@@ -1,0 +1,22 @@
+{
+  "name": "sunmou-lantern",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "description": "榫卯灯笼 · 国风流光 —— 浏览器端 3D 分步交互",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "verify": "node tools/verify-geometry.mjs",
+    "gen:voice": "node tools/gen-voice.mjs",
+    "gen:bgm": "node tools/gen-bgm.mjs",
+    "probe": "node tools/probe-minimax.mjs"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  }
+}

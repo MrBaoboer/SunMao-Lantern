@@ -1,0 +1,27 @@
+# --- 密钥：绝对不入库 ---
+.env
+.env.local
+.env.*.local
+*.key
+
+# --- 依赖与构建产物 ---
+node_modules/
+dist/
+.vite/
+
+# --- 部署 ---
+.vercel/
+
+# --- 开发期视觉校验截图 ---
+.shots/
+
+# --- 系统 ---
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+
+# --- 音频生成中间产物（最终 mp3 入库，缓存不入库）---
+tools/.audio-cache/
+
+.vercel
