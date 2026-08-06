@@ -38,8 +38,8 @@
 }
 .sheet-lede {
   max-width: 30em; margin: var(--s3) auto 0;
-  font-size: var(--fs-mini); line-height: var(--lh-body); letter-spacing: var(--ls-wide);
-  color: var(--text-3);
+  font-size: var(--fs-tiny); line-height: var(--lh-body); letter-spacing: var(--ls-base);
+  color: var(--text-2);
 }
 .sheet-body { margin-top: var(--s7); }
 
@@ -87,7 +87,7 @@
 }
 .door-ds {
   display: block; margin-top: var(--s2);
-  font-size: var(--fs-mark); line-height: var(--lh-tight); color: var(--text-3);
+  font-size: var(--fs-mini); line-height: var(--lh-tight); color: var(--text-3);
 }
 
 /* 做完了盖一枚印 */
@@ -121,7 +121,7 @@
   letter-spacing: var(--ls-vast); text-indent: var(--ls-vast); color: var(--text);
 }
 .pick-mn {
-  margin-top: var(--s2); font-size: var(--fs-mark);
+  margin-top: var(--s2); font-size: var(--fs-mini);
   line-height: var(--lh-tight); color: var(--text-3);
 }
 .pick[aria-pressed="true"] .pick-mn { color: var(--accent); }
@@ -269,7 +269,8 @@
 /* ═══════════════ 窄屏 ═══════════════ */
 
 @media (max-width: 680px) {
-  .dock { padding: 0 44px; }
+  /* 与底部一样抬到翻页之上 */
+  .dock { bottom: calc(var(--edge) + 52px); padding: 0 var(--s4); }
   .door { width: calc(50% - var(--s2)); }
   .pick { width: calc(50% - var(--s2)); }
   .wishes { grid-template-columns: repeat(2, 1fr); }

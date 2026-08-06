@@ -104,7 +104,7 @@
   --fs-mark: 11px;
   --fs-mini: 12px;
   --fs-tiny: 13px;
-  --fs-base: 14px;
+  --fs-base: 15px;
   --fs-mid:  16px;
   --fs-read: clamp(17px, 1.9vw, 21px);
   --fs-lede: clamp(19px, 2.4vw, 25px);
@@ -127,7 +127,7 @@
   --edge: clamp(18px, 3vw, 44px);
 
   /* ── 圆角与描边 ───────────────────────────────── */
-  --r-xs: 3px; --r-sm: 6px; --r-md: 10px; --r-full: 999px;
+  --r-xs: 3px; --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-full: 999px;
   --hair:      inset 0 0 0 1px var(--line);
   --hair-gold: inset 0 0 0 1px var(--accent-soft);
 
@@ -145,9 +145,10 @@
   --z-chrome:  30;
   --z-note:    34;
   --z-toast:   40;
+  /* 封面压过常驻界面，但让覆盖层压过它 —— 封面上的「怎么操作」才看得见 */
+  --z-cover:   45;
   --z-overlay: 50;
   --z-menu:    60;
-  --z-boot:    90;
 
   /* ── 纸纹：让浅色面不像一块塑料 ───────────────── */
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");

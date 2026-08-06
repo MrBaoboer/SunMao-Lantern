@@ -10,7 +10,7 @@
   display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
   padding: 12px var(--s6);
   border-radius: var(--r-full);
-  font-size: var(--fs-tiny); letter-spacing: var(--ls-wide); text-indent: var(--ls-wide);
+  font-size: var(--fs-base); letter-spacing: var(--ls-wide); text-indent: var(--ls-wide);
   white-space: nowrap; text-decoration: none;
   transition: background var(--t-base) var(--ease),
               color var(--t-base) var(--ease),
@@ -18,7 +18,7 @@
               transform var(--t-fast) var(--ease),
               opacity var(--t-base) var(--ease);
 }
-.btn .ico { width: 15px; height: 15px; text-indent: 0; }
+.btn .ico { width: 16px; height: 16px; text-indent: 0; }
 
 .btn-primary { background: var(--accent); color: var(--on-accent); font-weight: 500; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-lift); transform: translateY(-1px); }
@@ -45,11 +45,11 @@
 .icon-btn {
   pointer-events: auto;
   display: grid; place-items: center;
-  width: 34px; height: 34px; border-radius: var(--r-full);
+  width: 38px; height: 38px; border-radius: var(--r-full);
   color: var(--text-3);
   transition: color var(--t-base) var(--ease), background var(--t-base) var(--ease);
 }
-.icon-btn .ico { width: 17px; height: 17px; }
+.icon-btn .ico { width: 18px; height: 18px; }
 .icon-btn:hover:not(:disabled) { color: var(--text); background: var(--shade); }
 .icon-btn:disabled { opacity: 0.24; }
 
@@ -61,7 +61,7 @@
 }
 input[type="range"] {
   -webkit-appearance: none; appearance: none;
-  width: clamp(150px, 24vw, 250px); height: 16px;
+  width: clamp(150px, 24vw, 250px); height: 20px;
   background: none; outline: none; cursor: pointer;
 }
 input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--line); }
@@ -79,12 +79,12 @@ input[type="range"]::-moz-range-thumb {
   background: var(--accent); box-shadow: 0 0 0 5px var(--accent-faint);
 }
 
-/* ═══════════════ 设置菜单 ═══════════════ */
+/* ═══════════════ 更多菜单 ═══════════════ */
 
 .menu {
-  position: fixed; right: var(--edge); top: calc(var(--edge) + 74px);
+  position: fixed; right: var(--edge); top: calc(var(--edge) + 84px);
   z-index: var(--z-menu);
-  min-width: 212px; padding: var(--s2);
+  min-width: 224px; padding: var(--s2);
   border-radius: var(--r-sm);
   background: var(--surface);
   box-shadow: var(--hair), var(--lift-3);
@@ -96,12 +96,12 @@ input[type="range"]::-moz-range-thumb {
   display: flex; align-items: center; gap: var(--s3);
   width: 100%; padding: 10px var(--s3);
   border-radius: var(--r-xs);
-  font-size: var(--fs-tiny); letter-spacing: var(--ls-base);
+  font-size: var(--fs-base); letter-spacing: var(--ls-base);
   color: var(--text-2);
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 .menu button:hover { background: var(--shade); color: var(--text); }
-.menu button .ico { width: 15px; height: 15px; color: var(--text-3); }
+.menu button .ico { width: 16px; height: 16px; color: var(--text-3); }
 .menu button:hover .ico { color: var(--accent); }
 .menu button span { flex: 1; text-align: left; }
 .menu .sep { height: 1px; background: var(--line); margin: var(--s2) var(--s3); }
@@ -120,6 +120,36 @@ input[type="range"]::-moz-range-thumb {
 }
 [aria-checked="true"] .sw { background: var(--accent-soft); }
 [aria-checked="true"] .sw::after { transform: translateX(12px); background: var(--accent); }
+
+/* ═══════════════ 怎么操作 ═══════════════ */
+
+.guide { max-width: 460px; margin: 0 auto; text-align: left; }
+
+.guide-row {
+  display: flex; align-items: baseline; gap: var(--s5);
+  padding: var(--s3) 0;
+}
+.guide-row + .guide-row { border-top: 1px solid var(--line-2); }
+.guide-k {
+  flex: none; width: 92px;
+  display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap;
+}
+.guide-t { font-size: var(--fs-tiny); line-height: var(--lh-body); color: var(--text-2); }
+.guide-t em { font-style: normal; color: var(--accent); }
+
+/* 键帽：只描一道边，不做立体 */
+.kbd {
+  display: inline-grid; place-items: center;
+  min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: var(--r-xs);
+  font-family: var(--mono); font-size: var(--fs-mark); line-height: 1;
+  color: var(--text-2);
+  box-shadow: var(--hair);
+}
+.kbd .ico { width: 13px; height: 13px; }
+.guide-k > span:not(.kbd) {
+  font-size: var(--fs-mark); letter-spacing: var(--ls-base); color: var(--text-3);
+}
 
 /* ═══════════════ 三维锚点标注 ═══════════════ */
 

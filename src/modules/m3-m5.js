@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { V, Junk, buildNightSky } from '../steps/util.js';
+import { playVO } from './vo.js';
 import { buildPatternTexture } from '../render/lattice.js';
 import { makePosterNo } from '../core/state.js';
 import { tween, Ease, wait } from '../util/tween.js';
@@ -63,6 +64,7 @@ export function openM3(c, onExit) {
         o.querySelector('#own').addEventListener('click', combo);
         o.querySelector('#go').addEventListener('click', () => picked && write());
       },
+      onEsc: close,
     });
   };
 
@@ -89,6 +91,7 @@ export function openM3(c, onExit) {
           draw();
         }));
       },
+      onEsc: choose,
     });
     draw();
   };
@@ -144,7 +147,6 @@ export function openM3(c, onExit) {
     c.sfx.play('SUCCESS');
     c.hud.sheet({
       body: `<img class="poster" src="${url}" alt="写着「${c.state.wishText}」的灯笼海报">`,
-      lede: '海报在本机生成，没有上传任何内容',
       actions: [
         { label: '回去', on: close },
         { label: '换一句', ico: 'refresh', on: choose },
@@ -153,6 +155,7 @@ export function openM3(c, onExit) {
           href: url, download: `榫卯灯笼-${c.state.posterNo}.png`,
         },
       ],
+      onEsc: close,
     });
   };
 
@@ -284,11 +287,7 @@ export function openM4(c, onExit) {
 
   draw();
   c.state.modulesDone = { ...c.state.modulesDone, M4: true };
-  c.voice.play('M4', `把它挂起来。
-转一转视角，找个喜欢的位置，点一下就挂上去。
-（气口）
-想挂几盏都行。绕着走一圈 —— 从不同角度看，它是不一样的。
-拍张照吧。这是你做的。`, { cps: 3.8 });
+  playVO(c, 'M4');
 
   return close;
 }
@@ -365,7 +364,7 @@ export function openM5(c, onExit) {
         c.lantern.innerLight.color.lerpColors(new THREE.Color(0xffa54f), color, pulse * 0.6);
         c.lantern.setLit(base + pulse * (base ? 0.35 : 0.28));
       }, { onDone: () => { c.lantern.setLit(base); c.lantern.innerLight.color.setHex(0xffa54f); } });
-      if (type === 'fu') c.voice.play('M5-fu', '哎 —— 是个「福」字。', { cps: 4.2 });
+      if (type === 'fu') playVO(c, 'M5-fu');
       if (count === 12) c.hud.toast('可以放压轴了', { gold: true });
     } });
   };
@@ -423,18 +422,14 @@ export function openM5(c, onExit) {
   const outro = async () => {
     c.state.modulesDone = { ...c.state.modulesDone, M5: true };
     c.stage.setRecommended({ az: 55, el: 8, dist: 360, target: V(0, 0, 96), ease: 0.35 });
-    c.voice.play('M5-outro', `烟花放完了，灯还亮着。
-（停顿 1.0 s）
-十三根木条，零颗钉子。
-这套办法，我们用了七千年。
-（停顿 1.5 s）
-新年快乐。`, { cps: 3.3 });
+    playVO(c, 'M5-outro');
     await wait(7.5);
     c.hud.sheet({
       body: `<div class="finale">
         <div class="ln">13 根木条</div><div class="ln">0 颗钉子</div><div class="ln">7000 年</div>
       </div>`,
       actions: [{ label: '回去', kind: 'primary', on: close }],
+      onEsc: close,
       onMount: (o) => {
         o.querySelectorAll('.ln').forEach((el, i) => {
           el.style.opacity = 0;
@@ -451,9 +446,7 @@ export function openM5(c, onExit) {
     ],
     hint: '点一下 · 往上划 · 画个圈 · 长按再松手',
   });
-  c.voice.play('M5', `最后，放烟花。
-点一下，划一下，画个圈，放出来的花都不一样。
-试试看。`, { cps: 3.8 });
+  playVO(c, 'M5');
 
   return close;
 }

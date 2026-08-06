@@ -3,6 +3,7 @@
  */
 
 import { V, a, C, Junk, buildNightSky } from '../steps/util.js';
+import { playVO } from './vo.js';
 import { tween, Ease, wait } from '../util/tween.js';
 
 const junk = new Junk(null);
@@ -76,10 +77,7 @@ export function openM1(c, onExit) {
         c.lantern.root.position.z = 0;
         c.lantern.setLit(level(c));
         await wait(1.4);
-        c.voice.play('M1', `亮了。
-光从绵纸里透出来，被木头挡成一格一格的 —— 这就是你选的那个花纹。
-（停顿 1.0 s）
-看地上。`, { cps: 3.6 });
+        playVO(c, 'M1');
         tools.hidden = false;
         again.hidden = false;
         c.state.modulesDone = { ...c.state.modulesDone, M1: true };
@@ -204,7 +202,7 @@ export function openM2(c, onExit) {
       ],
       onMount: (o) => {
         c.sfx.play('PAPER', { gain: 0.6 });
-        c.voice.play(`M2-${i + 1}`, q.face.replace(/\n/g, ''), { cps: 3.5 });
+        playVO(c, `M2-${i + 1}`);
         const ans = o.querySelector('#ans');
         const next = o.querySelector('#next');
 
@@ -219,17 +217,13 @@ export function openM2(c, onExit) {
             c.state.riddleScore = score;
             c.sfx.play('SUCCESS');
             c.lantern.setLit(c.state.lit ? level(c) : score * 0.08);
-                        ans.innerHTML = `<div class="answer-k">对了 · 灯又亮了一分</div>
-                             <div class="answer-v">${q.why}</div>`;
+            ans.innerHTML = `<div class="answer-k">对了 · 灯又亮了一分</div>
+              <div class="answer-v">${q.why}</div>`;
           } else {
-                        ans.innerHTML = `<div class="answer-k">${q.key}</div>
-                             <div class="answer-v">${q.why}</div>`;
+            ans.innerHTML = `<div class="answer-k">${q.key}</div>
+              <div class="answer-v">${q.why}</div>`;
           }
-          if (q.last && right) {
-            c.voice.play('M2-fin', `这一题你答得出来，是因为前面那二十多步你都看过了。
-不用一根钉，不用一滴胶 —— 一凹，一凸，两块木头就咬死了。
-这就是榫卯。`, { cps: 3.5 });
-          }
+          if (q.last && right) playVO(c, 'M2-fin');
           next.hidden = false;
         };
 
@@ -247,13 +241,14 @@ export function openM2(c, onExit) {
     c.state.modulesDone = { ...c.state.modulesDone, M2: true };
     c.sfx.play('SUCCESS');
     c.hud.sheet({
-      eyebrow: `答对 ${score} 题`,
+      eyebrow: `五题答对 ${score} 题`,
       title: name,
-      lede: score ? `灯笼比刚才亮了 ${score * 8}%` : '灯笼还是原来的亮度',
+      lede: score ? `灯笼比刚才亮了 ${score * 8}%` : '再来一轮，灯会更亮',
       actions: [
         { label: '再来一次', ico: 'refresh', on: () => { i = 0; score = 0; ask(); } },
         { label: '回去', kind: 'primary', on: close },
       ],
+      onEsc: close,
     });
   };
 

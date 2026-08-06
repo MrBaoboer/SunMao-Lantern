@@ -23,9 +23,10 @@ export class Engine {
     ctx.hud.onPrev = () => this.back();
     ctx.hud.onJump = (i) => this.go(i);
 
-    // 互动模块把主界面收起来了，这时方向键不该在背后翻页
+    // 互动模块把主界面收起来了，盖住画面的卷也一样 —— 这时方向键不该在背后翻页
     addEventListener('keydown', (e) => {
-      if (!ctx.hud.navVisible) return;
+      if (!ctx.hud.navVisible || ctx.hud.modalOpen) return;
+      if (e.target instanceof HTMLInputElement) return;
       if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); this.next(); }
       if (e.key === 'ArrowLeft') this.back();
     });

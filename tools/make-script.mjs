@@ -14,8 +14,8 @@ const SRC = path.join(ROOT, 'tools', 'vo-manifest.json');
 const OUT = path.join(ROOT, '旁白解说稿.md');
 
 const ACTS = [
-  { at: 'A1', name: '起兴', note: '静 → 好奇。慢，重氛围。' },
-  { at: 'B1', name: '明理', note: '好奇 → 会意。清晰、耐心，讲解的口气。' },
+  { at: 'A1', name: '开场', note: '静 → 好奇。慢，重氛围。' },
+  { at: 'B1', name: '认识榫卯', note: '好奇 → 会意。清晰、耐心，讲解的口气。' },
   { at: 'C1', name: '做骨架', note: '专注 → 沉浸。手上有活的语气，节拍稳定。' },
   { at: 'D1', name: '装点年味', note: '暖 → 燃。放缓，转入审美与情感。' },
   { at: 'M1', name: '互动模块', note: '轻松、生活化，把话语权交回给用户。' },
