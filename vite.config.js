@@ -70,5 +70,5 @@ export default defineConfig({
       },
     },
   },
-  server: { port: 5173, open: false },
+  server: { port: Number(process.env.PORT) || 5173, open: false },
 });

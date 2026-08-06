@@ -51,7 +51,7 @@ export function act1(ctx) {
       cam: { az: 40, el: 16, dist: 480 },
       narration: `这就是我们要做的东西 —— 一盏榫卯灯笼。
 十三根木条，四片格心，一颗钉子也没有。
-接下来的每一步，都由你亲手完成。`,
+接下来，我们一根一根把它做出来。`,
       note: {
         title: '一盏灯的全部',
         spec: [['木条', '13 根'], ['格心', '4 片'], ['钉子', '0'], ['成品', '120×120×192 mm']],
@@ -80,7 +80,8 @@ export function act1(ctx) {
       mood: 'craft',
       cam: { az: 30, el: 14, dist: 210, target: [0, 0, 96], snap: true },
       cps: 3.6,
-      cue: { ico: 'drag', text: '<em>拖动</em>左边的木条，把它推进右边' },
+      // 画面随时可以被拖着转，所以指代一律按「长什么样」，不按左右
+      cue: { ico: 'drag', text: '<em>拖动</em>凸出来的那根，推进对面的孔里' },
       narration: `榫卯，sǔn mǎo。
 中国人用它把木头连起来，已经连了七千年 —— 比文字还早。
 （气口）
@@ -173,7 +174,7 @@ export function act1(ctx) {
       title: '直榫：穿过去，露一截',
       mood: 'craft',
       cam: { az: 34, el: 16, dist: 200, target: [0, 0, 96], snap: true },
-      cue: { ico: 'drag', text: '<em>拖动</em>木条，把榫头推进孔里' },
+      cue: { ico: 'drag', text: '<em>拖动</em>带榫头的那根，把榫头推进孔里' },
       narration: `第一种，直榫 —— 最基础，也最常见。
 我们这盏灯用的是它的贯穿做法：榫头要穿过整根木条，还要在另一头露出一小截。
 这一小截既是加强，也是中式木作特有的样子。

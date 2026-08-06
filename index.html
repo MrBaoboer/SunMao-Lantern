@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#f4efe3" />
 <title>榫卯灯笼 · 国风流光</title>
-<meta name="description" content="十三根木条，一颗钉子也不用。亲手做一盏能拆开的中式灯笼。" />
+<meta name="description" content="十三根木条，一颗钉子也不用。在浏览器里亲手做一盏能拆开的中式灯笼。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f4efe3'/%3E%3Cg fill='%239a7328'%3E%3Crect x='6' y='7' width='20' height='2.6'/%3E%3Crect x='6' y='22.4' width='20' height='2.6'/%3E%3Crect x='9' y='5' width='2.6' height='22'/%3E%3Crect x='20.4' y='5' width='2.6' height='22'/%3E%3C/g%3E%3C/svg%3E" />
 <script>
   // 主题要在首帧之前定下来，否则会闪一下
@@ -18,18 +18,21 @@
 <body>
   <canvas id="stage"></canvas>
 
-  <!-- 开场 -->
-  <div id="boot">
-    <div class="boot-inner">
-      <p class="boot-eyebrow">国风流光</p>
-      <h1 class="boot-title">榫卯灯笼</h1>
-      <p class="boot-sub">十三根木条 · 一颗钉子也不用</p>
-      <div class="boot-line"><i></i></div>
-      <p id="boot-msg" class="boot-msg" role="status">正在为你点亮这盏灯</p>
+  <!-- 封面：先是加载页，就绪后化开，露出背后那盏灯 -->
+  <div id="cover" class="cover">
+    <div class="cover-bg"></div>
+    <div class="cover-veil"></div>
+    <div class="cover-inner">
+      <p class="cover-eyebrow">国风流光</p>
+      <h1 class="cover-title">榫卯灯笼</h1>
+      <p class="cover-sub">十三根木条 · 一颗钉子也不用</p>
+      <div class="cover-rule"><i id="cover-bar"></i></div>
+      <p id="cover-msg" class="cover-msg" role="status">正在为你点亮这盏灯</p>
+      <div id="cover-act" class="cover-act" hidden></div>
     </div>
   </div>
 
-  <!-- 顶部：章节 -->
+  <!-- 顶部：走到哪了 -->
   <header id="topbar" hidden>
     <nav id="chapters" class="chapters" aria-label="章节"></nav>
     <div class="toprow">
@@ -37,7 +40,7 @@
         <span id="stepno" class="stepno"></span>
         <h2 id="steptitle" class="steptitle"></h2>
       </div>
-      <button id="btn-menu" class="icon-btn" aria-label="设置" aria-haspopup="true" aria-expanded="false"></button>
+      <button id="btn-menu" class="icon-btn" aria-label="更多" aria-haspopup="true" aria-expanded="false"></button>
     </div>
   </header>
 

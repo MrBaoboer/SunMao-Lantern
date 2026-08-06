@@ -15,7 +15,17 @@ import { icon } from './icons.js';
 const $ = (id) => document.getElementById(id);
 
 /** 四章 */
-export const PHASES = ['起兴', '明理', '做骨架', '装点年味'];
+export const PHASES = ['开场', '认识榫卯', '做骨架', '装点年味'];
+
+/** 怎么操作。前四条是第一次进来就该知道的，后两条留给完整版 */
+const GUIDE = [
+  { k: ['back', 'forward'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用' },
+  { k: ['drag'], t: '按住画面拖，换个角度看；滚轮缩放。松开手，镜头会自己转回来' },
+  { k: ['layers'], t: '顶上一格就是一步，点一下直接跳过去' },
+  { k: ['more'], t: '深色、声音、字幕，都在右上角' },
+  { k: ['X'], t: '随时把灯笼拆开、调透明，看看里面', full: true },
+  { k: ['spark'], t: '不想自己动手，就选旁边的「帮我加工」「帮我装上」', full: true },
+];
 
 /**
  * 把一份行动声明渲染成按钮。
@@ -41,6 +51,9 @@ function bindActions(root, list) {
   });
 }
 
+/** 键帽：认得的名字画成线稿图标，认不得的直接印字 */
+const cap = (name) => `<span class="kbd">${icon(name) || name}</span>`;
+
 export class HUD {
   constructor(state) {
     this.state = state;
@@ -53,10 +66,13 @@ export class HUD {
       menu: $('btn-menu'), overlay: $('overlay'),
     };
     this.spots = [];
+    this.hasVoice = false;
     this._toastTimer = null;
     this._menu = null;
     this._tip = null;
     this._noteOpen = false;
+    this._escape = null;
+    this._returnFocus = null;
     this.steps = [];
 
     this.el.menu.innerHTML = icon('more');
@@ -68,6 +84,13 @@ export class HUD {
     this.el.task.addEventListener('click', () => this.onTask?.());
     this.el.menu.addEventListener('click', (e) => { e.stopPropagation(); this.toggleMenu(); });
     this.el.noteTab.addEventListener('click', () => this.toggleNote());
+
+    // Esc 一次退一层：先收菜单，再关当前的卷
+    addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (this._menu) { this.closeMenu(); return; }
+      if (this._escape) { const fn = this._escape; this._escape = null; fn(); }
+    });
   }
 
   // ══════════════ 章节 ══════════════
@@ -236,38 +259,42 @@ export class HUD {
   quiet(on) {
     this.el.topbar.dataset.quiet = on ? '1' : '0';
     this.el.bottom.dataset.quiet = on ? '1' : '0';
-    this.el.prev.style.opacity = on ? '0' : '';
-    this.el.next.style.opacity = on ? '0' : '';
     if (on) { this.setNote(null); this.clearSpots(); }
   }
 
-  // ══════════════ 设置菜单 ══════════════
+  // ══════════════ 更多菜单 ══════════════
 
   toggleMenu() {
     if (this._menu) { this.closeMenu(); return; }
     const toggles = [
-      { k: 'theme', ico: 'sun', off: 'moon', label: '浅色模式', theme: true },
+      { k: 'theme', ico: 'moon', off: 'sun', label: '深色', theme: true },
       { k: 'sound', ico: 'sound', off: 'mute', label: '声音' },
       { k: 'captions', ico: 'caption', label: '字幕' },
-      { k: 'voice', ico: 'voice', label: '旁白朗读' },
+      // 没有配音文件时这一项什么也控制不了，索性不出现
+      ...(this.hasVoice ? [{ k: 'voice', ico: 'voice', label: '旁白朗读' }] : []),
     ];
-    const read = (t) => (t.theme ? this.state.theme !== 'dark' : !!this.state[t.k]);
+    const read = (t) => (t.theme ? this.state.theme === 'dark' : !!this.state[t.k]);
 
     const m = document.createElement('div');
     m.className = 'menu';
     m.setAttribute('role', 'menu');
-    m.innerHTML = toggles.map((t) => {
-      const on = read(t);
-      return `<button role="menuitemcheckbox" aria-checked="${on}" data-k="${t.k}">
-        ${icon(on || !t.off ? t.ico : t.off)}<span>${t.label}</span><i class="sw"></i></button>`;
-    }).join('')
+    m.innerHTML = `<button role="menuitem" data-k="help">${icon('book')}<span>怎么操作</span></button>`
+      + '<div class="sep"></div>'
+      + toggles.map((t) => {
+        const on = read(t);
+        return `<button role="menuitemcheckbox" aria-checked="${on}" data-k="${t.k}">
+          ${icon(on || !t.off ? t.ico : t.off)}<span>${t.label}</span><i class="sw"></i></button>`;
+      }).join('')
       + '<div class="sep"></div>'
       + `<button role="menuitem" data-k="inspect">${icon('cube')}<span>拆开看看</span></button>`
-      + `<button role="menuitem" data-k="check">${icon('ruler')}<span>尺寸对照</span></button>`;
+      + `<button role="menuitem" data-k="check">${icon('ruler')}<span>尺寸对照</span></button>`
+      + '<div class="sep"></div>'
+      + `<button role="menuitem" data-k="restart">${icon('refresh')}<span>从头再来</span></button>`;
 
     document.body.appendChild(m);
     this._menu = m;
     this.el.menu.setAttribute('aria-expanded', 'true');
+    m.querySelector('button')?.focus();
 
     m.addEventListener('click', (e) => {
       const b = e.target.closest('button');
@@ -275,7 +302,7 @@ export class HUD {
       const t = toggles.find((x) => x.k === b.dataset.k);
       if (t) {
         const v = !read(t);
-        if (t.theme) this.setTheme(v ? 'light' : 'dark');
+        if (t.theme) this.setTheme(v ? 'dark' : 'light');
         else this.state[t.k] = v;
         b.setAttribute('aria-checked', String(v));
         if (t.off) b.querySelector('svg').outerHTML = icon(v ? t.ico : t.off);
@@ -284,19 +311,23 @@ export class HUD {
         return;
       }
       this.closeMenu();
+      if (b.dataset.k === 'help') this.guide({ full: true });
       if (b.dataset.k === 'inspect') this.onInspect?.();
       if (b.dataset.k === 'check') this.onCheck?.();
+      if (b.dataset.k === 'restart') this.onRestart?.();
     });
 
-    this._away = () => this.closeMenu();
-    setTimeout(() => addEventListener('pointerdown', this._away, { once: true }), 0);
+    // 点到菜单以外才收起 —— 点在菜单自己身上不能收，否则开关根本按不动
+    this._away = (e) => { if (!m.contains(e.target)) this.closeMenu(); };
+    addEventListener('pointerdown', this._away, true);
   }
 
   closeMenu() {
-    this._menu?.remove();
+    if (!this._menu) return;
+    this._menu.remove();
     this._menu = null;
     this.el.menu.setAttribute('aria-expanded', 'false');
-    if (this._away) removeEventListener('pointerdown', this._away);
+    if (this._away) { removeEventListener('pointerdown', this._away, true); this._away = null; }
   }
 
   setTheme(mode) {
@@ -321,6 +352,27 @@ export class HUD {
     document.documentElement.dataset.theme = v;
     document.querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', v === 'dark' ? '#0a0908' : '#f4efe3');
+  }
+
+  // ══════════════ 怎么操作 ══════════════
+
+  /**
+   * 第一次进来给四条，右上角菜单里给六条。
+   * @param {{full?:boolean, label?:string, onClose?:Function}} o
+   */
+  guide({ full = false, label = '知道了', onClose } = {}) {
+    const rows = GUIDE.filter((r) => full || !r.full);
+    const done = () => { this.hideOverlay(); onClose?.(); };
+    this.sheet({
+      title: '怎么操作',
+      body: `<div class="guide">${rows.map((r) => `
+        <div class="guide-row">
+          <div class="guide-k">${r.k.map(cap).join('')}</div>
+          <div class="guide-t">${r.t}</div>
+        </div>`).join('')}</div>`,
+      actions: [{ label, kind: 'primary', on: done }],
+      onEsc: done,
+    });
   }
 
   // ══════════════ 三维锚定标注 ══════════════
@@ -373,39 +425,62 @@ export class HUD {
 
   // ══════════════ 覆盖层 ══════════════
 
-  showOverlay(html, { veil = true, onMount } = {}) {
+  showOverlay(html, { veil = true, onMount, onEsc } = {}) {
     const o = this.el.overlay;
+    if (o.hidden) this._returnFocus = document.activeElement;
     o.hidden = false;
     o.className = `overlay ${veil ? 'veil' : 'bare'}`;
     o.innerHTML = html;
+    this._escape = onEsc || null;
     onMount?.(o);
+    // 卷盖住了画面，焦点跟着进去；坞不夺焦点，手还在画面上
+    if (veil) {
+      (o.querySelector('.btn-primary:not([hidden]):not(:disabled)')
+        || o.querySelector('button:not([hidden]):not(:disabled)'))?.focus();
+    }
     return o;
   }
 
   /** 卷：盖住画面的一页 */
-  sheet({ eyebrow, title, lede, body, actions = [], veil = true, onMount } = {}) {
-    const html = `<div class="sheet scroll">
+  sheet({ eyebrow, title, lede, body, actions = [], veil = true, onMount, onEsc } = {}) {
+    const html = `<div class="sheet scroll" role="dialog" aria-modal="true">
       ${eyebrow ? `<p class="eyebrow">${eyebrow}</p>` : ''}
       ${title ? `<h2 class="sheet-title">${title}</h2>` : ''}
       ${lede ? `<p class="sheet-lede">${lede}</p>` : ''}
       ${body ? `<div class="sheet-body">${body}</div>` : ''}
       ${actions.length ? `<div class="sheet-act">${actions.map(actionHTML).join('')}</div>` : ''}
     </div>`;
-    return this.showOverlay(html, { veil, onMount: (o) => { bindActions(o, actions); onMount?.(o); } });
+    return this.showOverlay(html, {
+      veil, onEsc,
+      onMount: (o) => { bindActions(o, actions); onMount?.(o); },
+    });
   }
 
   /** 坞：停在底部的一排控件，画面完整让出来 */
-  dock({ body, actions = [], hint, onMount } = {}) {
+  dock({ body, actions = [], hint, onMount, onEsc } = {}) {
     const html = `<div class="dock">
       ${body || ''}
       ${actions.length ? `<div class="dock-row">${actions.map(actionHTML).join('')}</div>` : ''}
       ${hint ? `<p class="dock-hint">${hint}</p>` : ''}
     </div>`;
-    return this.showOverlay(html, { veil: false, onMount: (o) => { bindActions(o, actions); onMount?.(o); } });
+    return this.showOverlay(html, {
+      veil: false, onEsc,
+      onMount: (o) => { bindActions(o, actions); onMount?.(o); },
+    });
   }
 
-  hideOverlay() { this.el.overlay.hidden = true; this.el.overlay.innerHTML = ''; }
+  hideOverlay() {
+    if (this.el.overlay.hidden) return;
+    this.el.overlay.hidden = true;
+    this.el.overlay.innerHTML = '';
+    this._escape = null;
+    if (this._returnFocus?.isConnected) this._returnFocus.focus();
+    this._returnFocus = null;
+  }
+
   get overlayOpen() { return !this.el.overlay.hidden; }
+  /** 盖住画面的那一种。此时方向键不该在背后翻页 */
+  get modalOpen() { return this.overlayOpen && this.el.overlay.classList.contains('veil'); }
 
   showChrome(v) {
     this.el.bottom.hidden = !v;

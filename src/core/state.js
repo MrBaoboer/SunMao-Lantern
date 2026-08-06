@@ -23,7 +23,8 @@ const DEFAULTS = {
   captions: true,
   voice: true,
   autoSection: true,     // 自动播放结构复看（S17 备注可关）
-  maxStep: 0,            // 已解锁的最远步骤
+  maxStep: 0,            // 走到过的最远一步，封面据此提供「继续」
+  primed: false,         // 是否看过「怎么操作」
 };
 
 const PATTERNS = ['mayo', 'wanzi'];
