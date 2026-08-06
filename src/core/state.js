@@ -5,7 +5,7 @@
  * 它作用于：格心 → 爆炸图 → M1 地面投影 → M3 海报边框 → M4 AR → M5。
  */
 
-const KEY = 'sunmou.v3.state';
+const KEY = 'sunmao.v3.state';
 
 const DEFAULTS = {
   patternId: 'mayo',     // 麻叶纹 / 冰裂纹 / 万字纹

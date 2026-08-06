@@ -19,10 +19,22 @@ export class Engine {
     this.index = -1;
     this.busy = false;
 
-    ctx.hud.onNext = () => this.next();
+    // 有些步骤的主行动不是「继续」，而是一个动作（例如「明白了，开工」）。
+    // 那一下按完，主按钮才变回「继续」。
+    this.override = null;
+    ctx.hud.onNext = async () => {
+      if (this.override) {
+        const fn = this.override;
+        this.override = null;
+        this.lock();
+        await fn();
+        return;
+      }
+      this.next();
+    };
     ctx.hud.onBack = () => this.back();
     addEventListener('keydown', (e) => {
-      if (ctx.hud.overlayVisible) return;
+      if (ctx.hud.overlayOpen) return;
       if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); this.next(); }
       if (e.key === 'ArrowLeft') this.back();
     });
@@ -58,10 +70,9 @@ export class Engine {
       ctx.drag.cancel();
       ctx.mach.end();
       ctx.guides.clear();
-      ctx.hud.clearHotspots();
-      ctx.hud.setCards([]);
-      ctx.hud.setCounter('');
-      ctx.hud.setActions([]);
+      ctx.hud.clearSpots();
+      ctx.hud.setNote(null);
+      ctx.hud.setAlts([]);
       ctx.hud.setHint('');
       ctx.hud.setSubtitle('');
       ctx.hud.quiet(false);
@@ -73,9 +84,14 @@ export class Engine {
       const s = this.current;
       if (i > ctx.state.maxStep) ctx.state.maxStep = i;
 
-      ctx.hud.setTitle(s.id, s.title);
+      ctx.hud.setTitle(s.title);
       ctx.hud.setPhase(s.phase ?? 0, s.phaseRatio ?? 1);
-      ctx.hud.setNext({ label: s.nextLabel || '继续 ▸', enabled: !s.gate, hidden: !!s.hideNext });
+      this.override = s.primary ? () => s.primary.onClick(ctx, this) : null;
+      ctx.hud.setNext({
+        label: s.primary?.label || s.nextLabel || '继续',
+        enabled: s.primary ? true : !s.gate,
+        hidden: !!s.hideNext,
+      });
       ctx.hud.setBack({ enabled: i > 0 });
       if (s.mood) ctx.stage.setMood(s.mood);
       if (s.bgm) ctx.bgm.play(s.bgm, { level: s.bgmLevel ?? 1 });
@@ -87,8 +103,8 @@ export class Engine {
         });
         if (s.cam.snap) ctx.stage.snapToRecommended();
       }
-      if (s.cards) ctx.hud.setCards(s.cards);
-      if (s.hint) ctx.hud.setHint(s.hint, { pulse: !!s.hintPulse });
+      if (s.note) ctx.hud.setNote(s.note);
+      if (s.hint) ctx.hud.setHint(s.hint);
 
       // enter 里有大量动画 await。万一某个动画因故不解析（例如页面长时间不可见
       // 导致 rAF 停摆），不能让导航永久锁死 —— 超时后放行，步骤自身会继续跑完。
@@ -115,7 +131,7 @@ export class Engine {
 
   /** 任务完成 → 解锁「继续」 */
   unlock(label) {
-    this.ctx.hud.setNext({ label: label || this.current?.nextLabel || '继续 ▸', enabled: true });
+    this.ctx.hud.setNext({ label: label || this.current?.nextLabel || '继续', enabled: true });
   }
 
   lock() {

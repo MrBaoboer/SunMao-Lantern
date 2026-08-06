@@ -1,12 +1,12 @@
 /**
- * §12.1 BGM 曲目与分层机制
+ * 背景音乐
  *
- * BGM 由 MiniMax music_generation 生成（见 tools/gen-bgm.mjs），放在 /audio/bgm/。
- * 缺失时静默降级，不影响任何叙事。
+ * 曲目放在 public/audio/bgm/，并在同目录的 manifest.json 里登记：
+ *     { "files": ["a-opening", "b-craft", ...] }
+ * 缺文件就静默跳过，不影响任何叙事。
  *
- * ★两处静默点须特殊处理（导演红线）：
- *   静默点① S08：减至仅剩单音铺底，无打击乐
- *   静默点② S30：减至单一乐器独奏 12 s，比全片平均低 3 dB，期间不加任何音效
+ * 两处静默段落靠 setLevel 减编制，而不是切歌：
+ * 「榫为阳，卯为阴」减到仅剩铺底；成品巡礼的十二秒再压一档，且不加任何音效。
  */
 
 const BGM_BASE = 'audio/bgm';

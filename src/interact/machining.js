@@ -141,7 +141,7 @@ export class Machining {
 
   onDown(e) {
     const j = this.job;
-    if (!j || this.ctx.hud.overlayVisible) return;
+    if (!j || this.ctx.hud.overlayOpen) return;
     const rect = this.ctx.stage.canvas.getBoundingClientRect();
     this.ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.ptr.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -184,7 +184,7 @@ export class Machining {
     // 拖出轨迹 → 刀具阻尼回弹 + 明确引导
     if (!d.warned && d.perp > 18 && d.perp > d.along * 2.4) {
       d.warned = true;
-      this.ctx.hud.toast(j.wrongHint || '沿着槽的方向来回拉', { type: 'warn' });
+      this.ctx.hud.toast(j.wrongHint || '沿着槽的方向来回拉');
       this.ctx.sfx.play('UI_REJECT', { gain: 0.5 });
       this.dragging = null;
       this.ctx.stage.controls.enabled = true;

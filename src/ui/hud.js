@@ -1,79 +1,48 @@
 /**
- * §12.5 UI 组件清单 + 排版纪律
- *   字幕单行 ≤ 18 字；提示文案单行 ≤ 14 字；尺寸标注一律「模数倍数（毫米）」双写。
+ * 界面层
  *
- * 静默点（S08 / S30）通过 quiet() 整体降 UI —— 这是导演红线的实现点：
- * 「任何『填满』的冲动都会毁掉它」。
+ * 只有四样东西会同时出现在屏幕上：进度、步骤名、旁白、一个主行动。
+ * 其余全部按需出现、用完即走。
  */
 
 import * as THREE from 'three';
 
 const $ = (id) => document.getElementById(id);
 
-/** §1.1 三幕四段 → 顶部 5 段进度条（§12.5 段名） */
-export const PHASES = [
-  { id: 0, name: '起兴' },
-  { id: 1, name: '明理' },
-  { id: 2, name: '下枨框' },
-  { id: 3, name: '上枨框与立柱' },
-  { id: 4, name: '装点年味' },
-];
+/** 五个阶段 */
+export const PHASES = ['起兴', '明理', '下枨框', '立起框架', '装点年味'];
 
 export class HUD {
   constructor(state) {
     this.state = state;
     this.el = {
       topbar: $('topbar'), progress: $('progress'), steptitle: $('steptitle'),
-      slots: $('slots'), counter: $('counter'), cards: $('cards'), toast: $('toast'),
+      note: $('note'), toast: $('toast'),
       bottom: $('bottom'), hint: $('hint'), subtitle: $('subtitle'),
-      actions: $('actions'), next: $('btn-next'), back: $('btn-back'),
-      overlay: $('overlay'),
-      sound: $('btn-sound'), cc: $('btn-cc'), inspect: $('btn-inspect'), verify: $('btn-verify'),
+      alts: $('alts'), next: $('btn-next'), back: $('btn-back'),
+      menu: $('btn-menu'), overlay: $('overlay'),
     };
-    this.hotspots = [];
-    this.#buildProgress();
-    this.#bindToggles();
+    this.spots = [];
     this._toastTimer = null;
-  }
+    this._menu = null;
 
-  #buildProgress() {
-    this.el.progress.innerHTML = PHASES
-      .map((p) => `<div class="seg" data-phase="${p.id}" title="${p.name}"><i></i></div>`).join('');
-  }
-
-  #bindToggles() {
-    const bind = (btn, key, onChange) => {
-      const sync = () => btn.dataset.on = this.state[key] ? '1' : '0';
-      btn.addEventListener('click', () => {
-        this.state[key] = !this.state[key];
-        sync();
-        onChange?.(this.state[key]);
-      });
-      sync();
-    };
-    this.onSoundToggle = null;
-    bind(this.el.sound, 'sound', (v) => this.onSoundToggle?.(v));
-    bind(this.el.cc, 'captions', (v) => { if (!v) this.setSubtitle(''); });
-    this.el.inspect.addEventListener('click', () => this.onInspect?.());
-    this.el.verify.addEventListener('click', () => this.onVerify?.());
+    this.el.progress.innerHTML = PHASES.map((p) => `<div class="seg" title="${p}"><i></i></div>`).join('');
     this.el.next.addEventListener('click', () => this.onNext?.());
     this.el.back.addEventListener('click', () => this.onBack?.());
+    this.el.menu.addEventListener('click', (e) => { e.stopPropagation(); this.toggleMenu(); });
   }
 
-  // ── 顶部 ──────────────────────────────────────────
-  setPhase(phase, ratio = 0) {
+  // ── 顶部 ──
+  setPhase(phase, ratio = 1) {
     [...this.el.progress.children].forEach((seg, i) => {
-      const done = i < phase;
-      seg.classList.toggle('active', i === phase);
-      seg.querySelector('i').style.width = done ? '100%' : i === phase ? `${ratio * 100}%` : '0%';
+      seg.querySelector('i').style.width =
+        i < phase ? '100%' : i === phase ? `${Math.round(ratio * 100)}%` : '0';
     });
   }
 
-  setTitle(id, title) {
-    this.el.steptitle.innerHTML = id ? `<b>${id}</b>${title || ''}` : '';
-  }
+  setTitle(text) { this.el.steptitle.textContent = text || ''; }
 
-  // ── 字幕 / 提示 ───────────────────────────────────
+  // ── 旁白与提示 ──
   setSubtitle(text, { lyric = false } = {}) {
     const e = this.el.subtitle;
     if (!this.state.captions) { e.textContent = ''; return; }
@@ -81,184 +50,181 @@ export class HUD {
     e.textContent = text || '';
   }
 
-  setHint(text, { pulse = false } = {}) {
-    this.el.hint.textContent = text || '';
-    this.el.hint.classList.toggle('pulse', !!pulse && !!text);
-  }
+  /** 一行提示。用 <em> 标出关键动作词 */
+  setHint(html) { this.el.hint.innerHTML = html || ''; }
 
-  toast(text, { type = 'ok', dur = 2000 } = {}) {
+  toast(text, { gold = false, dur = 2400 } = {}) {
     clearTimeout(this._toastTimer);
     const e = this.el.toast;
     e.hidden = false;
-    e.className = `toast ${type}`;
-    e.innerHTML = text;
-    // 重播入场动画
-    e.style.animation = 'none';
-    void e.offsetWidth;
-    e.style.animation = '';
+    e.className = `toast${gold ? ' gold' : ''}`;
+    e.textContent = text;
+    e.style.animation = 'none'; void e.offsetWidth; e.style.animation = '';
     this._toastTimer = setTimeout(() => { e.hidden = true; }, dur);
   }
 
-  setCounter(text) {
-    this.el.counter.hidden = !text;
-    this.el.counter.textContent = text || '';
-  }
-
-  // ── 卡片 ──────────────────────────────────────────
+  // ── 便签：一次只有一张，只写值得写的 ──
   /**
-   * @param {Array<{title?:string, tag?:string, rows?:Array<[string,string]>,
-   *   note?:string, warn?:string|string[], danger?:string,
-   *   cols?:[string,string], fold?:boolean, html?:string}>} cards
+   * @param {null | {title?:string, body?:string, num?:Array<[string,string]>, tiny?:string}} n
    */
-  setCards(cards) {
-    const box = this.el.cards;
-    if (!cards || !cards.length) { box.hidden = true; box.innerHTML = ''; return; }
-    box.hidden = false;
-    box.innerHTML = cards.map((c) => {
-      const rows = (c.rows || []).map(([k, v]) => `<div class="row"><span>${k}</span><b>${v}</b></div>`).join('');
-      const warns = [].concat(c.warn || []).filter(Boolean)
-        .map((w) => `<div class="warn">⚠ ${w}</div>`).join('');
-      const danger = c.danger ? `<div class="danger">${c.danger}</div>` : '';
-      const cols = c.cols
-        ? `<div class="cols"><div>${c.cols[0]}</div><div>${c.cols[1]}</div></div>` : '';
-      const note = c.note ? `<p>${c.note}</p>` : '';
-      const head = c.title
-        ? `<h4 class="${c.fold ? 'foldhead' : ''}">${c.title}${c.tag ? `<span class="tag">${c.tag}</span>` : ''}</h4>`
-        : '';
-      return `<div class="card ${c.fold ? 'folded' : ''}">${head}
-        <div class="foldbody">${c.html || ''}${rows}${cols}${note}${warns}${danger}</div></div>`;
-    }).join('');
-    box.querySelectorAll('.foldhead').forEach((h) => {
-      h.addEventListener('click', () => h.closest('.card').classList.toggle('folded'));
-    });
+  setNote(n) {
+    const el = this.el.note;
+    if (!n) { el.hidden = true; el.innerHTML = ''; return; }
+    const nums = (n.num || [])
+      .map(([k, v]) => `<p>${k}　<span class="num">${v}</span></p>`).join('');
+    el.innerHTML = [
+      n.title ? `<h4>${n.title}</h4>` : '',
+      nums,
+      n.body ? `<p>${n.body}</p>` : '',
+      n.tiny ? `<div class="rule"></div><p class="tiny">${n.tiny}</p>` : '',
+    ].join('');
+    el.hidden = false;
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
   }
 
-  // ── 已掌握榫型槽位（知识回查入口）──────────────────
-  setSlots(items) {
-    const box = this.el.slots;
-    if (!items || !items.length) { box.hidden = true; return; }
-    box.hidden = false;
-    box.innerHTML = items.map((s, i) =>
-      `<div class="slot ${s.filled ? 'filled' : ''}" data-i="${i}" title="${s.tip || ''}">${s.label}</div>`).join('');
-    box.querySelectorAll('.slot').forEach((el) => {
-      el.addEventListener('click', () => {
-        const it = items[+el.dataset.i];
-        if (it.filled) it.onClick?.();
-      });
-    });
-  }
-
-  // ── 底部按钮 ──────────────────────────────────────
-  setActions(actions) {
-    const box = this.el.actions;
+  // ── 行动区 ──
+  /** 次要行动：一律是无框文字按钮，最多两个 */
+  setAlts(list) {
+    const box = this.el.alts;
     box.innerHTML = '';
-    for (const a of actions || []) {
+    for (const a of (list || []).slice(0, 2)) {
       const b = document.createElement('button');
-      b.className = a.kind === 'main' ? 'main-btn' : a.kind === 'alt' ? 'alt-btn' : 'ghost-btn';
+      b.className = 'ghost';
       b.textContent = a.label;
-      b.disabled = !!a.disabled;
       b.addEventListener('click', () => a.onClick?.(b));
       box.appendChild(b);
     }
   }
 
-  setNext({ label = '继续 ▸', enabled = true, hidden = false } = {}) {
-    this.el.next.textContent = label;
+  /** 不传 label 就保留当前文字 —— 禁用按钮时不该把标题也一并冲掉 */
+  setNext({ label, enabled = true, hidden = false } = {}) {
+    if (label !== undefined) this.el.next.textContent = label;
     this.el.next.disabled = !enabled;
     this.el.next.style.display = hidden ? 'none' : '';
   }
 
-  setBack({ enabled = true, hidden = false } = {}) {
-    this.el.back.disabled = !enabled;
-    this.el.back.style.display = hidden ? 'none' : '';
-  }
+  setBack({ enabled = true } = {}) { this.el.back.disabled = !enabled; }
 
-  /** 静默点清屏（导演红线）：隐藏进度条、按钮、提示，仅留极淡的退出角标 */
+  /** 静默：整层界面退场 */
   quiet(on) {
     this.el.topbar.dataset.quiet = on ? '1' : '0';
     this.el.bottom.dataset.quiet = on ? '1' : '0';
-    if (on) { this.setCards([]); this.setCounter(''); this.clearHotspots(); }
+    if (on) { this.setNote(null); this.clearSpots(); }
   }
 
-  // ── 3D 锚定热点（引线式标注，须避让模型不穿模）──────
-  addHotspot({ pos, label, sub, badge = '', color = 'var(--tenon)', onClick, active = false }) {
+  // ── 设置菜单 ──
+  toggleMenu() {
+    if (this._menu) { this.closeMenu(); return; }
+    const m = document.createElement('div');
+    m.className = 'menu';
+    const items = [
+      { k: 'sound', label: '声音', get: () => this.state.sound, set: (v) => { this.state.sound = v; this.onSound?.(v); } },
+      { k: 'captions', label: '字幕', get: () => this.state.captions, set: (v) => { this.state.captions = v; if (!v) this.setSubtitle(''); } },
+      { k: 'voice', label: '旁白朗读', get: () => this.state.voice, set: (v) => { this.state.voice = v; } },
+    ];
+    m.innerHTML = items.map((it) =>
+      `<button data-k="${it.k}" class="${it.get() ? 'on' : ''}">${it.label}<i>${it.get() ? '开' : '关'}</i></button>`).join('')
+      + '<div class="sep"></div>'
+      + '<button data-k="inspect">拆开看看<i>X</i></button>'
+      + '<button data-k="check">尺寸对照<i></i></button>';
+    document.body.appendChild(m);
+    this._menu = m;
+    m.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const it = items.find((x) => x.k === b.dataset.k);
+      if (it) {
+        const v = !it.get();
+        it.set(v);
+        b.classList.toggle('on', v);
+        b.querySelector('i').textContent = v ? '开' : '关';
+        return;
+      }
+      this.closeMenu();
+      if (b.dataset.k === 'inspect') this.onInspect?.();
+      if (b.dataset.k === 'check') this.onCheck?.();
+    });
+    this._away = () => this.closeMenu();
+    setTimeout(() => addEventListener('pointerdown', this._away, { once: true }), 0);
+  }
+
+  closeMenu() {
+    this._menu?.remove();
+    this._menu = null;
+    if (this._away) removeEventListener('pointerdown', this._away);
+  }
+
+  // ── 3D 锚定标注 ──
+  addSpot({ pos, label, sub, badge = '', color = 'var(--gold)', onClick, active = false }) {
     const el = document.createElement('button');
-    el.className = 'hotspot';
+    el.className = 'spot';
     el.textContent = badge;
-    el.style.borderColor = color;
     el.style.color = color;
     if (active) el.classList.add('on');
     const lb = document.createElement('div');
-    lb.className = 'hslabel';
+    lb.className = 'spot-label';
     lb.innerHTML = `${label}${sub ? `<small>${sub}</small>` : ''}`;
     lb.style.display = active ? '' : 'none';
     document.body.append(el, lb);
-    const h = { el, lb, pos: pos.clone(), onClick, active };
+    const h = { el, lb, pos: pos.clone(), active };
     el.addEventListener('click', () => {
       h.active = !h.active;
       el.classList.toggle('on', h.active);
       lb.style.display = h.active ? '' : 'none';
       onClick?.(h.active, h);
     });
-    this.hotspots.push(h);
+    this.spots.push(h);
     return h;
   }
 
-  clearHotspots() {
-    for (const h of this.hotspots) { h.el.remove(); h.lb.remove(); }
-    this.hotspots = [];
+  clearSpots() {
+    for (const s of this.spots) { s.el.remove(); s.lb.remove(); }
+    this.spots = [];
   }
 
-  /** 每帧把 3D 锚点投影到屏幕 */
-  updateHotspots(camera) {
-    if (!this.hotspots.length) return;
+  updateSpots(camera) {
+    if (!this.spots.length) return;
     const v = new THREE.Vector3();
-    const w = innerWidth, hgt = innerHeight;
-    for (const h of this.hotspots) {
-      v.copy(h.pos).project(camera);
+    for (const s of this.spots) {
+      v.copy(s.pos).project(camera);
       const behind = v.z > 1;
-      const x = (v.x * 0.5 + 0.5) * w;
-      const y = (-v.y * 0.5 + 0.5) * hgt;
-      h.el.style.display = behind ? 'none' : '';
-      h.lb.style.display = behind || !h.active ? 'none' : '';
-      h.el.style.left = `${x}px`; h.el.style.top = `${y}px`;
-      h.lb.style.left = `${x + 18}px`; h.lb.style.top = `${y}px`;
+      const x = (v.x * 0.5 + 0.5) * innerWidth;
+      const y = (-v.y * 0.5 + 0.5) * innerHeight;
+      s.el.style.display = behind ? 'none' : '';
+      s.lb.style.display = behind || !s.active ? 'none' : '';
+      s.el.style.left = `${x}px`; s.el.style.top = `${y}px`;
+      s.lb.style.left = `${x + 14}px`; s.lb.style.top = `${y}px`;
     }
   }
 
-  // ── 覆盖层（模块 / 枢纽 / 海报）─────────────────────
-  showOverlay(html, { solid = true, onMount } = {}) {
+  // ── 覆盖层 ──
+  showOverlay(html, { veil = true, onMount } = {}) {
     const o = this.el.overlay;
     o.hidden = false;
-    o.className = `overlay ${solid ? 'solid' : 'clear'}`;
+    o.className = `overlay ${veil ? 'veil' : 'bare'}`;
     o.innerHTML = html;
     onMount?.(o);
     return o;
   }
 
-  hideOverlay() {
-    this.el.overlay.hidden = true;
-    this.el.overlay.innerHTML = '';
-  }
+  hideOverlay() { this.el.overlay.hidden = true; this.el.overlay.innerHTML = ''; }
+  get overlayOpen() { return !this.el.overlay.hidden; }
 
-  get overlayVisible() { return !this.el.overlay.hidden; }
-
-  showBottom(v) { this.el.bottom.hidden = !v; }
-  showTop(v) { this.el.topbar.hidden = !v; }
+  showChrome(v) { this.el.bottom.hidden = !v; this.el.topbar.hidden = !v; }
 }
 
-/** 引导箭头（S25 地面轨道 / S27 三段轨迹）—— 须在首次触碰前显示 */
-export class GuideArrows {
+/** 空间方向引导（立柱推入方向、装板轨迹） */
+export class Arrows {
   constructor() { this.items = []; }
   set(list) {
     this.clear();
     for (const it of list) {
       const el = document.createElement('div');
-      el.className = 'guide-arrow';
-      el.textContent = it.glyph || '➜';
+      el.className = 'arrow';
+      el.textContent = it.glyph || '→';
       el.style.transform = `translate(-50%,-50%) rotate(${it.rot || 0}deg)`;
       document.body.appendChild(el);
-      this.items.push({ el, pos: it.pos.clone(), rot: it.rot || 0 });
+      this.items.push({ el, pos: it.pos.clone() });
     }
   }
   clear() { for (const i of this.items) i.el.remove(); this.items = []; }
@@ -267,8 +233,7 @@ export class GuideArrows {
     const v = new THREE.Vector3();
     for (const it of this.items) {
       v.copy(it.pos).project(camera);
-      const behind = v.z > 1;
-      it.el.style.display = behind ? 'none' : '';
+      it.el.style.display = v.z > 1 ? 'none' : '';
       it.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
       it.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
     }

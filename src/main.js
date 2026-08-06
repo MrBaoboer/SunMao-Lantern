@@ -6,7 +6,7 @@ import { Lantern } from './render/lantern.js';
 import { ChipBurst, Ripples, EnergyRing, Fireworks, detectTier } from './render/fx.js';
 import { state } from './core/state.js';
 import { runVerification, formatReport } from './core/verify.js';
-import { HUD, GuideArrows } from './ui/hud.js';
+import { HUD, Arrows } from './ui/hud.js';
 import { SFX, unlockAudio } from './audio/sfx.js';
 import { BGM } from './audio/bgm.js';
 import { VoiceTrack } from './audio/voice.js';
@@ -42,11 +42,11 @@ const MODULE_VO = [
 ];
 
 const boot = document.getElementById('boot');
-const bar = boot.querySelector('.bootbar i');
-const bootmsg = boot.querySelector('.bootmsg');
+const bar = boot.querySelector('.boot-line i');
+const bootMsg = boot.querySelector('.boot-msg');
 const progress = (p, msg) => {
   bar.style.width = `${Math.round(p * 100)}%`;
-  if (msg) bootmsg.textContent = msg;
+  if (msg) bootMsg.textContent = msg;
 };
 const frame = () => new Promise((r) => setTimeout(r, 16));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -84,7 +84,7 @@ async function main() {
   const hud = new HUD(state);
   const bgm = new BGM(state, SFX);
   const voice = new VoiceTrack(state, hud);
-  const guides = new GuideArrows();
+  const guides = new Arrows();
   const fx = {
     chips: new ChipBurst(stage.scene, tier),
     ripples: new Ripples(stage.scene),
@@ -110,105 +110,97 @@ async function main() {
   const engine = new Engine(ctx);
   engine.setSteps([...act1(ctx), ...act3(ctx), ...act4(ctx)]);
 
-  // ── 互动模块枢纽 ──
-  const MODULES = [
+  // ── 五个入口 ──
+  const DOORS = [
     { id: 'M1', ic: '🔥', nm: '点灯', ds: '让它亮起来', open: openM1 },
-    { id: 'M2', ic: '🎋', nm: '猜灯谜', ds: '五题闯关，答对越多灯越亮', open: openM2 },
-    { id: 'M3', ic: '🖌', nm: '新春许愿', ds: '写下心愿，生成一张海报', open: openM3 },
-    { id: 'M4', ic: '📷', nm: 'AR 挂灯笼', ds: '把它挂在你家门口', open: openM4 },
-    { id: 'M5', ic: '🎆', nm: '烟花庆祝', ds: '五种花型，等你点', open: openM5 },
+    { id: 'M2', ic: '🎋', nm: '猜灯谜', ds: '答对一个，灯亮一分', open: openM2 },
+    { id: 'M3', ic: '🖌', nm: '写心愿', ds: '写在灯上，存成一张画', open: openM3 },
+    { id: 'M4', ic: '🏮', nm: '挂起来', ds: '挂到你想挂的地方', open: openM4 },
+    { id: 'M5', ic: '🎆', nm: '放烟花', ds: '点、划、画个圈', open: openM5 },
   ];
   ctx.openHub = () => {
     const done = state.modulesDone || {};
-    const n = Object.keys(done).filter((k) => done[k]).length;
-    hud.showOverlay(`<div class="panel">
-      <h2>过年该做的事</h2>
-      <p class="lead">顺序随意，想先做哪个都可以 · 已完成 ${n}/5</p>
-      <div class="hub">
-        ${MODULES.map((m) => `<button class="hub-item" data-m="${m.id}">
-            ${done[m.id] ? '<span class="stamp">成</span>' : ''}
-            <span class="ic">${m.ic}</span>
-            <span class="nm">${m.nm}</span>
-            <span class="ds">${m.ds}</span>
+    const n = DOORS.filter((d) => done[d.id]).length;
+    hud.showOverlay(`<div class="dock">
+      <div class="doors">
+        ${DOORS.map((m) => `<button class="door" data-m="${m.id}">
+            ${done[m.id] ? '<span class="seal">成</span>' : ''}
+            <span class="ic">${m.ic}</span><span class="nm">${m.nm}</span><span class="ds">${m.ds}</span>
           </button>`).join('')}
       </div>
-      <div style="margin-top:26px;text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <button id="hub-replay" class="ghost-btn">重看制作过程</button>
-        <button id="hub-verify" class="ghost-btn">几何校验报告</button>
-      </div>
-      ${n === 5 ? '<p class="lead" style="margin-top:20px;color:var(--tenon)">五项全部完成 · 已解锁双色描金</p>' : ''}
-    </div>`, { solid: false, onMount: (o) => {
-      o.classList.add('clear');
-      o.querySelectorAll('.hub-item').forEach((b) => {
+    </div>`, { veil: false, onMount: (o) => {
+      o.querySelectorAll('.door').forEach((b) => {
         b.addEventListener('mouseenter', () => SFX.play('UI_HOVER_SOFT'));
         b.addEventListener('click', () => {
-          const m = MODULES.find((x) => x.id === b.dataset.m);
+          const m = DOORS.find((x) => x.id === b.dataset.m);
           SFX.play('PORTAL_ENTER');
           hud.hideOverlay();
-          hud.showBottom(false);
-          hud.showTop(false);
+          hud.showChrome(false);
           m.open(ctx, () => {
-            hud.showBottom(true);
-            hud.showTop(true);
+            hud.showChrome(true);
             SFX.play('STAMP');
             ctx.openHub();
           });
         });
       });
-      o.querySelector('#hub-replay').addEventListener('click', () => {
-        hud.hideOverlay();
-        engine.goToStep('D5');
-      });
-      o.querySelector('#hub-verify').addEventListener('click', showVerify);
     } });
+    hud.setHint(n ? `已经做了 <em>${n}</em> 件 · 想先做哪个都行` : '想先做哪个都行');
+    hud.setAlts([{ label: '重看制作过程', onClick: () => { hud.hideOverlay(); engine.goToStep('D5'); } }]);
   };
 
-  // ── 几何校验报告面板 ──
-  const showVerify = () => {
+  // ── 尺寸对照 ──
+  // 这盏灯的几何是按一套尺寸算出来的，打开页面时会自己核对一遍。
+  // 这里只挑几条人看得懂的说，完整结果在控制台。
+  const showCheck = () => {
     const { pass, total } = formatReport(report);
-    hud.showOverlay(`<div class="panel">
-      <h2>几何闭合验算</h2>
-      <p class="lead">§13.1 建模自检表 → 运行时断言 · ${pass}/${total} 项通过</p>
-      <div class="verify">${report.map((r) =>
-        `<div class="${r.ok ? 'ok' : 'no'}">${r.ok ? '✓' : '✗'} [${r.code}] ${r.title}</div>` +
-        (r.detail ? `<div style="opacity:.6;padding-left:20px">${r.detail}</div>` : '')).join('')}
+    const ok = pass === total;
+    const clash = report.find((r) => r.code === 'CLASH');
+    hud.showOverlay(`<div class="sheet">
+      <h2>严丝合缝</h2>
+      <p class="lede">这盏灯的每一个尺寸，都是同一个数算出来的</p>
+      <div class="tally">
+        <div class="r"><span>木条截面</span><b>12 毫米</b></div>
+        <div class="r"><span>其余所有尺寸</span><b>它的整数倍</b></div>
+        <div class="r"><span>榫头穿透后露出</span><b>6 毫米</b></div>
+        <div class="r"><span>上槽 / 下槽</span><b>6 / 2 毫米</b></div>
+        <div class="r"><span>细颈截面</span><b>柱身的四分之一</b></div>
+        <div class="r sum"><span>零件两两相碰之处</span><b>${ok ? '0' : '有'}</b></div>
       </div>
-      <div style="margin-top:22px;text-align:center"><button id="v-close" class="main-btn">关闭</button></div>
+      <p class="lede" style="margin:30px 0 0">
+        ${clash?.detail || ''}<br>页面每次打开都会重算一遍，${pass} / ${total} 项通过。
+      </p>
+      <div class="foot"><button id="chk-x" class="primary">好</button></div>
     </div>`, { onMount: (o) => {
-      o.querySelector('#v-close').addEventListener('click', () => {
+      o.querySelector('#chk-x').addEventListener('click', () => {
         hud.hideOverlay();
         if (engine.current?.id === 'D6') ctx.openHub();
       });
     } });
   };
-  hud.onVerify = showVerify;
+  hud.onCheck = showCheck;
 
-  // ── 结构检视器（V3.0 新增：把散落各步的六次剖切升级为全局能力）──
-  let inspectOn = false;
+  // ── 拆开看看：任意时刻剖切与拆解 ──
+  let inspecting = false;
   hud.onInspect = () => {
-    inspectOn = !inspectOn;
-    hud.el.inspect.dataset.on = inspectOn ? '1' : '0';
-    if (!inspectOn) {
+    inspecting = !inspecting;
+    if (!inspecting) {
       lantern.setSection(null, false);
       lantern.setExplode(0, 'layered');
+      for (const p of lantern.parts.values()) {
+        p.material.transparent = false; p.material.opacity = 1;
+        p.material.depthWrite = true; p.material.needsUpdate = true;
+      }
       hud.hideOverlay();
       return;
     }
-    hud.showOverlay(`<div class="panel" style="position:fixed;right:0;top:14vh;width:min(300px,80vw);pointer-events:auto">
-      <div class="card">
-        <h4>结构检视器<span class="tag">X</span></h4>
-        <div class="slider-wrap" style="margin:10px 0"><span>爆炸</span>
-          <input id="ins-ex" type="range" min="0" max="100" value="0" style="width:150px"></div>
-        <div class="slider-wrap"><span>半透</span>
-          <input id="ins-sec" type="range" min="0" max="100" value="0" style="width:150px"></div>
-        <p>几何为程序化生成，任意时刻都可剖切与拆解 —— 这是网页端相对分步讲解器的真正优势。</p>
-      </div>
-    </div>`, { solid: false, onMount: (o) => {
-      o.classList.add('clear');
-      o.querySelector('#ins-ex').addEventListener('input', (e) => {
-        lantern.setExplode(e.target.value / 100, 'layered');
-      });
-      o.querySelector('#ins-sec').addEventListener('input', (e) => {
+    hud.showOverlay(`<div class="dock">
+      <div class="slider"><span>拆开</span><input id="ins-x" type="range" min="0" max="100" value="0"></div>
+      <div class="slider"><span>透明</span><input id="ins-s" type="range" min="0" max="100" value="0"></div>
+      <button id="ins-close" class="ghost">收起</button>
+    </div>`, { veil: false, onMount: (o) => {
+      o.querySelector('#ins-x').addEventListener('input', (e) =>
+        lantern.setExplode(e.target.value / 100, 'layered'));
+      o.querySelector('#ins-s').addEventListener('input', (e) => {
         const k = e.target.value / 100;
         for (const p of lantern.parts.values()) {
           p.material.transparent = k > 0;
@@ -217,11 +209,15 @@ async function main() {
           p.material.needsUpdate = true;
         }
       });
+      o.querySelector('#ins-close').addEventListener('click', () => hud.onInspect());
     } });
   };
-  addEventListener('keydown', (e) => { if (e.key === 'x' || e.key === 'X') hud.onInspect(); });
+  addEventListener('keydown', (e) => {
+    if ((e.key === 'x' || e.key === 'X') && !hud.overlayOpen) hud.onInspect();
+    else if ((e.key === 'x' || e.key === 'X') && inspecting) hud.onInspect();
+  });
 
-  hud.onSoundToggle = (v) => { SFX.setEnabled(v); bgm.setEnabled(v); };
+  hud.onSound = (v) => { SFX.setEnabled(v); bgm.setEnabled(v); };
 
   // ── 主循环 ──
   stage.updaters.add((dt, t) => {
@@ -231,7 +227,7 @@ async function main() {
     fx.ripples.update(dt);
     fx.ring.update(dt);
     fx.fireworks.update(dt);
-    hud.updateHotspots(stage.camera);
+    hud.updateSpots(stage.camera);
     guides.update(stage.camera);
   });
   stage.start();
@@ -257,19 +253,18 @@ async function main() {
   unlockAudio();
 
   progress(1, '好了');
-  await sleep(280);
+  await sleep(320);
   boot.classList.add('gone');
-  setTimeout(() => { boot.hidden = true; }, 900);
-  hud.showTop(true);
-  hud.showBottom(true);
+  setTimeout(() => { boot.hidden = true; }, 1100);
+  hud.showChrome(true);
 
   await engine.go(0);
 }
 
 main().catch((e) => {
   console.error(e);
-  bootmsg.innerHTML = `出错了：${e.message}<br><small style="opacity:.6">详情见控制台</small>`;
-  bootmsg.style.color = '#e0776f';
+  bootMsg.textContent = `没能打开：${e.message}`;
+  bootMsg.style.color = '#d98a80';
 });
 
 export { THREE };

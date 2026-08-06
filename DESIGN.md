@@ -133,7 +133,7 @@ CSG 内核给每个顶点标了 `aCut`（该面是否为加工新露出的面）
 
 ## 5. 音频：为什么音效是合成的
 
-MiniMax 提供 T2A（配音）与 music_generation（BGM），但**没有音效接口**。这反而是好事，因为脚本本身要求音效是**参数化**的：
+音效不能用现成的采样，因为脚本本身要求它是**参数化**的：
 
 - S02 建立的 `SFX_SNAP_IN` 后续 12 次装配复用
 - S20 第二记 `SFX_SNAP_IN`「音高高 2 个半音」
@@ -149,17 +149,15 @@ MiniMax 提供 T2A（配音）与 music_generation（BGM），但**没有音效�
 
 ### 配音与 BGM
 
-- `tools/gen-voice.mjs` —— 36 条旁白，音色按 §12.3 选用**温润男声**（明确避开「播报男声」，规范禁用播音腔），抒情段落切换抒情男声；「（气口）」「（停顿 n s）」自动转成 MiniMax 的 `<#x#>` 停顿标记；语速由各步 `cps` 折算
-- `tools/gen-bgm.mjs` —— §12.1 的 8 首曲目，各带编制描述
+音频层与生成工具解耦：播放端只认目录与清单，用什么录制或合成都行。
 
-**当前状态：MiniMax 账户余额不足（`1008 insufficient balance`），音频尚未生成。**
-密钥本身有效（音色列表接口正常返回 303 个音色）。充值后跑：
+- 旁白 → `public/audio/vo/{编号}.mp3` ＋ 同目录 `manifest.json`：`{ "ids": [...] }`
+- 音乐 → `public/audio/bgm/{曲名}.mp3` ＋ `{ "files": [...] }`
 
-```bash
-npm run gen:voice && npm run gen:bgm
-```
+全片旁白全文见 [旁白解说稿.md](旁白解说稿.md)，36 条、2914 字、约 15 分钟，已分段断句并标注语速与停顿。
+它由 `tools/make-script.mjs` 从**运行时的真实步骤数据**导出，因此与线上逐字一致，不会因为源码改动而失同步。
 
-未生成时，字幕按 §12.3 的语速模型独立走完全同一套内容——这正是 §7「降级后叙事与知识点零损失」的兑现方式。
+没有音频时，字幕按语速模型独立走完同一套内容 —— 这正是原文档 §7「降级后叙事与知识点零损失」的兑现方式。
 
 ---
 
@@ -221,7 +219,7 @@ src/
   steps/      act1/act3/act4.js  24 步内容
   modules/    m1-m2.js, m3-m5.js  五大互动模块
 tools/        verify-geometry.mjs  Node 端几何验算（npm run verify）
-              gen-voice.mjs / gen-bgm.mjs  MiniMax 生成管线
+              make-script.mjs      从运行时数据导出旁白解说稿
 ```
 
 ---

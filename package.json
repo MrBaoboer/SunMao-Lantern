@@ -1,5 +1,5 @@
 {
-  "name": "sunmou-lantern",
+  "name": "sunmao-lantern",
   "private": true,
   "version": "3.0.0",
   "type": "module",
@@ -8,10 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "verify": "node tools/verify-geometry.mjs",
-    "gen:voice": "node tools/gen-voice.mjs",
-    "gen:bgm": "node tools/gen-bgm.mjs",
-    "probe": "node tools/probe-minimax.mjs"
+    "verify": "node tools/verify-geometry.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"

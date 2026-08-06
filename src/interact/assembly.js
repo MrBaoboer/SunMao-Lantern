@@ -111,7 +111,7 @@ export class DragAssembly {
 
   onDown(e) {
     const s = this.session;
-    if (!s || this.ctx.hud.overlayVisible) return;
+    if (!s || this.ctx.hud.overlayOpen) return;
     const hit = this._pick(e);
     if (!hit) return;
 
@@ -212,20 +212,18 @@ export class DragAssembly {
       // 停在末段没推到底 —— 回弹 2 mm，提示再用力
       const u1 = a.u - J3.WEDGE_LEN / a.gap;
       await tween(0.22, (k) => this.ctx.lantern.setAssemblyProgress(a.partId, a.u + (u1 - a.u) * k), { ease: Ease.outQuad });
-      this.ctx.hud.toast('再用点力，推到底才会咬住', { type: 'warn' });
+      this.ctx.hud.toast('再用点力，推到底才会咬住');
       this.ctx.sfx.play('UI_REJECT', { gain: 0.5 });
     } else {
       // 推进不足 —— 缓慢滑回原位
       const u0 = a.u;
       await tween(0.42, (k) => this.ctx.lantern.setAssemblyProgress(a.partId, u0 * (1 - k)), { ease: Ease.inOutQuad });
       s.failCount++;
-      this.ctx.hud.toast('再推近一点', { type: 'warn' });
+      this.ctx.hud.toast('再推近一点');
       // 连续 3 次未成功 → 放宽吸附并主动提供帮助（隐性辅助）
       if (s.failCount >= 3) {
         s.snap = Math.max(s.snap, 12);
-        this.ctx.hud.setActions([
-          { label: '需要我帮你完成吗？', kind: 'alt', onClick: () => this.autoSeatAll() },
-        ]);
+        this.ctx.hud.setAlts([{ label: '要我帮你吗', onClick: () => this.autoSeatAll() }]);
       }
     }
   }
@@ -238,7 +236,7 @@ export class DragAssembly {
     const u0 = a.u;
     await tween(0.3, (k) => this.ctx.lantern.setAssemblyProgress(a.partId, u0 * (1 - Ease.outQuad(k))), { ease: Ease.linear });
     this.ctx.sfx.play('UI_REJECT');
-    this.ctx.hud.toast(s.wrongHint || '沿着木条的方向推进去', { type: 'warn' });
+    this.ctx.hud.toast(s.wrongHint || '沿着木条的方向推进去');
   }
 
   /** 把某件送到位（含到位反馈） */

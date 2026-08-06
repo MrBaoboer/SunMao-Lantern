@@ -8,7 +8,7 @@ import path from 'node:path';
  */
 function shotPlugin() {
   return {
-    name: 'sunmou-shot',
+    name: 'sunmao-shot',
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use('/__shot', (req, res) => {

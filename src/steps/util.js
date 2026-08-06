@@ -144,7 +144,7 @@ export function makeSimpleDrag(ctx) {
     };
 
     const onDown = (e) => {
-      if (seated || ctx.hud.overlayVisible) return;
+      if (seated || ctx.hud.overlayOpen) return;
       pointer(e);
       if (!ray.intersectObject(obj, true).length) return;
       const camDir = new THREE.Vector3();
