@@ -15,7 +15,7 @@ import { DragAssembly } from './interact/assembly.js';
 import { Machining } from './interact/machining.js';
 import { Engine } from './app/engine.js';
 import { tick as tickTweens } from './util/tween.js';
-import { makeSimpleDrag } from './steps/util.js';
+import { makeSimpleDrag, FIT_LANTERN } from './steps/util.js';
 import { act1 } from './steps/act1.js';
 import { act3 } from './steps/act3.js';
 import { act4 } from './steps/act4.js';
@@ -26,11 +26,11 @@ import { installDevShot } from './devshot.js';
 
 /** 做完灯之后的五件事 */
 const DOORS = [
-  { id: 'M1', ico: 'flame', nm: '点灯', ds: '把这盏灯点亮', open: openM1 },
+  { id: 'M1', ico: 'flame', nm: '点灯', ds: '按住引火，等它亮起来', open: openM1 },
   { id: 'M2', ico: 'slip', nm: '猜灯谜', ds: '答对一个，灯亮一分', open: openM2 },
   { id: 'M3', ico: 'brush', nm: '写心愿', ds: '写在灯上，存成一张画', open: openM3 },
   { id: 'M4', ico: 'lantern', nm: '挂起来', ds: '挂到你想挂的地方', open: openM4 },
-  { id: 'M5', ico: 'firework', nm: '放烟花', ds: '点一下，划一下，画个圈', open: openM5 },
+  { id: 'M5', ico: 'firework', nm: '放烟花', ds: '点一下，画个圈，四种花', open: openM5 },
 ];
 
 const cover = document.getElementById('cover');
@@ -67,6 +67,8 @@ async function main() {
       `color:${r.ok ? '#4f8a55' : '#c25a4e'}`, r.detail || '');
   }
   console.groupEnd();
+  // 冒烟测试要读这个结果 —— 页面能打开不等于几何是对的
+  window.__verifyReport = { total: report.length, failed: bad.length };
 
   progress(0.45, '正在下料');
   await frame();
@@ -201,6 +203,9 @@ async function main() {
     if ((e.key === 'x' || e.key === 'X') && (inspecting || !hud.overlayOpen)) hud.onInspect();
   });
 
+  // 界面占掉的上下两条边交给三维 —— 灯笼据此让位与退远
+  hud.onSafeArea = (safe) => stage.setSafeArea(safe);
+
   hud.onSound = (v) => { SFX.setEnabled(v); bgm.setEnabled(v); };
   hud.onTheme = (v) => stage.setTheme(v);
   hud.onRestart = () => { if (inspecting) hud.onInspect(); engine.go(0); };
@@ -254,8 +259,12 @@ async function main() {
   lantern.setLit(0);
   stage.setMood('dusk');
 
+  // 封面的灯退得远一些、转得慢一些：它是题字背后的一层影，不是主体
   let az = 62;
-  const drift = (dt) => { az += dt * 2.4; stage.setRecommended({ az, el: 12, dist: 470 }); };
+  const drift = (dt) => {
+    az += dt * 2.0;
+    stage.setRecommended({ az, el: 10, dist: 620, fit: FIT_LANTERN });
+  };
   drift(0);
   stage.snapToRecommended();
   stage.updaters.add(drift);
@@ -264,7 +273,8 @@ async function main() {
   await sleep(200);
   cover.dataset.ready = '1';
 
-  const enter = async (index) => {
+  // 每次打开都是新的一遍：封面只有一个入口，不问「要不要接着上次」
+  const enter = async () => {
     coverAct.querySelectorAll('button').forEach((b) => { b.disabled = true; });
     stage.updaters.delete(drift);
     cover.classList.add('gone');
@@ -275,26 +285,20 @@ async function main() {
       await sleep(480);                     // 让封面先退干净，再摊开这一页
       await new Promise((done) => hud.guide({ label: '开始吧', onClose: done }));
     }
-    await engine.go(index);
+    await engine.go(0);
   };
 
-  const resumeAt = Math.min(state.maxStep || 0, engine.steps.length - 1);
-  const fresh = resumeAt <= 0;
-  const stepName = engine.steps[resumeAt]?.title || '';
-
   coverAct.innerHTML = `
-    <button class="btn btn-primary" id="cv-go">${fresh ? '开始做灯' : `继续 · 第 ${resumeAt + 1} 步`}</button>
+    <button class="btn btn-primary" id="cv-go">开始做灯</button>
     <div class="cover-alt">
-      ${fresh ? '' : '<button class="btn btn-text" id="cv-new">从头开始</button>'}
       <button class="btn btn-text" id="cv-help">怎么操作</button>
     </div>
-    <p class="cover-meta">${fresh ? '约 8 分钟 · 随时可以停' : `上次停在「${stepName}」`}</p>`;
+    <p class="cover-meta">约 8 分钟 · 随时可以停</p>`;
   coverMsg.hidden = true;
   coverAct.hidden = false;
   coverAct.querySelector('#cv-go').focus();
 
-  coverAct.querySelector('#cv-go').addEventListener('click', () => enter(resumeAt));
-  coverAct.querySelector('#cv-new')?.addEventListener('click', () => enter(0));
+  coverAct.querySelector('#cv-go').addEventListener('click', enter);
   coverAct.querySelector('#cv-help').addEventListener('click', () => hud.guide({ full: true }));
 }
 
@@ -306,7 +310,7 @@ main().catch((e) => {
   coverAct.hidden = false;
   coverAct.innerHTML = `
     <button class="btn btn-primary" id="cv-retry">重新加载</button>
-    <p class="cover-meta">如果一直不行，换个新一点的浏览器试试</p>`;
+    <p class="cover-meta">这一页需要 WebGL。反复失败的话，换个新一点的浏览器再试。</p>`;
   coverAct.querySelector('#cv-retry').addEventListener('click', () => location.reload());
 });
 

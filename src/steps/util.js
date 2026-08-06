@@ -2,7 +2,12 @@
 
 import * as THREE from 'three';
 import { a, av, dim, M, C, J1, J2, J3, J4 } from '../core/modulus.js';
-import { PALETTE } from '../render/materials.js';
+import { PALETTE, makeWoodMaterial } from '../render/materials.js';
+import { Solid, box } from '../core/boxcsg.js';
+import { solidToGeometry, grainAxisOf, edgeLines } from '../render/geometry.js';
+import { tween } from '../util/tween.js';
+
+export { box, edgeLines };
 
 export const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export { a, av, dim, M, C, J1, J2, J3, J4, PALETTE };
@@ -10,60 +15,89 @@ export { a, av, dim, M, C, J1, J2, J3, J4, PALETTE };
 /** 工作台陈列位（构件离位加工时的摆放高度） */
 export const BENCH_Z = a(8);
 
+/**
+ * 取景范围（相对该步的镜头目标，毫米）。
+ *
+ * 每一步都得声明"这一步必须完整看到多大一块" —— 画幅装不下时相机自己后退。
+ * 不声明的后果在竖屏上立刻可见：水平视场只有十几度，主体直接被裁掉两边。
+ */
+/**
+ * 整盏灯：木作本体加柱头角花。
+ * 流苏那截红线故意不算进来 —— 为了一根穗子把灯笼缩掉三成，不值。
+ */
+export const FIT_LANTERN = { r: 98, h: 110 };
+/** 只有木作骨架：十三根木条，无装饰无流苏 */
+export const FIT_FRAME = { r: 98, h: 100 };
+/** 一个枨框：五件或四件，摊平的一层 */
+export const FIT_RING = { r: 104, h: 52 };
+/** 工作台上的单件加工镜头 */
+export const FIT_BENCH = { r: 76, h: 48 };
+
 /** 参数卡的标准行（一律「模数倍数（毫米）」双写，§12.5 排版纪律） */
 export const row = (k, n) => [k, dim(n)];
 
+/** 一枚软边光点。远处的灯只该是一团光，不该是一块贴片 */
+let glowTex = null;
+function lampGlow() {
+  if (glowTex) return glowTex;
+  const cv = document.createElement('canvas');
+  cv.width = 64; cv.height = 64;
+  const g = cv.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.28, 'rgba(255,214,150,0.85)');
+  grd.addColorStop(0.62, 'rgba(255,140,70,0.28)');
+  grd.addColorStop(1, 'rgba(255,120,60,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  glowTex = new THREE.CanvasTexture(cv);
+  glowTex.colorSpace = THREE.SRGBColorSpace;
+  return glowTex;
+}
+
 /**
- * 「灯河」氛围：12 盏形制各异的灯笼剪影依次点亮，主角始终不亮。
- * 原稿 S01 的老街是一次性写实资产；此处改为抽象灯河 ——
- * 成本低得多，且天然不会与主角灯笼同形制（原稿备注要求「禁止剧透」）。
+ * 「灯河」氛围：远处一片灯依次点亮，主角始终不亮。
+ *
+ * 这些灯只负责"远处还有别人家的灯"这一个意思，所以做成软边光点：
+ * 有形状的剪影一旦飘到画面里，就变成一块糊在界面上的橙色方块，
+ * 既不像灯，也压过了主角。全部压在地平线一带、推到主角之外很远的地方。
  */
 export function buildLanternRiver(scene) {
   const g = new THREE.Group();
-  const rnd = (s) => { let x = Math.sin(s * 127.1) * 43758.5453; return x - Math.floor(x); };
+  const rnd = (s) => { const x = Math.sin(s * 127.1) * 43758.5453; return x - Math.floor(x); };
   const lamps = [];
-  for (let i = 0; i < 12; i++) {
-    // 推到主角灯笼之外足够远，才读得出「远处的一片灯」而不是几块贴片
-    const r = 900 + rnd(i) * 900;
-    const th = (i / 12) * Math.PI * 2 + rnd(i + 9) * 0.7;
-    const h = 160 + rnd(i + 3) * 420;
-    const w = 34 + rnd(i + 5) * 30;
-    const shape = i % 3;
-    const geo = shape === 0
-      ? new THREE.CylinderGeometry(w, w, w * 1.5, 10)
-      : shape === 1
-        ? new THREE.SphereGeometry(w * 0.8, 12, 8)
-        : new THREE.BoxGeometry(w * 1.4, w * 1.4, w * 1.7);
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xc0392b, transparent: true, opacity: 0.16,
+  const tex = lampGlow();
+  for (let i = 0; i < 16; i++) {
+    const r = 1500 + rnd(i) * 1400;
+    const th = (i / 16) * Math.PI * 2 + rnd(i + 9) * 0.35;
+    const h = -40 + rnd(i + 3) * 260;          // 压在地平线一带，不飘到画面上方
+    const w = 60 + rnd(i + 5) * 70;
+    const mat = new THREE.SpriteMaterial({
+      map: tex, color: 0xff8a4c, transparent: true, opacity: 0.10,
+      depthWrite: false, blending: THREE.AdditiveBlending,
     });
-    const m = new THREE.Mesh(geo, mat);
-    if (shape === 0) m.rotation.x = Math.PI / 2;
+    const m = new THREE.Sprite(mat);
+    m.scale.set(w, w, 1);
     m.position.set(Math.cos(th) * r, Math.sin(th) * r, h);
-    // 悬绳
-    const cord = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.2, 1.2, 320, 4),
-      new THREE.MeshBasicMaterial({ color: 0x3a2a1e, transparent: true, opacity: 0.28 }),
-    );
-    cord.rotation.x = Math.PI / 2;
-    cord.position.set(m.position.x, m.position.y, h + 160 + w);
-    g.add(m, cord);
-    lamps.push({ m, mat, delay: i * 0.25 });
+    g.add(m);
+    lamps.push({ m, mat, delay: i * 0.18 });
   }
   scene.add(g);
   return {
     group: g, lamps,
-    /** 点灯波：自远及近依次点亮，间隔 0.25 s */
-    async wave(sfx) {
+    /** 点灯波：自远及近依次点亮 */
+    wave(sfx) {
       for (const l of lamps) {
         setTimeout(() => {
-          l.mat.opacity = 0.95;
-          l.mat.color.setHex(0xff8a4c);
-          sfx?.play('LIGHT_SOFT', { gain: 0.35, pitch: (Math.random() - 0.5) * 6 });
+          tween(0.7, (k) => { l.mat.opacity = 0.10 + 0.62 * k; });
+          sfx?.play('LIGHT_SOFT', { gain: 0.35, pitch: (rnd(l.delay * 31) - 0.5) * 6 });
         }, l.delay * 1000);
       }
     },
-    dispose() { scene.remove(g); },
+    dispose() {
+      scene.remove(g);
+      for (const l of lamps) l.mat.dispose();
+    },
   };
 }
 
@@ -91,6 +125,40 @@ export function buildNightSky(scene) {
   g.add(stars);
   scene.add(g);
   return { group: g, dispose() { scene.remove(g); geo.dispose(); mat.dispose(); } };
+}
+
+/**
+ * 教学件：走的是真构件那条几何管线 —— 毛坯减去若干切除盒。
+ *
+ * 意义不只是"更真"。凹进去的地方必须是**真的没有料**：
+ * 内壁由 CSG 生成、照常受光，切面还会按全片统一的规矩亮一档。
+ * 拿一块深色面片贴在木料表面上假装凹槽，得到的一定是相反的读数 ——
+ * 不透光的实体压在表面上，眼睛读出来是凸起。
+ *
+ * @param {{blank:object, cuts?:object[], at?:number[], tone?:number,
+ *          edge?:number, edgeOpacity?:number}} o edge 给一个语义色即描边
+ * @returns {THREE.Group} 组内网格已抵消 recenter，声明时的坐标即组内坐标
+ */
+export function demoSolid({ blank, cuts = [], at = [0, 0, 0], tone = 0, edge, edgeOpacity = 0.5 }) {
+  const solid = new Solid(blank, cuts);
+  const geo = solidToGeometry(solid);
+  const mat = makeWoodMaterial({
+    grainAxis: grainAxisOf(solid),
+    center: new THREE.Vector3(...at),
+    tone,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  // solidToGeometry 把几何挪到了毛坯中心，这里加回去，声明时的坐标才作数。
+  // 描边必须挂在网格下面 —— 挂到组上就会整体错位一个毛坯半长。
+  mesh.position.copy(geo.userData.origin);
+  if (edge !== undefined) mesh.add(edgeLines(geo, edge, edgeOpacity));
+  const g = new THREE.Group();
+  g.add(mesh);
+  g.position.set(...at);
+  g.userData = { geo, mat, mesh };
+  return g;
 }
 
 /** 幻影提示体（S18 柱窝预留、S19 立柱与格心示意） */

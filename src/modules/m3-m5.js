@@ -3,7 +3,7 @@
  */
 
 import * as THREE from 'three';
-import { V, Junk, buildNightSky } from '../steps/util.js';
+import { V, Junk, buildNightSky, FIT_LANTERN } from '../steps/util.js';
 import { playVO } from './vo.js';
 import { buildPatternTexture } from '../render/lattice.js';
 import { makePosterNo } from '../core/state.js';
@@ -34,7 +34,7 @@ export function openM3(c, onExit) {
   c.stage.setMood('night');
   c.bgm.play('BGM_C_WISH');
   junk.add(buildNightSky(c.stage.scene));
-  c.stage.setRecommended({ az: 90, el: 8, dist: 330, target: V(0, 0, 96) });
+  c.stage.setRecommended({ az: 90, el: 8, dist: 330, target: V(0, 0, 96), fit: FIT_LANTERN });
   c.stage.snapToRecommended();
 
   let picked = c.state.wishText || '';
@@ -232,13 +232,13 @@ export function openM4(c, onExit) {
   junk.add(sky);
 
   const placed = [];
-  c.stage.setRecommended({ az: 60, el: 6, dist: 540, target: V(0, 0, 96) });
+  c.stage.setRecommended({ az: 60, el: 6, dist: 540, target: V(0, 0, 96), fit: FIT_LANTERN });
   c.stage.snapToRecommended();
 
   const close = () => { junk.clear(); c.hud.hideOverlay(); c.voice.stop(); onExit?.(); };
 
   const hang = () => {
-    if (placed.length >= 6) { c.hud.toast('已经很热闹了'); return; }
+    if (placed.length >= 6) { c.hud.toast('最多挂六盏 —— 想换位置，先收起来'); return; }
     const clone = c.lantern.root.clone(true);
     const th = Math.random() * Math.PI * 2;
     const r = 280 + Math.random() * 440;
@@ -275,7 +275,7 @@ export function openM4(c, onExit) {
       { label: '收起来', ico: 'refresh', on: takeDown },
       { label: '回去', ico: 'back', on: close },
     ],
-    hint: '转动视角找个位置，再挂一盏上去',
+    hint: '转动画面找个位置，再挂一盏上去',
   });
 
   const upd = (dt, t) => {
@@ -336,7 +336,8 @@ export function openM5(c, onExit) {
   c.stage.setMood('night');
   c.bgm.play('BGM_C_FINALE');
   junk.add(buildNightSky(c.stage.scene));
-  c.stage.setRecommended({ az: 60, el: 16, dist: 920, target: V(0, 0, 420) });
+  // 烟花在天上，但灯笼不能因此被切掉半截 —— 目标点压低到两者都装得下的位置
+  c.stage.setRecommended({ az: 60, el: 14, dist: 900, target: V(0, 0, 300), fit: { r: 150, h: 300 } });
   c.stage.snapToRecommended();
 
   let count = 0;
@@ -365,7 +366,7 @@ export function openM5(c, onExit) {
         c.lantern.setLit(base + pulse * (base ? 0.35 : 0.28));
       }, { onDone: () => { c.lantern.setLit(base); c.lantern.innerLight.color.setHex(0xffa54f); } });
       if (type === 'fu') playVO(c, 'M5-fu');
-      if (count === 12) c.hud.toast('可以放压轴了', { gold: true });
+      if (count === 12) c.hud.toast('放了十二发了 —— 压轴的那串在下面', { gold: true });
     } });
   };
 
@@ -421,7 +422,7 @@ export function openM5(c, onExit) {
 
   const outro = async () => {
     c.state.modulesDone = { ...c.state.modulesDone, M5: true };
-    c.stage.setRecommended({ az: 55, el: 8, dist: 360, target: V(0, 0, 96), ease: 0.35 });
+    c.stage.setRecommended({ az: 55, el: 8, dist: 360, target: V(0, 0, 96), ease: 0.35, fit: FIT_LANTERN });
     playVO(c, 'M5-outro');
     await wait(7.5);
     c.hud.sheet({
@@ -441,10 +442,10 @@ export function openM5(c, onExit) {
 
   c.hud.dock({
     actions: [
-      { label: '压轴', kind: 'quiet', ico: 'spark', on: finale },
+      { label: '放一串压轴', kind: 'quiet', ico: 'spark', on: finale },
       { label: '回去', ico: 'back', on: close },
     ],
-    hint: '点一下 · 往上划 · 画个圈 · 长按再松手',
+    hint: '点一下、往上划、画个圈、长按松手 —— 四种不一样的花',
   });
   playVO(c, 'M5');
 

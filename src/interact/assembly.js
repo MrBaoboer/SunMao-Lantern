@@ -221,7 +221,7 @@ export class DragAssembly {
       // 连续 3 次未成功 → 放宽吸附并主动提供帮助（隐性辅助）
       if (s.failCount >= 3) {
         s.snap = Math.max(s.snap, 12);
-        this.ctx.hud.setAlts([{ label: '要我帮你吗', onClick: () => this.autoSeatAll() }]);
+        this.ctx.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: () => this.autoSeatAll() }]);
       }
     }
   }
@@ -286,14 +286,4 @@ export class DragAssembly {
     }
   }
 
-  /** 点击（未拖动）即自动装配 —— 降级模式与移动端的兜底 */
-  bindClickFallback() {
-    const c = this.ctx.stage.canvas;
-    c.addEventListener('click', (e) => {
-      const s = this.session;
-      if (!s || !this.ctx.state?.fallbackMode) return;
-      const hit = this._pick(e);
-      if (hit) this.seat(hit.partId);
-    });
-  }
 }

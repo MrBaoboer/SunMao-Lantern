@@ -3,7 +3,10 @@
  */
 
 import * as THREE from 'three';
-import { V, a, av, C, M, J3, J4, PALETTE, Junk, BENCH_Z, ghostBox, outlineBox } from './util.js';
+import {
+  V, a, av, C, M, J3, J4, PALETTE, Junk, BENCH_Z, ghostBox, outlineBox,
+  FIT_FRAME, FIT_RING, FIT_BENCH,
+} from './util.js';
 import { OP } from '../core/parts.js';
 import { tween, Ease, wait } from '../util/tween.js';
 
@@ -35,7 +38,7 @@ export function act3(ctx) {
       title: '十三根木条',
       mood: 'studio',
       bgm: 'BGM_B_CRAFT',
-      cam: { az: 58, el: 46, dist: 560, target: [0, 0, 96], snap: true },
+      cam: { az: 58, el: 46, dist: 560, target: [0, 0, 96], snap: true, fit: { r: 222, h: 146 } },
       narration: `一共十三根木条，截面都是方的。
 九根短的，用来做上下两个框；四根长的，是灯笼的柱子。
 （气口）
@@ -85,7 +88,7 @@ export function act3(ctx) {
       id: 'C2', phase: 2,
       title: '开槽，开叉',
       mood: 'craft',
-      cam: { az: 62, el: 46, dist: 190, target: [0, 0, BENCH_Z], snap: true },
+      cam: { az: 62, el: 46, dist: 190, target: [0, 0, BENCH_Z], snap: true, fit: FIT_BENCH },
       cue: { ico: 'drag', text: '<em>拖动刻刀</em>，沿着槽来回走' },
       narration: `先从两根顺枨开始：在顶面铣两条平行的槽。
 中间留下的这一小条不是废料，是榫舌。
@@ -115,7 +118,7 @@ export function act3(ctx) {
           only(c, ['LB-C1']);
           c.lantern.setOps('LB-C1', 'blank');
           bench(c, 'LB-C1', [0, 0, 0]);
-          c.stage.setRecommended({ az: 8, el: 20, dist: 200, target: V(0, 0, BENCH_Z) });
+          c.stage.setRecommended({ az: 8, el: 20, dist: 200, target: V(0, 0, BENCH_Z), fit: FIT_BENCH });
           c.hud.setCue('<em>拖动锯</em>，沿线来回锯', 'drag');
 
           const ops = [OP.SHORTEN, OP.FORK, OP.BEAR_SHOULDER];
@@ -175,7 +178,7 @@ export function act3(ctx) {
       id: 'C3', phase: 2,
       title: '落下去，成「工」字',
       mood: 'craft',
-      cam: { az: 46, el: 34, dist: 280, target: [0, 0, C.LOWER_Z1], snap: true },
+      cam: { az: 46, el: 34, dist: 280, target: [0, 0, C.LOWER_Z1], snap: true, fit: { r: 76, h: 52 } },
       cue: { ico: 'pull', text: '<em>向下拖动</em>中梁，两端一起落' },
       narration: `刚才练的夹榫，现在用真的来一次。
 中梁从上往下落，两端的叉口同时咬住两根顺枨。
@@ -217,7 +220,7 @@ export function act3(ctx) {
       id: 'C4', phase: 2,
       title: '切榫头，凿透眼',
       mood: 'craft',
-      cam: { az: 30, el: 40, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true },
+      cam: { az: 30, el: 40, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: { r: 80, h: 54 } },
       cue: { ico: 'drag', text: '<em>拖动锯</em>，切出四个榫头' },
       narration: `四个端头切出榫头。榫头要细而长，才穿得过整根木条。
 这里有个容易忽略的地方：榫头不居中，要往里偏一点 —— 外侧留出的那一半，是给柱子留的位置。
@@ -247,7 +250,7 @@ export function act3(ctx) {
           c.lantern.setOps('LB-B2', 'blank');
           bench(c, 'LB-B1', [0, 0, 0]);
           c.lantern.parts.get('LB-B2').mesh.visible = false;
-          c.stage.setRecommended({ az: 70, el: 26, dist: 210, target: V(0, 0, BENCH_Z) });
+          c.stage.setRecommended({ az: 70, el: 26, dist: 210, target: V(0, 0, BENCH_Z), fit: FIT_BENCH });
 
           const seq = [
             { op: OP.MORTISE, name: '凿孔', tool: 'chisel', sfx: 'CHISEL', done: '凿穿了' },
@@ -336,7 +339,7 @@ export function act3(ctx) {
       id: 'C5', phase: 2,
       title: '底盘做好了',
       mood: 'craft',
-      cam: { az: 40, el: 36, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true },
+      cam: { az: 40, el: 36, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: FIT_RING },
       cue: { ico: 'drag', text: '<em>拖动横枨</em>，套住两个榫头' },
       narration: `两根横枨套上去，两个榫头同时穿进两个孔，推到底。
 看四边 —— 榫头都穿出来了，各露出一小截。
@@ -381,7 +384,7 @@ export function act3(ctx) {
       id: 'C6', phase: 2,
       title: '上面那个框：中间一刀都不动',
       mood: 'craft',
-      cam: { az: 34, el: 26, dist: 340, target: [0, 0, C.UPPER_Z0], snap: true },
+      cam: { az: 34, el: 26, dist: 340, target: [0, 0, C.UPPER_Z0], snap: true, fit: { r: 100, h: 140 } },
       cps: 3.8,
       narration: `上面这个框，做法几乎一样，但有一处必须不一样。
 下面那个框中间架着中梁，所以顺枨要开槽。
@@ -414,7 +417,7 @@ export function act3(ctx) {
           c.hud.setCue('<em>拖动横枨</em>，套住两个榫头', 'drag');
           for (const id of ['UB-A1', 'UB-A2']) c.lantern.parts.get(id).installed = true;
           c.lantern.applyAssembly();
-          c.stage.setRecommended({ az: 40, el: 40, dist: 350, target: V(0, 0, C.UPPER_Z0) });
+          c.stage.setRecommended({ az: 40, el: 40, dist: 350, target: V(0, 0, C.UPPER_Z0), fit: { r: 104, h: 140 } });
 
           c.drag.begin({
             parts: ['UB-B1', 'UB-B2'], snap: 6, seatSfx: 'SNAP_IN',
@@ -470,7 +473,7 @@ export function act3(ctx) {
       id: 'C7', phase: 2,
       title: '柱子：削掉四分之三',
       mood: 'craft',
-      cam: { az: 26, el: 8, dist: 300, target: [0, 0, 96], snap: true },
+      cam: { az: 26, el: 8, dist: 300, target: [0, 0, 96], snap: true, fit: { r: 46, h: 104 } },
       cue: { ico: 'drag', text: '<em>拖动铣刀</em>，一次削掉一个角' },
       narration: `最后四根长料，做柱子。
 柱子要同时扣住上下两个框，还得让框拆不下来。怎么做到？
@@ -488,26 +491,37 @@ export function act3(ctx) {
         c.lantern.setOps('PL-01', 'blank');
         c.lantern.detach('PL-01', { pos: [0, 0, 96], rot: [0, 0, 0] });
 
-        for (const [z0, z1] of [J3.SEG.NECK2, J3.SEG.NECK1]) {
-          junk.add(outlineBox(c.stage.scene, {
-            size: [M.SEC + 2, M.SEC + 2, z1 - z0],
-            pos: [0, 0, (z0 + z1) / 2 - M.HEIGHT / 2 + 96],
-            color: PALETTE.SOCKET,
-          }));
-        }
+        // 两处细颈的位置先标出来 —— 半透的实体比虚线看得清，
+        // 而这一步的关键恰恰是"哪两段要削、其余都不动"
+        const marks = [J3.SEG.NECK2, J3.SEG.NECK1].map(([z0, z1]) => junk.add(ghostBox(c.stage.scene, {
+          size: [M.SEC + 3, M.SEC + 3, z1 - z0],
+          pos: [0, 0, (z0 + z1) / 2 - M.HEIGHT / 2 + 96],
+          color: PALETTE.SOCKET, opacity: 0.26,
+        })));
 
         const ops = [OP.NECK2, OP.NECK1];
         let stage = 0;
         const neck = () => {
           const seg = stage === 0 ? J3.SEG.NECK2 : J3.SEG.NECK1;
           const zw = (seg[0] + seg[1]) / 2 - M.HEIGHT / 2 + 96;
-          c.stage.setRecommended({ az: 26, el: 6, dist: 150, target: V(0, 0, zw) });
+          // 整根柱子都得在画面里。细颈只有 12 mm，凑近了看确实清楚，
+          // 但"三段两颈"这件事一旦裁掉柱身就说不成立了。
+          c.stage.setRecommended({ az: 26, el: 6, dist: 300, target: V(0, 0, 96), fit: { r: 46, h: 104 } });
+          marks.forEach((m, i) => { m.material.opacity = i === stage ? 0.5 : 0.16; });
+          c.hud.clearSpots();
+          c.hud.addSpot({
+            pos: V(0, 0, zw), badge: stage + 1,
+            label: stage === 0 ? '这一处对着下面那个框' : '这一处对着上面那个框',
+            color: 'var(--violet)', active: true,
+          });
           c.hud.setCue(`第 <b>${stage + 1}</b> 处细颈 / 共 2 处`, 'drag');
+          // 刀从柱子外侧横着走。走在轴线上会让刀身穿进柱子里，
+          // 既看不见刀，也看不出它在削哪一面
           cut(c, {
             tool: 'router',
-            from: V(-av(1.4), 0, zw), to: V(av(1.4), 0, zw),
-            faceNormal: V(0, 0, -1),
-            strokes: 3, sfx: 'ROUTER', chipDir: V(1, 0, 0),
+            from: V(-av(1.4), -av(1.6), zw), to: V(av(1.4), -av(1.6), zw),
+            faceNormal: V(0, 1, 0),
+            strokes: 3, sfx: 'ROUTER', chipDir: V(0, -1, 0),
             onStroke: (n, total) => c.hud.setCue(`第 ${stage + 1} 处细颈 · 削掉 <b>${n}</b> / ${total} 个角`, 'drag'),
             onDone: async () => {
               for (const id of COLS) c.lantern.addOp(id, ops[stage]);
@@ -518,16 +532,18 @@ export function act3(ctx) {
                 neck();
                 return;
               }
-              c.hud.setCue('三段，两颈');
+              c.hud.clearSpots();
+              for (const m of marks) { m.material.opacity = 0.14; }
+              c.hud.setCue('三段柱身，两处细颈');
               c.hud.toast('推到底会咬住 —— 不用钉子也掉不了', { gold: true });
-              c.stage.setRecommended({ az: 30, el: 12, dist: 300, target: V(0, 0, 96) });
+              c.stage.setRecommended({ az: 30, el: 12, dist: 300, target: V(0, 0, 96), fit: { r: 46, h: 104 } });
               engine.done();
             },
           });
         };
         neck();
       },
-      exit() { junk.clear(); },
+      exit(c) { junk.clear(); c.hud.clearSpots(); },
     },
 
     // ══════════════════════════════════════════════════════
@@ -535,7 +551,7 @@ export function act3(ctx) {
       id: 'C8', phase: 2,
       title: '四柱推入，合龙',
       mood: 'craft',
-      cam: { az: 42, el: 26, dist: 540, target: [0, 0, 96], snap: true },
+      cam: { az: 42, el: 26, dist: 540, target: [0, 0, 96], snap: true, fit: { r: 132, h: 108 } },
       cue: { ico: 'drag', text: '沿着箭头，<em>横着推</em>进去' },
       narration: `注意方向 —— 柱子不能从上往下放。细颈太细，掉不进去，也卡不住。
 要从外面横着推进来，上下两个细颈同时滑进两个窝。
@@ -576,7 +592,7 @@ export function act3(ctx) {
             c.fx.ring.sweep({ z0: 0, z1: M.HEIGHT, dur: 1.2 });
             c.hud.setCue('十三根木条 · <em>全部到位</em>');
             c.hud.toast('框架，合龙了', { gold: true, dur: 3000 });
-            c.stage.setRecommended({ az: 42, el: 18, dist: 520, target: V(0, 0, 96) });
+            c.stage.setRecommended({ az: 42, el: 18, dist: 520, target: V(0, 0, 96), fit: FIT_FRAME });
             engine.done();
           },
         });

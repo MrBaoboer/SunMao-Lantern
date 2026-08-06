@@ -37,6 +37,8 @@
   --slip-rule: rgba(42, 35, 27, 0.14);
 
   --veil:  rgba(244, 239, 227, 0.90);
+  /* 封面用的那层薄纱：比卷淡得多 —— 背后那盏灯是要看见的 */
+  --veil-cover: rgba(244, 239, 227, 0.66);
   --scrim: linear-gradient(to top, rgba(244, 239, 227, 0.94) 0%, rgba(244, 239, 227, 0.6) 46%, transparent 100%);
   --shade: rgba(34, 29, 22, 0.06);
 
@@ -80,6 +82,7 @@
   --slip-rule: rgba(42, 35, 27, 0.14);
 
   --veil:  rgba(8, 6, 5, 0.90);
+  --veil-cover: rgba(8, 6, 5, 0.62);
   --scrim: linear-gradient(to top, rgba(5, 4, 3, 0.88) 0%, rgba(5, 4, 3, 0.54) 46%, transparent 100%);
   --shade: rgba(242, 236, 224, 0.07);
 
@@ -125,6 +128,8 @@
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
   --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
   --edge: clamp(18px, 3vw, 44px);
+  /* 坞摊开时的高度，由界面层实测写入 —— 底部这一摞据此整体上让 */
+  --dock-h: 0px;
 
   /* ── 圆角与描边 ───────────────────────────────── */
   --r-xs: 3px; --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-full: 999px;

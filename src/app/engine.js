@@ -78,7 +78,6 @@ export class Engine {
       // ── 进入 ──
       this.index = i;
       const s = this.current;
-      if (i > ctx.state.maxStep) ctx.state.maxStep = i;
 
       ctx.hud.setStep(i, this.steps.length, s.title);
       if (s.task) ctx.hud.setTask(s.task.label, () => s.task.onClick(ctx, this));
@@ -89,6 +88,7 @@ export class Engine {
           az: s.cam.az ?? 50, el: s.cam.el ?? 18, dist: s.cam.dist ?? 420,
           target: s.cam.target ? new THREE.Vector3(...s.cam.target) : undefined,
           ease: s.cam.ease ?? 1,
+          fit: s.cam.fit,
         });
         if (s.cam.snap) ctx.stage.snapToRecommended();
       }

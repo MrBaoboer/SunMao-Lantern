@@ -2,7 +2,7 @@
  * 点灯 · 猜灯谜
  */
 
-import { V, a, C, Junk, buildNightSky } from '../steps/util.js';
+import { V, a, C, Junk, buildNightSky, FIT_LANTERN } from '../steps/util.js';
 import { playVO } from './vo.js';
 import { tween, Ease, wait } from '../util/tween.js';
 
@@ -22,7 +22,7 @@ export function openM1(c, onExit) {
   c.stage.setMood('night');
   c.bgm.play('BGM_C_LANTERN');
   junk.add(buildNightSky(c.stage.scene));
-  c.stage.setRecommended({ az: 55, el: 6, dist: 250, target: V(0, 0, C.LOWER_Z1 + 20) });
+  c.stage.setRecommended({ az: 55, el: 6, dist: 250, target: V(0, 0, C.LOWER_Z1 + 20), fit: { r: 72, h: 86 } });
   c.stage.snapToRecommended();
 
   let k = 0, holding = false, held = 0, lit = c.state.lit, need = 1.2, misses = 0;
@@ -69,7 +69,7 @@ export function openM1(c, onExit) {
         fire.hidden = true;
         ring.style.display = 'none';
         tip.textContent = '';
-        c.stage.setRecommended({ az: 55, el: 10, dist: 470, target: V(0, 0, 96), ease: 2.2 });
+        c.stage.setRecommended({ az: 55, el: 10, dist: 470, target: V(0, 0, 96), ease: 2.2, fit: FIT_LANTERN });
         await tween(0.9, (t) => {
           c.lantern.setLit(level(c) * (0.3 + 0.7 * t));
           c.lantern.root.position.z = a(0.5) * Math.sin(t * Math.PI) * 0.6;
@@ -180,7 +180,7 @@ export function openM2(c, onExit) {
   c.stage.setMood('night');
   c.bgm.play('BGM_C_FAIR');
   junk.add(buildNightSky(c.stage.scene));
-  c.stage.setRecommended({ az: 40, el: 10, dist: 640, target: V(90, 0, 96) });
+  c.stage.setRecommended({ az: 40, el: 10, dist: 640, target: V(90, 0, 96), fit: { r: 190, h: 172 } });
   c.stage.snapToRecommended();
 
   let i = 0, score = 0;
@@ -237,7 +237,6 @@ export function openM2(c, onExit) {
 
   const result = () => {
     const name = score === 5 ? '榫卯通' : score === 4 ? '巧手' : score === 3 ? '明白人' : '学徒';
-    c.state.riddleDone = true;
     c.state.modulesDone = { ...c.state.modulesDone, M2: true };
     c.sfx.play('SUCCESS');
     c.hud.sheet({

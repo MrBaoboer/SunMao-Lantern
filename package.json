@@ -8,12 +8,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "verify": "node tools/verify-geometry.mjs"
+    "verify": "node tools/verify-geometry.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "check": "npm run verify && npm run build && npm run smoke"
   },
   "dependencies": {
     "three": "^0.170.0"
   },
   "devDependencies": {
+    "playwright": "^1.49.0",
     "vite": "^5.4.11"
   }
 }

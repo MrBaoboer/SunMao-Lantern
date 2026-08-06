@@ -1,42 +1,53 @@
 /**
- * 全局状态 —— 贯穿主线与五个互动模块，中途退出也不丢。
+ * 全局状态。
  *
- * patternId 是全片唯一的个性化选择：格心 → 爆炸图 → 地面投影 → 海报 → 烟花。
+ * 分两类，界线很清楚：
+ *
+ *   偏好 PREFS —— 深色、声音、字幕这些「这台设备上我习惯怎么用」，跨会话留着；
+ *   进度 RUN   —— 做到哪一步、灯亮没亮、猜对几题，**每次打开都从头开始**。
+ *
+ * 一盏灯做一遍只要八分钟。半截存档换来的是一次「你上次停在……」的提问，
+ * 而这个问题在你刚打开页面、还没想好要不要玩的时候，是纯粹的干扰。
+ *
+ * patternId 是这一遍里唯一的个性化选择：格心 → 爆炸图 → 地面投影 → 海报 → 烟花。
  */
 
 const KEY = 'sunmao.v3.state';
 
-const DEFAULTS = {
+/** 跨会话保留 */
+const PREFS = {
   theme: 'light',        // 浅色 / 深色
+  sound: true,
+  captions: true,
+  voice: true,
+  primed: false,         // 是否看过「怎么操作」—— 看过就不再打扰
+};
+
+/** 这一遍的进度，刷新即归零 */
+const RUN = {
   patternId: 'mayo',     // 麻叶纹 / 万字纹
   lit: false,            // M1 是否已点亮
   litLevel: 0,           // 当前亮度（含 M2 加亮）
   riddleScore: 0,        // M2 得分 0–5
-  riddleDone: false,
   wishText: '',          // M3 愿望
-  wishCombo: null,
-  posterNo: '',
-  motifs: ['fu', 'fish', 'lotus', 'bat'], // 四面窗花
+  posterNo: '',          // M3 海报编号（本地随机码）
   modulesDone: {},       // { M1: true, ... }
-  fallbackMode: false,   // §7 降级开关：降级后知识点零损失
-  sound: true,
-  captions: true,
-  voice: true,
-  autoSection: true,     // 自动播放结构复看（S17 备注可关）
-  maxStep: 0,            // 走到过的最远一步，封面据此提供「继续」
-  primed: false,         // 是否看过「怎么操作」
 };
 
-const PATTERNS = ['mayo', 'wanzi'];
+const DEFAULTS = { ...PREFS, ...RUN };
 
 function load() {
-  let s = { ...DEFAULTS };
+  const s = { ...DEFAULTS };
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) s = { ...DEFAULTS, ...JSON.parse(raw) };
+    if (raw) {
+      const saved = JSON.parse(raw);
+      // 只收偏好。进度一律用默认值 —— 存档里若还留着旧版本的进度，忽略即可
+      for (const k of Object.keys(PREFS)) {
+        if (saved[k] !== undefined) s[k] = saved[k];
+      }
+    }
   } catch { /* 隐私模式：用默认值 */ }
-  // 存档可能来自旧版本，把已经不存在的选项收回到默认
-  if (!PATTERNS.includes(s.patternId)) s.patternId = DEFAULTS.patternId;
   if (s.theme !== 'dark') s.theme = 'light';
   return s;
 }

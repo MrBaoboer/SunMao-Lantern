@@ -3,7 +3,7 @@
  */
 
 import * as THREE from 'three';
-import { V, a, C, J4, PALETTE, Junk } from './util.js';
+import { V, a, C, J4, PALETTE, Junk, FIT_LANTERN, FIT_FRAME } from './util.js';
 import { PATTERNS, buildPatternTexture } from '../render/lattice.js';
 import { EXPLODE_LAYERS } from '../render/lantern.js';
 import { icon } from '../ui/icons.js';
@@ -33,7 +33,7 @@ export function act4(ctx) {
       title: '选一个花纹',
       mood: 'studio',
       bgm: 'BGM_C_FESTIVE',
-      cam: { az: 90, el: 4, dist: 360, target: [0, 0, 96], snap: true },
+      cam: { az: 90, el: 4, dist: 360, target: [0, 0, 96], snap: true, fit: FIT_FRAME },
       narration: `框架好了，四个面还空着。
 要用一片叫「格心」的木板填上 —— 在一整块板上镂空做出花纹，这样才够结实。
 （气口）
@@ -51,21 +51,29 @@ export function act4(ctx) {
           body: `<div class="picks">${PATTERNS.map((p) => `
             <button class="pick" type="button" data-id="${p.id}"
                     aria-pressed="${p.id === c.state.patternId}">
-              <canvas width="220" height="220" data-cv="${p.id}"></canvas>
+              <canvas width="180" height="180" data-cv="${p.id}"></canvas>
+              <span class="pick-meta">
+                <span class="pick-nm">${p.name}</span>
+                <span class="pick-mn">${p.meaning}</span>
+              </span>
               <span class="pick-on">${icon('check')}</span>
-              <div class="pick-meta">
-                <div class="pick-nm">${p.name}</div>
-                <div class="pick-mn">${p.meaning}</div>
-              </div>
             </button>`).join('')}</div>`,
           onMount: (o) => {
+            // 缩略图跟着主题走：浅色下是木棂压在宣纸上，深色下是灯从背后透出来
+            const css = getComputedStyle(document.documentElement);
+            const dark = document.documentElement.dataset.theme === 'dark';
+            const paper = css.getPropertyValue('--surface-2').trim() || '#fbf6ea';
             for (const p of PATTERNS) {
               const cv = o.querySelector(`[data-cv="${p.id}"]`);
-              const tex = buildPatternTexture(p.id, 220);
+              const tex = buildPatternTexture(p.id, 180);
               const g = cv.getContext('2d');
-              g.fillStyle = '#0a0806'; g.fillRect(0, 0, 220, 220);
-              g.globalCompositeOperation = 'lighter';
-              g.drawImage(tex.image, 0, 0, 220, 220);
+              g.fillStyle = dark ? '#0d0a07' : paper;
+              g.fillRect(0, 0, 180, 180);
+              g.globalCompositeOperation = dark ? 'lighter' : 'multiply';
+              g.globalAlpha = dark ? 1 : 0.82;
+              g.drawImage(tex.image, 0, 0, 180, 180);
+              g.globalCompositeOperation = 'source-over';
+              g.globalAlpha = 1;
               tex.dispose();
             }
             // 选中即定案，直接往下走 —— 不再多一个确认按钮
@@ -95,7 +103,7 @@ export function act4(ctx) {
       id: 'D2', phase: 3,
       title: '把板子装进去',
       mood: 'studio',
-      cam: { az: 90, el: 6, dist: 350, target: [0, 0, 96], snap: true },
+      cam: { az: 90, el: 6, dist: 350, target: [0, 0, 96], snap: true, fit: FIT_FRAME },
       narration: `装板不靠榫，也不靠胶：上下两道槽把板夹住，就完了。
 可板比空腔还高一点，怎么塞进去？
 （气口）
@@ -187,7 +195,7 @@ export function act4(ctx) {
       id: 'D3', phase: 3,
       title: '糊纸，贴花，上锁',
       mood: 'studio',
-      cam: { az: 55, el: 16, dist: 430, target: [0, 0, 96], snap: true },
+      cam: { az: 55, el: 16, dist: 430, target: [0, 0, 96], snap: true, fit: FIT_LANTERN },
       narration: `接下来是灯笼的「皮」。
 先在里面糊一层绵纸 —— 它挡在灯和木头之间，把硬光揉软；再在外面贴上红纸窗花。
 （气口）
@@ -324,7 +332,7 @@ export function act4(ctx) {
       id: 'D4', phase: 3,
       title: '拆开看一遍',
       mood: 'studio',
-      cam: { az: 48, el: 22, dist: 660, target: [0, 0, 96], snap: true },
+      cam: { az: 48, el: 22, dist: 660, target: [0, 0, 96], snap: true, fit: { r: 258, h: 172 } },
       cps: 3.9,
       narration: `我们把它拆开看一遍。
 最底下是下面那个框：四根木条穿成井字，中间横着一根中梁。
@@ -341,13 +349,13 @@ export function act4(ctx) {
         c.lantern.showDecor(true);
         c.lantern.core.visible = true;
 
+        // 坞压得越矮，灯笼在画面里就越大 —— 这一步要看的正是那三十六件东西
         c.hud.dock({
           body: `<div class="layers">${EXPLODE_LAYERS.map((l) =>
             `<button class="layer" type="button" data-l="${l.id}" aria-pressed="false">
-               <span>${l.name}</span><b>${l.count}</b></button>`).join('')}</div>
+               <span>${l.name}</span><b>${l.count}</b></button>`).join('')}
             <div class="slider"><span>拆开</span>
-              <input type="range" min="0" max="100" value="0" aria-label="拆开"></div>`,
-          hint: '点一层，只看那一层',
+              <input type="range" min="0" max="100" value="0" aria-label="拆开程度"></div></div>`,
           onMount: (o) => {
             o.querySelectorAll('.layer').forEach((b) => {
               b.addEventListener('click', () => {
@@ -356,6 +364,7 @@ export function act4(ctx) {
                 b.setAttribute('aria-pressed', String(on));
                 c.lantern.focusLayer(on ? +b.dataset.l : null);
                 c.lantern.setExplode(c.lantern.explodeT, 'layered');
+                c.sfx.play('UI_TAP');
               });
             });
             const rng = o.querySelector('input');
@@ -363,6 +372,7 @@ export function act4(ctx) {
             c.explodeRange = rng;
           },
         });
+        c.hud.setCue('点一层，单看那一层', 'tap');
 
         await wait(0.6);
         await tween(3.0, (k) => {
@@ -392,7 +402,7 @@ export function act4(ctx) {
       title: '过年该做的事',
       mood: 'night',
       bgm: 'BGM_C_FESTIVE_LOOP',
-      cam: { az: 50, el: 14, dist: 500, target: [0, 0, 96], snap: true },
+      cam: { az: 50, el: 14, dist: 500, target: [0, 0, 96], snap: true, fit: FIT_LANTERN },
       narration: `灯笼做好了。
 接下来是过年该做的事：点上它，猜几个灯谜，写一句愿望，把它挂起来，再放一场烟花。
 想先做哪个都行。`,

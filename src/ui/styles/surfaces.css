@@ -62,11 +62,16 @@
 
 /* ═══════════════ 五道门 ═══════════════ */
 
-.doors { display: flex; flex-wrap: wrap; gap: var(--s3); justify-content: center; }
+/* 五件事一字排开，等宽等高 —— 谁也不比谁更值得先做 */
+.doors {
+  display: grid; grid-template-columns: repeat(5, 148px);
+  gap: var(--s3); justify-content: center;
+}
 
 .door {
   position: relative;
-  width: 146px; padding: var(--s5) var(--s3) var(--s4);
+  display: flex; flex-direction: column; align-items: center;
+  padding: var(--s5) var(--s3) var(--s4);
   border-radius: var(--r-sm); text-align: center;
   background: var(--surface);
   box-shadow: var(--hair), var(--lift-1);
@@ -86,7 +91,8 @@
   letter-spacing: var(--ls-wide); text-indent: var(--ls-wide); color: var(--text);
 }
 .door-ds {
-  display: block; margin-top: var(--s2);
+  display: flex; align-items: center; justify-content: center;
+  margin-top: var(--s2); min-height: 2.6em;
   font-size: var(--fs-mini); line-height: var(--lh-tight); color: var(--text-3);
 }
 
@@ -103,35 +109,46 @@
 
 /* ═══════════════ 纹样选择 ═══════════════ */
 
-.picks { display: flex; gap: var(--s4); justify-content: center; flex-wrap: wrap; }
+/*
+ * 纹样二选一。做成横条而不是大卡片 ——
+ * 这一步真正要看的是背后那个空着的框，控件只需说清「两种，选一个」。
+ */
+.picks { display: flex; align-items: stretch; gap: var(--s3); justify-content: center; flex-wrap: wrap; }
 
 .pick {
   position: relative;
-  width: 200px; border-radius: var(--r-sm); overflow: hidden; text-align: center;
+  display: flex; align-items: center; gap: var(--s4);
+  width: 268px; padding: var(--s3) var(--s5) var(--s3) var(--s3);
+  border-radius: var(--r-sm); text-align: left;
   background: var(--surface);
   box-shadow: var(--hair), var(--lift-1);
   transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
 }
-.pick:hover { transform: translateY(-5px); box-shadow: var(--hair-gold), var(--lift-2); }
+.pick:hover { transform: translateY(-3px); box-shadow: var(--hair-gold), var(--lift-2); }
 .pick[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--accent), var(--lift-2); }
-.pick canvas { display: block; width: 100%; aspect-ratio: 1; background: #0a0806; }
-.pick-meta { padding: var(--s4) var(--s3) var(--s5); }
+.pick canvas {
+  display: block; flex: none; width: 60px; height: 60px;
+  border-radius: var(--r-xs); background: var(--surface-2);
+}
+.pick-meta { flex: 1; min-width: 0; }
 .pick-nm {
+  display: block;
   font-family: var(--serif); font-size: var(--fs-mid);
-  letter-spacing: var(--ls-vast); text-indent: var(--ls-vast); color: var(--text);
+  letter-spacing: var(--ls-wide); color: var(--text);
 }
 .pick-mn {
-  margin-top: var(--s2); font-size: var(--fs-mini);
+  display: block; margin-top: 2px;
+  font-size: var(--fs-mini);
   line-height: var(--lh-tight); color: var(--text-3);
 }
 .pick[aria-pressed="true"] .pick-mn { color: var(--accent); }
 .pick-on {
-  position: absolute; top: var(--s2); right: var(--s2);
+  position: absolute; top: 50%; right: var(--s3); transform: translateY(-50%);
   display: none; place-items: center;
-  width: 22px; height: 22px; border-radius: 50%;
+  width: 18px; height: 18px; border-radius: 50%;
   background: var(--accent); color: var(--on-accent);
 }
-.pick-on .ico { width: 13px; height: 13px; stroke-width: 2; }
+.pick-on .ico { width: 11px; height: 11px; stroke-width: 2; }
 .pick[aria-pressed="true"] .pick-on { display: grid; }
 
 /* ═══════════════ 灯谜 ═══════════════ */
@@ -230,7 +247,10 @@
 
 /* ═══════════════ 分层控制 ═══════════════ */
 
-.layers { display: flex; gap: var(--s1); flex-wrap: wrap; justify-content: center; }
+.layers {
+  display: flex; align-items: center; gap: var(--s1) var(--s5);
+  flex-wrap: wrap; justify-content: center;
+}
 .layer {
   display: inline-flex; align-items: baseline; gap: var(--s2);
   padding: 8px var(--s4); border-radius: var(--r-full);
@@ -271,9 +291,12 @@
 @media (max-width: 680px) {
   /* 与底部一样抬到翻页之上 */
   .dock { bottom: calc(var(--edge) + 52px); padding: 0 var(--s4); }
-  .door { width: calc(50% - var(--s2)); }
-  .pick { width: calc(50% - var(--s2)); }
-  .wishes { grid-template-columns: repeat(2, 1fr); }
+  .doors { grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
+  .door { padding: var(--s4) var(--s2) var(--s3); }
+  .door-ic { margin-bottom: var(--s2); width: 26px; height: 26px; }
+  .door-ic .ico { width: 24px; height: 24px; }
+  .pick { width: 100%; max-width: 300px; }
+  .wish { padding: var(--s4) var(--s2); }
   .sheet-body { margin-top: var(--s6); }
   .riddle { margin-bottom: var(--s6); }
 }

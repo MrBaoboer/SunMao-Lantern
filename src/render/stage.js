@@ -13,7 +13,6 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { M } from '../core/modulus.js';
-import { PALETTE } from './materials.js';
 
 /** 灯笼几何中心（世界坐标）—— 全片镜头的默认目标 */
 export const FOCUS = new THREE.Vector3(0, 0, M.HEIGHT / 2);
@@ -24,23 +23,71 @@ export const FOCUS = new THREE.Vector3(0, 0, M.HEIGHT / 2);
  * craft / studio 是工作台，跟随界面主题：浅色模式下是明亮的宣纸桌面，
  * 深色模式下是暖调的暗房。dusk / night 是傍晚与夜色 —— 这两个不跟主题走，
  * 因为灯笼只有在暗处才亮得起来。
+ *
+ * 曝光纪律：木料的漫反射本身就亮（#a9743f 再乘一层年轮），四盏灯加环境光
+ * 一旦超过约 2.6 的总辐照，ACES 会把它推成一片奶白，木纹随之消失。
+ * 浅色模式尤其危险 —— 背景也是浅的，主体一旦泛白就与背景糊在一起。
+ * 下面这组数值是照着「木头要看得出是木头」调的，不要整体上调。
+ *
+ * bg 是一对：[中心, 边缘]。背景不是一块平色，而是一圈落在主体背后的光晕。
  */
 const MOODS = {
   dark: {
-    craft:  { env: 0.55, key: 2.10, fill: 0.55, rim: 0.90, amb: 0.35, bg: 0x1a1611, ground: false, bloom: 0.30 },
-    studio: { env: 0.70, key: 2.40, fill: 0.70, rim: 1.00, amb: 0.45, bg: 0x241f19, ground: false, bloom: 0.34 },
-    dusk:   { env: 0.30, key: 0.70, fill: 0.26, rim: 0.60, amb: 0.18, bg: 0x1b1712, ground: false, bloom: 0.50 },
+    craft:  { env: 0.50, key: 1.85, fill: 0.45, rim: 0.85, amb: 0.30, bg: [0x231d16, 0x0d0a08], bloom: 0.30 },
+    studio: { env: 0.62, key: 2.05, fill: 0.55, rim: 0.95, amb: 0.38, bg: [0x2c251c, 0x110d0a], bloom: 0.34 },
+    dusk:   { env: 0.28, key: 0.68, fill: 0.24, rim: 0.60, amb: 0.16, bg: [0x241b13, 0x0b0807], bloom: 0.50 },
   },
   light: {
-    craft:  { env: 1.25, key: 2.20, fill: 1.10, rim: 0.55, amb: 1.05, bg: 0xece5d5, ground: false, bloom: 0.10 },
-    studio: { env: 1.40, key: 2.40, fill: 1.25, rim: 0.60, amb: 1.20, bg: 0xf3ecdd, ground: false, bloom: 0.12 },
-    dusk:   { env: 0.95, key: 1.40, fill: 0.80, rim: 0.70, amb: 0.80, bg: 0xdcd0ba, ground: false, bloom: 0.20 },
+    craft:  { env: 0.72, key: 1.30, fill: 0.40, rim: 0.50, amb: 0.34, bg: [0xf6f1e6, 0xd8cdb6], bloom: 0.08 },
+    studio: { env: 0.82, key: 1.45, fill: 0.46, rim: 0.55, amb: 0.40, bg: [0xfaf6ec, 0xdfd5bf], bloom: 0.10 },
+    dusk:   { env: 0.52, key: 0.95, fill: 0.30, rim: 0.62, amb: 0.24, bg: [0xe6d9c1, 0xb8a789], bloom: 0.18 },
   },
   /** 夜色不跟主题走 —— 灯笼只有在暗处才亮得起来 */
   fixed: {
-    night: { env: 0.12, key: 0.22, fill: 0.10, rim: 0.28, amb: 0.09, bg: 0x070a12, ground: true, bloom: 0.45 },
+    night: { env: 0.12, key: 0.22, fill: 0.10, rim: 0.28, amb: 0.09, bg: [0x0d1220, 0x03040a], ground: true, bloom: 0.45 },
   },
 };
+
+/**
+ * 背景：一块贴在远平面上的屏幕空间渐变。
+ *
+ * 换掉平色背景是这一版画面里最省的一笔 —— 主体背后有一圈光晕，
+ * 边缘压暗，木头就从背景里"站"出来了，不必额外加地面或假阴影。
+ */
+function makeBackdrop() {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uInner: { value: new THREE.Color(0xf6f1e6) },
+      uOuter: { value: new THREE.Color(0xd8cdb6) },
+      uAspect: { value: 1 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = vec4(position.xy, 1.0, 1.0); }
+    `,
+    fragmentShader: /* glsl */ `
+      varying vec2 vUv;
+      uniform vec3 uInner;
+      uniform vec3 uOuter;
+      uniform float uAspect;
+      void main() {
+        vec2 p = (vUv - 0.5) * vec2(max(uAspect, 1.0), max(1.0 / uAspect, 1.0));
+        // 光晕中心略高于画面正中 —— 主体本来就摆在偏上的位置
+        p.y -= 0.06;
+        float d = length(p) * 1.42;
+        float k = smoothstep(0.0, 1.0, clamp(d, 0.0, 1.0));
+        gl_FragColor = vec4(mix(uInner, uOuter, k), 1.0);
+      }
+    `,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -1;
+  return mesh;
+}
 
 /**
  * §3.2 规定 Z 轴向上，而 Three.js 默认 +Y 向上。
@@ -67,8 +114,10 @@ export class Stage {
 
     // ── 场景 ──
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(PALETTE.BG_DARK);
+    this.scene.background = null;   // 背景由 backdrop 画，见 makeBackdrop()
     this.scene.fog = null;
+    this.backdrop = makeBackdrop();
+    this.scene.add(this.backdrop);
 
     // 环境光照（PMREM，无需外部 HDR 文件）
     const pmrem = new THREE.PMREMGenerator(renderer);
@@ -128,6 +177,9 @@ export class Stage {
     controls.zoomSpeed = 0.9;
     this.controls = controls;
 
+    /** 界面遮住的上下边（像素）—— 取景按剩下的那块画面算，见 setSafeArea() */
+    this.safe = { top: 0, bottom: 0 };
+
     // §1 用户偏离后 3 秒无操作自动缓回推荐机位
     this.recommend = { pos: this.camera.position.clone(), target: FOCUS.clone(), enabled: true };
     this.idleSince = 0;
@@ -159,16 +211,69 @@ export class Stage {
     this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.backdrop.material.uniforms.uAspect.value = w / h;
+    // 画幅一变，取景距离也得跟着重算，否则竖屏上主体会被裁掉
+    if (this._lastFrame) this.setRecommended(this._lastFrame);
   }
 
-  /** 设定本步推荐机位。dist 为相机到目标的距离，az/el 为方位角/仰角（度） */
-  setRecommended({ az = 45, el = 22, dist = 420, target = FOCUS, ease = 1.0 } = {}) {
+  /**
+   * 界面遮住了多少画面。取景与构图都按剩下的那块算 ——
+   * 底部摊开一排卡片时，灯笼自己会往上让，并退远到卡片上方仍看得全。
+   * @param {{top?:number, bottom?:number}} px
+   */
+  setSafeArea({ top = 0, bottom = 0 }) {
+    if (this.safe.top === top && this.safe.bottom === bottom) return;
+    this.safe = { top, bottom };
+    if (this._lastFrame) this.setRecommended(this._lastFrame);
+  }
+
+  /** 画面中真正可用的那一块：高度占比与中心相对整幅的偏移 */
+  #viewport() {
+    const h = this.canvas.clientHeight || innerHeight || 1;
+    // 下限 0.58：界面再厚也不能把主体挤成一枚邮票 ——
+    // 底部那层压着的是渐隐的暗角与居中的一行字，主体探进去一点仍然读得出来
+    const free = Math.max(h * 0.58, h - this.safe.top - this.safe.bottom);
+    return { frac: free / h, lift: (this.safe.bottom - this.safe.top) / (2.4 * h) };
+  }
+
+  /**
+   * 装下一个包围盒需要多远。
+   *
+   * 竖屏手机的水平视场只有十来度 —— 按垂直视场调好的距离，横过来一定裁边。
+   * 所以两个方向各算一次，取远的那个。
+   * @param {{r:number, h?:number}} box r = 水平半径，h = 垂直半高（毫米）
+   */
+  fitDistance({ r = 0, h = r }) {
+    const vHalf = (this.camera.fov * Math.PI) / 360;
+    const hHalf = Math.atan(Math.tan(vHalf) * this.camera.aspect);
+    const vFree = Math.atan(Math.tan(vHalf) * this.#viewport().frac);
+    return Math.max(h / Math.tan(vFree), r / Math.tan(hHalf));
+  }
+
+  /**
+   * 设定本步推荐机位。
+   * @param {object} o
+   * @param {number} [o.az]   方位角（度）
+   * @param {number} [o.el]   仰角（度）
+   * @param {number} [o.dist] 相机到目标的距离（毫米），宽画幅下的取景意图
+   * @param {{r:number,h?:number}} [o.fit] 这一步必须完整看到的范围。
+   *   画幅装不下时把相机往后拉 —— 只会拉远，不会拉近，宽屏上的取景意图原样保留。
+   */
+  setRecommended(o = {}) {
+    const { az = 45, el = 22, dist = 420, target = FOCUS, ease = 1.0, fit } = o;
+    this._lastFrame = { ...o, target };
     const t = target.clone();
+
+    const d = fit ? Math.max(dist, this.fitDistance(fit) * 1.06) : dist;
+
+    // 底部的讲述与行动压掉了一截画面 —— 把主体整体抬起来，别让它坐在字上
+    t.z -= 2 * d * Math.tan((this.camera.fov * Math.PI) / 360) * this.#viewport().lift;
+
     const ar = (az * Math.PI) / 180, er = (el * Math.PI) / 180;
     const p = new THREE.Vector3(
-      t.x + dist * Math.cos(er) * Math.cos(ar),
-      t.y + dist * Math.cos(er) * Math.sin(ar),
-      t.z + dist * Math.sin(er),
+      t.x + d * Math.cos(er) * Math.cos(ar),
+      t.y + d * Math.cos(er) * Math.sin(ar),
+      t.z + d * Math.sin(er),
     );
     this.recommend.pos.copy(p);
     this.recommend.target.copy(t);
@@ -237,8 +342,10 @@ export class Stage {
     this.fill.intensity = preset.fill;
     this.rim.intensity = preset.rim;
     this.ambient.intensity = preset.amb;
-    this.scene.background = new THREE.Color(preset.bg);
-    this.ground.visible = preset.ground;
+    const u = this.backdrop.material.uniforms;
+    u.uInner.value.setHex(preset.bg[0]);
+    u.uOuter.value.setHex(preset.bg[1]);
+    this.ground.visible = !!preset.ground;
     this.bloom.strength = preset.bloom;
     this.onMood?.(this.moodName);
   }

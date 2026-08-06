@@ -2,8 +2,10 @@
  * 起兴（2 步）+ 明理（3 步）
  */
 
-import * as THREE from 'three';
-import { V, a, av, J1, J2, PALETTE, Junk, buildLanternRiver } from './util.js';
+import {
+  V, a, av, J1, J2, PALETTE, Junk, buildLanternRiver, FIT_LANTERN,
+  box, demoSolid,
+} from './util.js';
 import { tween, Ease, wait } from '../util/tween.js';
 
 const junk = new Junk(null);
@@ -18,7 +20,7 @@ export function act1(ctx) {
       title: '一盏灯，为一年收尾',
       mood: 'dusk',
       bgm: 'BGM_A_OPENING',
-      cam: { az: 62, el: 12, dist: 470, snap: true },
+      cam: { az: 62, el: 12, dist: 470, snap: true, fit: FIT_LANTERN },
       cps: 3.6,
       cue: { ico: 'drag', text: '拖动画面，换个角度看' },
       narration: `每到岁末，中国人会用一盏灯，为一年收尾。
@@ -48,7 +50,7 @@ export function act1(ctx) {
       title: '要做的就是它',
       mood: 'studio',
       bgm: 'BGM_B_CRAFT',
-      cam: { az: 40, el: 16, dist: 480 },
+      cam: { az: 40, el: 16, dist: 480, fit: { r: 230, h: 172 } },
       narration: `这就是我们要做的东西 —— 一盏榫卯灯笼。
 十三根木条，四片格心，一颗钉子也没有。
 接下来，我们一根一根把它做出来。`,
@@ -78,7 +80,7 @@ export function act1(ctx) {
       id: 'B1', phase: 1,
       title: '凸的叫榫，凹的叫卯',
       mood: 'craft',
-      cam: { az: 30, el: 14, dist: 210, target: [0, 0, 96], snap: true },
+      cam: { az: 30, el: 14, dist: 210, target: [0, 0, 96], snap: true, fit: { r: 82, h: 44 } },
       cps: 3.6,
       // 画面随时可以被拖着转，所以指代一律按「长什么样」，不按左右
       cue: { ico: 'drag', text: '<em>拖动</em>凸出来的那根，推进对面的孔里' },
@@ -101,53 +103,56 @@ export function act1(ctx) {
         c.lantern.showDecor(false);
         c.lantern.core.visible = false;
         const Z = 96;
-        const mk = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-        const woodC = 0xc39a63;
-
-        const A = new THREE.Group();
-        A.add(new THREE.Mesh(new THREE.BoxGeometry(a(4), a(2), a(2)), mk(woodC)));
-        const tn = new THREE.Mesh(new THREE.BoxGeometry(a(1.5), a(2 / 3), a(1)), mk(0xd8b071));
-        tn.position.x = a(2.75);
-        A.add(tn);
-        A.position.set(-a(4), 0, Z);
-
-        const B = new THREE.Group();
-        B.add(new THREE.Mesh(new THREE.BoxGeometry(a(4), a(2), a(2)), mk(woodC)));
-        const hole = new THREE.Mesh(
-          new THREE.BoxGeometry(av(1.6), a(2 / 3) + 0.4, a(1) + 0.4),
-          new THREE.MeshBasicMaterial({ color: 0x201a12 }),
-        );
-        hole.position.x = -av(1.3);
-        B.add(hole);
-        B.position.set(av(3.2), 0, Z);
+        // 两块料都由毛坯减切除盒生成，卯眼是真的挖出来的 —— 见 demoSolid()
+        const TN = { len: a(1.5), ty: a(1 / 3), tz: a(1 / 2) };  // 榫头：长 18，半厚 4，半高 6
+        const A = demoSolid({
+          at: [-a(4), 0, Z],
+          edge: PALETTE.TENON,          // 榫件描暖金，卯件描青灰 —— 全片统一的语义色
+          blank: box(-a(2), -a(1), -a(1), a(2) + TN.len, a(1), a(1)),
+          cuts: [
+            box(a(2), -a(1), -a(1), a(2) + TN.len, -TN.ty, a(1)),
+            box(a(2), TN.ty, -a(1), a(2) + TN.len, a(1), a(1)),
+            box(a(2), -TN.ty, -a(1), a(2) + TN.len, TN.ty, -TN.tz),
+            box(a(2), -TN.ty, TN.tz, a(2) + TN.len, TN.ty, a(1)),
+          ],
+        });
+        const B = demoSolid({
+          at: [av(3.2), 0, Z],
+          tone: 0.18,
+          edge: PALETTE.MORTISE,
+          // 盲眼：自左端面向里挖 19 mm，比榫头长 1 mm，推到底不顶死
+          blank: box(-a(2), -a(1), -a(1), a(2), a(1), a(1)),
+          cuts: [box(-a(2), -TN.ty, -TN.tz, -a(2) + TN.len + 1, TN.ty, TN.tz)],
+        });
         junk.add(A, B);
         c.stage.scene.add(A, B);
 
-        const edge = (obj, color) => obj.add(new THREE.LineSegments(
-          new THREE.EdgesGeometry(obj.children[0].geometry, 20),
-          new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.8 }),
-        ));
-        edge(A, PALETTE.TENON);
-        edge(B, PALETTE.MORTISE);
-
         let done = false;
+        const SEATED = -av(0.8);      // 两块木头端面贴齐，榫头整根没入卯眼
         const seat = async () => {
           if (done) return;
           done = true;
           c.hud.setCue('');
-          await tween(0.35, (k) => { A.position.x = -a(4) + av(2.4) * k; }, { ease: Ease.inCubic });
-          A.position.x = -av(1.6);
+          const x0 = A.position.x;
+          await tween(0.35, (k) => { A.position.x = x0 + (SEATED - x0) * k; }, { ease: Ease.inCubic });
+          A.position.x = SEATED;
           c.sfx.play('SNAP_IN');
-          c.fx.ripples.emit(V(av(0.4), 0, Z), V(1, 0, 0));
+          c.fx.ripples.emit(V(av(1.2), 0, Z), V(1, 0, 0));
           c.hud.toast('咬住了', { gold: true });
           anatomy();
         };
-        c.simpleDrag(A, V(1, 0, 0), av(2.4), Z, seat, null, junk);
+        c.simpleDrag(A, V(1, 0, 0), a(4) + SEATED, Z, seat, null, junk);
         c.hud.setAlts([{ label: '帮我推', ico: 'spark', onClick: seat }]);
 
-        // 咬合之后再讲解剖 —— 先有手感，再有名词
-        const anatomy = () => {
-          c.hud.setCue('点开三个圆点，认认榫的三个部位', 'tap');
+        // 咬合之后再讲解剖 —— 先有手感，再有名词。
+        // 榫头这会儿已经整根进去了，所以把卯件调透，让它在里面看得见。
+        const anatomy = async () => {
+          const bm = B.userData.mat;
+          bm.transparent = true;
+          bm.depthWrite = false;
+          bm.needsUpdate = true;
+          await tween(0.5, (k) => { bm.opacity = 1 - 0.55 * k; });
+          c.hud.setCue('点开三个圆点，看看榫的三个部位', 'tap');
           const seen = new Set();
           const spot = (pos, badge, label, sub) => c.hud.addSpot({
             pos, badge, label, sub,
@@ -160,9 +165,9 @@ export function act1(ctx) {
               engine.done();
             },
           });
-          spot(V(av(0.4), 0, Z + a(0.5)), '头', '榫头', '伸出去、插进卯里的部分');
-          spot(V(-av(0.6), av(0.4), Z), '颊', '榫颊', '两侧的面，决定松紧');
-          spot(V(-av(1.7), 0, Z - av(0.6)), '肩', '榫肩', '根部的台阶，把力传过去');
+          spot(V(av(2.6), 0, Z), '头', '榫头', '伸出去、插进卯里的那一截');
+          spot(V(av(2.0), av(0.45), Z), '颊', '榫颊', '两侧的面，决定松紧');
+          spot(V(av(1.2), 0, Z + av(1.1)), '肩', '榫肩', '根部的台阶，把力传过去');
         };
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },
@@ -173,7 +178,7 @@ export function act1(ctx) {
       id: 'B2', phase: 1,
       title: '直榫：穿过去，露一截',
       mood: 'craft',
-      cam: { az: 34, el: 16, dist: 200, target: [0, 0, 96], snap: true },
+      cam: { az: 34, el: 16, dist: 200, target: [0, 0, 96], snap: true, fit: { r: 78, h: 40 } },
       cue: { ico: 'drag', text: '<em>拖动</em>带榫头的那根，把榫头推进孔里' },
       narration: `第一种，直榫 —— 最基础，也最常见。
 我们这盏灯用的是它的贯穿做法：榫头要穿过整根木条，还要在另一头露出一小截。
@@ -190,39 +195,47 @@ export function act1(ctx) {
         junk.clear();
         c.lantern.showOnly([]);
         const Z = 96;
-        const mk = (col) => new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 });
-        const A = new THREE.Group();
-        A.add(new THREE.Mesh(new THREE.BoxGeometry(a(4), a(1), a(1)), mk(0xc39a63)));
-        const tn = new THREE.Mesh(new THREE.BoxGeometry(J1.LEN, J1.THICK, J1.HIGH), mk(0xd8b071));
-        tn.position.x = a(2) + J1.LEN / 2;
-        A.add(tn);
-        const B = new THREE.Group();
-        B.add(new THREE.Mesh(new THREE.BoxGeometry(a(1), a(3), a(1)), mk(0xc39a63)));
-        B.add(new THREE.Mesh(
-          new THREE.BoxGeometry(a(1) + 0.6, J1.THICK, J1.HIGH),
-          new THREE.MeshBasicMaterial({ color: 0x201a12 }),
-        ));
-        A.position.set(-av(3.6), 0, Z);
-        B.position.set(av(1.2), 0, Z);
+        const half = a(1 / 2), ty = J1.THICK / 2, tz = J1.HIGH / 2;
+        const A = demoSolid({
+          at: [-av(3.6), 0, Z],
+          edge: PALETTE.TENON,
+          blank: box(-a(2), -half, -half, a(2) + J1.LEN, half, half),
+          cuts: [
+            box(a(2), -half, -half, a(2) + J1.LEN, -ty, half),
+            box(a(2), ty, -half, a(2) + J1.LEN, half, half),
+            box(a(2), -ty, -half, a(2) + J1.LEN, ty, -tz),
+            box(a(2), -ty, tz, a(2) + J1.LEN, ty, half),
+          ],
+        });
+        // 透眼：贯穿整根横料，榫头要从另一头整根出来
+        const B = demoSolid({
+          at: [av(1.2), 0, Z],
+          tone: 0.18,
+          edge: PALETTE.MORTISE,
+          blank: box(-half, -a(1.5), -half, half, a(1.5), half),
+          cuts: [box(-half, -ty, -tz, half, ty, tz)],
+        });
         junk.add(A, B);
         c.stage.scene.add(A, B);
 
         c.hud.addSpot({ pos: V(av(1.2), 0, Z + a(2)), badge: '定', label: '这一根不动', color: 'var(--jade)' });
 
         let done = false;
+        const SEATED = -av(1.3);   // 端面抵住横料，榫头正好露出 6 mm
         const seat = async () => {
           if (done) return;
           done = true;
           c.hud.setCue('');
-          await tween(0.4, (k) => { A.position.x = -av(3.6) + av(2.4) * k; }, { ease: Ease.inCubic });
-          A.position.x = -av(1.2);
+          const x0 = A.position.x;
+          await tween(0.4, (k) => { A.position.x = x0 + (SEATED - x0) * k; }, { ease: Ease.inCubic });
+          A.position.x = SEATED;
           c.sfx.play('SNAP_IN');
-          c.fx.ripples.emit(V(av(0.7), 0, Z), V(1, 0, 0));
+          c.fx.ripples.emit(V(av(1.8), 0, Z), V(1, 0, 0));
           c.hud.toast('看，穿出来了', { gold: true });
-          c.stage.setRecommended({ az: 12, el: 10, dist: 100, target: V(av(2.2), 0, Z) });
+          c.stage.setRecommended({ az: 12, el: 10, dist: 130, target: V(av(1.9), 0, Z), fit: { r: 30, h: 24 } });
           engine.done();
         };
-        c.simpleDrag(A, V(1, 0, 0), av(2.4), Z, seat, null, junk);
+        c.simpleDrag(A, V(1, 0, 0), av(3.6) + SEATED, Z, seat, null, junk);
         c.hud.setAlts([{ label: '帮我推', ico: 'spark', onClick: seat }]);
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },
@@ -233,7 +246,7 @@ export function act1(ctx) {
       id: 'B3', phase: 1,
       title: '夹榫：从上往下落',
       mood: 'craft',
-      cam: { az: 38, el: 28, dist: 190, target: [0, 0, 96], snap: true },
+      cam: { az: 38, el: 28, dist: 190, target: [0, 0, 108], snap: true, fit: { r: 60, h: 52 } },
       cue: { ico: 'pull', text: '<em>向下拖动</em>，把叉口落进两条槽' },
       narration: `第二种，夹榫。
 它有两个平行的榫头，中间夹着一道口子。
@@ -250,52 +263,55 @@ export function act1(ctx) {
         junk.clear();
         c.lantern.showOnly([]);
         const Z = 96;
-        const mk = (col) => new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 });
-        const w = J2.SLOT_W, tg = J2.TONGUE, d = J2.SLOT_D;
+        // 尺寸取自真节点 J-2：槽宽 4、榫舌 4、槽深 6，一根 12 见方的料正好三等分。
+        // 两块料都用 CSG 挖出来 —— 拿实心块拼出「槽」，槽底就是不透光的实体面，
+        // 看起来是贴上去的，不是掏出来的。
+        const half = a(1 / 2), t = J2.TONGUE / 2, d = J2.SLOT_D;
 
-        const D1 = new THREE.Group();
-        const base = new THREE.Mesh(new THREE.BoxGeometry(a(1), a(4), a(1) - d), mk(0xc39a63));
-        base.position.z = -d / 2;
-        const tongue = new THREE.Mesh(new THREE.BoxGeometry(tg, a(4), d), mk(0xd8b071));
-        tongue.position.z = (a(1) - d) / 2;
-        const wallL = new THREE.Mesh(new THREE.BoxGeometry(w / 2, a(4), d), mk(0xc39a63));
-        wallL.position.set(-(tg / 2 + w * 0.75), 0, (a(1) - d) / 2);
-        const wallR = wallL.clone(); wallR.position.x *= -1;
-        D1.add(base, tongue, wallL, wallR);
-        D1.position.set(0, 0, Z);
-
-        const D2 = new THREE.Group();
-        const forkL = new THREE.Mesh(new THREE.BoxGeometry(w, a(3), d), mk(0xd8b071));
-        forkL.position.set(-(tg / 2 + w / 2), 0, 0);
-        const forkR = forkL.clone(); forkR.position.x *= -1;
-        const bodyM = new THREE.Mesh(new THREE.BoxGeometry(a(1), av(1.2), a(1)), mk(0xc39a63));
-        bodyM.position.set(0, av(1.9), a(0.25));
-        D2.add(forkL, forkR, bodyM);
-        D2.position.set(0, 0, Z + a(2.5));
+        // 下面这根：顶面铣两条槽，中间留下的一条就是榫舌
+        const D1 = demoSolid({
+          at: [0, 0, Z],
+          edge: PALETTE.MORTISE,
+          blank: box(-half, -a(2), -half, half, a(2), half),
+          cuts: [
+            box(-half, -a(2), half - d, -t, a(2), half),
+            box(t, -a(2), half - d, half, a(2), half),
+          ],
+        });
+        // 上面这根：底面开一条同宽的口，两侧剩下的就是叉口
+        const D2 = demoSolid({
+          at: [0, 0, Z + a(2.5)],
+          tone: 0.2,
+          edge: PALETTE.TENON,
+          blank: box(-half, -a(1.5), -half, half, a(1.5), half),
+          cuts: [box(-t, -a(1.5), -half, t, a(1.5), -half + d)],
+        });
         junk.add(D1, D2);
         c.stage.scene.add(D1, D2);
 
-        c.hud.addSpot({ pos: V(-av(0.9), 0, Z + av(1.4)), ico: 'down', label: '叉口落进槽', active: true });
+        c.hud.addSpot({ pos: V(-av(0.75), 0, Z + av(1.4)), ico: 'down', label: '叉口落进槽', active: true });
         c.hud.addSpot({
-          pos: V(av(0.9), 0, Z + av(1.4)), ico: 'up', label: '榫舌卡回叉口',
+          pos: V(av(0.75), 0, Z + av(1.4)), ico: 'up', label: '榫舌卡回叉口',
           color: 'var(--jade)', active: true,
         });
 
         let done = false;
+        // 落到底：叉口顶到槽底，同时榫舌顶到叉口的顶 —— 两个面同时贴上
+        const SEATED = Z + d;
         const seat = async () => {
           if (done) return;
           done = true;
           c.hud.setCue('');
           const z0 = D2.position.z;
-          await tween(0.4, (k) => { D2.position.z = z0 - (z0 - (Z + a(0.25))) * k; }, { ease: Ease.inCubic });
-          D2.position.z = Z + a(0.25) - 0.3;
+          await tween(0.4, (k) => { D2.position.z = z0 + (SEATED - z0) * k; }, { ease: Ease.inCubic });
+          D2.position.z = SEATED;
           c.sfx.playDouble('SNAP_IN');
-          c.fx.ripples.emit(V(-av(0.9), 0, Z + a(0.5)), V(0, 0, 1));
-          c.fx.ripples.emit(V(av(0.9), 0, Z + a(0.5)), V(0, 0, 1));
+          c.fx.ripples.emit(V(-av(0.75), 0, Z + half), V(0, 0, 1));
+          c.fx.ripples.emit(V(av(0.75), 0, Z + half), V(0, 0, 1));
           c.hud.toast('两声 —— 两个方向，同时锁住', { gold: true });
           engine.done();
         };
-        c.simpleDrag(D2, V(0, 0, -1), a(2.25), Z, seat, null, junk);
+        c.simpleDrag(D2, V(0, 0, -1), a(2.5) - d, Z, seat, null, junk);
         c.hud.setAlts([{ label: '帮我落下', ico: 'spark', onClick: seat }]);
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },

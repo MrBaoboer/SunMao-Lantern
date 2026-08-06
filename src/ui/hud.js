@@ -74,6 +74,7 @@ export class HUD {
     this._escape = null;
     this._returnFocus = null;
     this.steps = [];
+    this._safe = { top: 0, bottom: 0 };
 
     this.el.menu.innerHTML = icon('more');
     this.el.prev.innerHTML = icon('back');
@@ -91,6 +92,49 @@ export class HUD {
       if (this._menu) { this.closeMenu(); return; }
       if (this._escape) { const fn = this._escape; this._escape = null; fn(); }
     });
+
+    // 底部这一摞（讲述、行动、坞）高度一变，画面的取景就得跟着让位
+    this._ro = new ResizeObserver(() => this.#syncSafe());
+    this._ro.observe(this.el.narration);
+    this._ro.observe(this.el.topbar);
+    addEventListener('resize', () => this.#syncSafe());
+  }
+
+  /**
+   * 量一下界面实际占掉了画面的哪两条边。
+   *
+   * 这不是装饰性的细节：底部摊开五张卡片时，如果三维不知道自己只剩上面那半块，
+   * 灯笼就会被卡片压掉一截 —— 而这一步的全部意义正是"看这盏灯"。
+   */
+  #syncSafe() {
+    const vh = innerHeight;
+    // 用 getClientRects 判"有没有被画出来"：常驻界面是 fixed 定位，offsetParent 一律是 null
+    const box = (el) => (el && !el.hidden && el.getClientRects().length ? el.getBoundingClientRect() : null);
+
+    let top = 0;
+    const tb = box(this.el.topbar);
+    if (tb && this.el.topbar.dataset.quiet !== '1') top = tb.bottom;
+
+    let bottom = 0;
+    const rise = (el) => { const r = box(el); if (r && r.height) bottom = Math.max(bottom, vh - r.top); };
+    if (this.el.bottom.dataset.quiet !== '1') { rise(this.el.cue); rise(this.el.narration); rise(this.el.alts.parentElement); }
+    this.el.overlay.querySelectorAll('.dock').forEach(rise);
+
+    const next = { top: Math.round(top), bottom: Math.round(bottom) };
+    if (next.top === this._safe.top && next.bottom === this._safe.bottom) return;
+    this._safe = next;
+    this.onSafeArea?.(next);
+    // 坞摊开时把讲述抬到它上面 —— 两层文字压在一起，谁都读不成
+    document.documentElement.style.setProperty('--dock-h', `${this.#dockHeight()}px`);
+  }
+
+  #dockHeight() {
+    let h = 0;
+    this.el.overlay.querySelectorAll('.dock').forEach((d) => {
+      const r = d.getBoundingClientRect();
+      if (r.height) h = Math.max(h, innerHeight - r.top);
+    });
+    return h;
   }
 
   // ══════════════ 章节 ══════════════
@@ -260,6 +304,7 @@ export class HUD {
     this.el.topbar.dataset.quiet = on ? '1' : '0';
     this.el.bottom.dataset.quiet = on ? '1' : '0';
     if (on) { this.setNote(null); this.clearSpots(); }
+    this.#syncSafe();
   }
 
   // ══════════════ 更多菜单 ══════════════
@@ -438,7 +483,19 @@ export class HUD {
       (o.querySelector('.btn-primary:not([hidden]):not(:disabled)')
         || o.querySelector('button:not([hidden]):not(:disabled)'))?.focus();
     }
+    const dock = o.querySelector('.dock');
+    if (dock) this._ro.observe(dock);
+    // 卷盖住了画面，背后那些还能被 Tab 走到的按钮就不该再存在
+    this.#setChromeInert(veil);
+    this.#syncSafe();
     return o;
+  }
+
+  /** 模态打开时，背后的常驻界面退出无障碍树与 Tab 序列 */
+  #setChromeInert(on) {
+    for (const el of [this.el.topbar, this.el.bottom, this.el.prev, this.el.next, this.el.noteTab]) {
+      if (el) el.inert = on;
+    }
   }
 
   /** 卷：盖住画面的一页 */
@@ -471,11 +528,14 @@ export class HUD {
 
   hideOverlay() {
     if (this.el.overlay.hidden) return;
+    this.el.overlay.querySelectorAll('.dock').forEach((d) => this._ro.unobserve(d));
     this.el.overlay.hidden = true;
     this.el.overlay.innerHTML = '';
+    this.#setChromeInert(false);
     this._escape = null;
     if (this._returnFocus?.isConnected) this._returnFocus.focus();
     this._returnFocus = null;
+    this.#syncSafe();
   }
 
   get overlayOpen() { return !this.el.overlay.hidden; }
@@ -487,6 +547,7 @@ export class HUD {
     this.el.topbar.hidden = !v;
     this.el.prev.hidden = !v;
     this.el.next.hidden = !v;
+    this.#syncSafe();
   }
 
   get navVisible() { return !this.el.next.hidden; }

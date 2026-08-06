@@ -13,40 +13,85 @@ import * as THREE from 'three';
 import { tween, Ease, wait } from '../util/tween.js';
 import { makeCoreMaterial, makeGoldMaterial } from '../render/materials.js';
 
-/** 虚拟刀具 TOOL-* */
+/**
+ * 一段收成薄刃的料：拿一个盒子，把 -Z 那一端的厚度收掉。
+ * 盒的顶点本来就按面拆开，改完位置重算法线即可得到规整的斜刃。
+ */
+function bevelled(w, t, len, tipRatio = 0.14) {
+  const g = new THREE.BoxGeometry(w, t, len);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    if (p.getZ(i) < 0) p.setY(i, p.getY(i) * tipRatio);
+  }
+  p.needsUpdate = true;
+  g.computeVertexNormals();
+  return g;
+}
+
+/** 锯齿：一条锯齿形轮廓挤出成一个几何，不是二十几个小锥体 */
+function sawTeeth(len, pitch, depth, thick) {
+  const s = new THREE.Shape();
+  s.moveTo(-len / 2, depth);
+  for (let x = -len / 2; x < len / 2 - pitch; x += pitch) {
+    s.lineTo(x + pitch * 0.5, 0);      // 齿尖朝下（shape 的 -Y，稍后转到世界 -Z）
+    s.lineTo(x + pitch, depth);
+  }
+  s.lineTo(len / 2, depth);
+  s.lineTo(len / 2, depth + 1.2);
+  s.lineTo(-len / 2, depth + 1.2);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: false });
+  g.translate(0, 0, -thick / 2);
+  g.rotateX(Math.PI / 2);              // shape 的 +Y → 世界 +Z，齿尖因此朝 -Z
+  return g;
+}
+
+/**
+ * 虚拟刀具 TOOL-*。
+ *
+ * 全部按同一个约定建模：**刃口朝 -Z，柄在 +Z，走刀方向沿 +X**。
+ * 摆位的 _orientTool() 依赖这个约定，改模型时别把朝向调头。
+ */
 export function buildTool(kind) {
   const g = new THREE.Group();
   const steel = new THREE.MeshStandardMaterial({ color: 0xb9bfc4, roughness: 0.32, metalness: 0.9 });
   const wood = new THREE.MeshStandardMaterial({ color: 0x6f4a28, roughness: 0.7 });
 
   if (kind === 'saw') {
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(64, 0.9, 15), steel);
-    blade.position.set(0, 0, -8);
-    const teeth = new THREE.Group();
-    for (let i = -30; i <= 30; i += 2.4) {
-      const t = new THREE.Mesh(new THREE.ConeGeometry(1.1, 2.6, 3), steel);
-      t.rotation.x = Math.PI;
-      t.position.set(i, 0, -16.4);
-      teeth.add(t);
-    }
-    const handle = new THREE.Mesh(new THREE.BoxGeometry(16, 5, 11), wood);
-    handle.position.set(-38, 0, -6);
-    g.add(blade, teeth, handle);
+    // 刃在下沿（-Z），齿尖朝下；背脊在上，手柄在 -X 一端
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(58, 1.0, 13), steel);
+    blade.position.set(3, 0, -8.5);
+    const teeth = new THREE.Mesh(sawTeeth(58, 2.6, 2.4, 1.0), steel);
+    teeth.position.set(3, 0, -15);
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(58, 2.2, 2.2), steel);
+    spine.position.set(3, 0, -1.2);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(13, 5.5, 15), wood);
+    grip.position.set(-32, 0, -8);
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 6.4, 8), steel);
+    bolt.rotation.z = Math.PI / 2;
+    bolt.position.set(-32, 0, -8);
+    g.add(blade, teeth, spine, grip, bolt);
   } else if (kind === 'router') {
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(7, 8, 26, 16), makeCoreMaterial());
-    body.rotation.x = Math.PI / 2; body.position.z = 5;
-    const bit = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.1, 14, 10), steel);
-    bit.rotation.x = Math.PI / 2; bit.position.z = -13;
-    g.add(body, bit);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(7, 8, 24, 16), makeCoreMaterial());
+    body.rotation.x = Math.PI / 2; body.position.z = 8;
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 5, 12), steel);
+    collar.rotation.x = Math.PI / 2; collar.position.z = -6;
+    const bit = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 13, 12), steel);
+    bit.rotation.x = Math.PI / 2; bit.position.z = -14;
+    g.add(body, collar, bit);
     g.userData.bit = bit;
-  } else { // chisel 凿刀
-    const shaft = new THREE.Mesh(new THREE.BoxGeometry(4.6, 4.6, 34), steel);
-    shaft.position.z = 5;
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.4, 8), steel);
-    edge.position.z = -15;
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(5, 6.6, 24, 12), wood);
-    handle.rotation.x = Math.PI / 2; handle.position.z = 32;
-    g.add(shaft, edge, handle);
+  } else { // chisel 凿刀：木柄 · 铁箍 · 扁身 · 斜刃
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 6.0, 26, 14), wood);
+    handle.rotation.x = Math.PI / 2; handle.position.z = 25;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 6.2, 2.4, 14), steel);
+    cap.rotation.x = Math.PI / 2; cap.position.z = 38;
+    const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 4.8, 4, 14), steel);
+    ferrule.rotation.x = Math.PI / 2; ferrule.position.z = 11;
+    const shank = new THREE.Mesh(new THREE.BoxGeometry(7, 3, 20), steel);
+    shank.position.z = -1;
+    const tip = new THREE.Mesh(bevelled(7, 3, 8), steel);
+    tip.position.z = -15;
+    g.add(handle, cap, ferrule, shank, tip);
   }
 
   // 走刀进度环（3 段式，叠在刀具上方）
@@ -119,10 +164,25 @@ export class Machining {
     return this.job;
   }
 
+  /**
+   * 摆正刀具：刃口（模型的 -Z）朝工件，刀身长轴（模型的 +X）顺着走刀方向。
+   *
+   * 这里不能用 lookAt()：它把物体的 **+Z** 转向目标，正好与刀具的建模约定相反 ——
+   * 锯齿朝天、凿柄扎进木头。而且默认 up 是 +Z，「朝下看」恰好是 lookAt 的退化情形，
+   * 滚转角由内部的容错分支随手定，刀身会歪。所以直接搭一组正交基。
+   */
   _orientTool(t, o) {
-    // 刀刃朝向加工面：让刀具的 -Z 指向工件
-    const look = o.faceNormal ? o.from.clone().add(o.faceNormal) : o.from.clone().add(new THREE.Vector3(0, 0, -1));
-    t.lookAt(look);
+    const attack = (o.faceNormal || new THREE.Vector3(0, 0, -1)).clone().normalize();
+    const zA = attack.clone().negate();                       // 模型 +Z 背离工件
+    const xA = o.to.clone().sub(o.from);                      // 模型 +X 顺走刀方向
+    xA.addScaledVector(zA, -xA.dot(zA));
+    if (xA.lengthSq() < 1e-6) {
+      xA.set(1, 0, 0).addScaledVector(zA, -zA.x);
+      if (xA.lengthSq() < 1e-6) xA.set(0, 1, 0).addScaledVector(zA, -zA.y);
+    }
+    xA.normalize();
+    const yA = new THREE.Vector3().crossVectors(zA, xA);
+    t.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, yA, zA));
   }
 
   end() {
