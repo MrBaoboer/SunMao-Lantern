@@ -1,0 +1,157 @@
+/*
+ * 设计令牌
+ *
+ * 界面只用三样材料：纸、墨、金。
+ * 浅色模式下纸在下、墨在上；深色模式反过来。金一屏只出现一次 ——
+ * 落在当下唯一该按的那个地方。
+ *
+ * 所有组件只引用下面这组语义令牌，不直接写颜色。
+ */
+
+:root {
+  /* ── 浅色（默认）──────────────────────────────── */
+  --bg:        #f4efe3;
+  --bg-deep:   #e9e1d0;
+  --surface:   #fffdf7;
+  --surface-2: #fbf6ea;
+
+  --text:      #221d16;
+  --text-2:    #574c3d;
+  --text-3:    #8a7c69;
+  --text-4:    #b3a691;
+
+  --line:      rgba(34, 29, 22, 0.14);
+  --line-2:    rgba(34, 29, 22, 0.07);
+
+  --accent:      #9a7328;
+  --accent-lift: #7f5d1c;
+  --accent-soft: rgba(154, 115, 40, 0.28);
+  --accent-faint:rgba(154, 115, 40, 0.10);
+  --on-accent:   #fffdf7;
+
+  --slip:      #fffaee;
+  --slip-ink:  #241e15;
+  --slip-body: #4c4133;
+  --slip-mute: #7c6e5c;
+  --slip-mark: #8a5a1e;
+  --slip-rule: rgba(42, 35, 27, 0.14);
+
+  --veil:  rgba(244, 239, 227, 0.90);
+  --scrim: linear-gradient(to top, rgba(244, 239, 227, 0.94) 0%, rgba(244, 239, 227, 0.6) 46%, transparent 100%);
+  --shade: rgba(34, 29, 22, 0.06);
+
+  --lift-1: 0 4px 14px rgba(60, 48, 30, 0.10);
+  --lift-2: 0 10px 28px rgba(60, 48, 30, 0.14);
+  --lift-3: 0 18px 44px rgba(60, 48, 30, 0.18);
+
+  /* 语义色，各自只说一件事 */
+  --jade:   #4f7a68;
+  --violet: #6f5f8c;
+  --seal:   #b6382b;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg:        #0a0908;
+  --bg-deep:   #050404;
+  --surface:   #171310;
+  --surface-2: #221c15;
+
+  --text:      #f2ece0;
+  --text-2:    rgba(242, 236, 224, 0.70);
+  --text-3:    rgba(242, 236, 224, 0.46);
+  --text-4:    rgba(242, 236, 224, 0.26);
+
+  --line:      rgba(242, 236, 224, 0.13);
+  --line-2:    rgba(242, 236, 224, 0.07);
+
+  --accent:      #d3aa63;
+  --accent-lift: #e6c286;
+  --accent-soft: rgba(211, 170, 99, 0.34);
+  --accent-faint:rgba(211, 170, 99, 0.13);
+  --on-accent:   #241a0c;
+
+  --slip:      #f0e7d5;
+  --slip-ink:  #2a231b;
+  --slip-body: #4c4133;
+  --slip-mute: #6f6152;
+  --slip-mark: #8a5a1e;
+  --slip-rule: rgba(42, 35, 27, 0.14);
+
+  --veil:  rgba(8, 6, 5, 0.90);
+  --scrim: linear-gradient(to top, rgba(5, 4, 3, 0.88) 0%, rgba(5, 4, 3, 0.54) 46%, transparent 100%);
+  --shade: rgba(242, 236, 224, 0.07);
+
+  --lift-1: 0 6px 18px rgba(0, 0, 0, 0.34);
+  --lift-2: 0 14px 36px rgba(0, 0, 0, 0.46);
+  --lift-3: 0 22px 56px rgba(0, 0, 0, 0.56);
+
+  --jade:   #7f9a8e;
+  --violet: #9184a6;
+  --seal:   #b6382b;
+
+  color-scheme: dark;
+}
+
+:root {
+  /* ── 字体 ─────────────────────────────────────── */
+  --serif: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
+  --sans:  "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mono:  "SFMono-Regular", "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* ── 字号 ─────────────────────────────────────── */
+  --fs-mark: 11px;
+  --fs-mini: 12px;
+  --fs-tiny: 13px;
+  --fs-base: 14px;
+  --fs-mid:  16px;
+  --fs-read: clamp(17px, 1.9vw, 21px);
+  --fs-lede: clamp(19px, 2.4vw, 25px);
+  --fs-head: clamp(22px, 2.8vw, 30px);
+  --fs-hero: clamp(30px, 4.6vw, 48px);
+  --fs-boot: clamp(34px, 6vw, 64px);
+
+  --lh-tight: 1.4;
+  --lh-body:  1.8;
+  --lh-loose: 2.1;
+
+  --ls-tight: 0.02em;
+  --ls-base:  0.06em;
+  --ls-wide:  0.14em;
+  --ls-vast:  0.3em;
+
+  /* ── 间距 · 4 的倍数 ──────────────────────────── */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --edge: clamp(18px, 3vw, 44px);
+
+  /* ── 圆角与描边 ───────────────────────────────── */
+  --r-xs: 3px; --r-sm: 6px; --r-md: 10px; --r-full: 999px;
+  --hair:      inset 0 0 0 1px var(--line);
+  --hair-gold: inset 0 0 0 1px var(--accent-soft);
+
+  /* ── 动效 ─────────────────────────────────────── */
+  --t-fast: 140ms;
+  --t-base: 260ms;
+  --t-slow: 480ms;
+  --t-veil: 720ms;
+  --ease:        cubic-bezier(0.16, 0.84, 0.44, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.2, 1.25, 0.5, 1);
+
+  /* ── 层级 ─────────────────────────────────────── */
+  --z-anchor:  20;
+  --z-chrome:  30;
+  --z-note:    34;
+  --z-toast:   40;
+  --z-overlay: 50;
+  --z-menu:    60;
+  --z-boot:    90;
+
+  /* ── 纸纹：让浅色面不像一块塑料 ───────────────── */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+/* 主题切换时整页过渡，避免闪一下 */
+html, body { transition: background-color var(--t-slow) var(--ease), color var(--t-slow) var(--ease); }

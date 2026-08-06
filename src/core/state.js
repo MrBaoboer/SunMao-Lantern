@@ -1,14 +1,14 @@
 /**
- * §13.3 全局状态 —— 必须贯穿主线与五大互动模块，中途退出不丢失。
+ * 全局状态 —— 贯穿主线与五个互动模块，中途退出也不丢。
  *
- * state.patternId 是全片唯一的个性化选择（§S26 备注：丢失即前功尽弃），
- * 它作用于：格心 → 爆炸图 → M1 地面投影 → M3 海报边框 → M4 AR → M5。
+ * patternId 是全片唯一的个性化选择：格心 → 爆炸图 → 地面投影 → 海报 → 烟花。
  */
 
 const KEY = 'sunmao.v3.state';
 
 const DEFAULTS = {
-  patternId: 'mayo',     // 麻叶纹 / 冰裂纹 / 万字纹
+  theme: 'light',        // 浅色 / 深色
+  patternId: 'mayo',     // 麻叶纹 / 万字纹
   lit: false,            // M1 是否已点亮
   litLevel: 0,           // 当前亮度（含 M2 加亮）
   riddleScore: 0,        // M2 得分 0–5
@@ -26,12 +26,18 @@ const DEFAULTS = {
   maxStep: 0,            // 已解锁的最远步骤
 };
 
+const PATTERNS = ['mayo', 'wanzi'];
+
 function load() {
+  let s = { ...DEFAULTS };
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
-  } catch { return { ...DEFAULTS }; }
+    if (raw) s = { ...DEFAULTS, ...JSON.parse(raw) };
+  } catch { /* 隐私模式：用默认值 */ }
+  // 存档可能来自旧版本，把已经不存在的选项收回到默认
+  if (!PATTERNS.includes(s.patternId)) s.patternId = DEFAULTS.patternId;
+  if (s.theme !== 'dark') s.theme = 'light';
+  return s;
 }
 
 const listeners = new Set();

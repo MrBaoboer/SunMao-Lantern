@@ -14,7 +14,6 @@ import { a, C, M, J4 } from '../core/modulus.js';
 
 export const PATTERNS = [
   { id: 'mayo', name: '麻叶纹', sub: '明清窗棂常见 · 放射对称', meaning: '六出放射，寓意生生不息' },
-  { id: 'binglie', name: '冰裂纹', sub: '江南园林常用 · 自然随机', meaning: '线不相交，取「冰破春来」' },
   { id: 'wanzi', name: '万字纹', sub: '吉祥连续纹 · 回环无尽', meaning: '回环相连，谓「万福不断头」' },
 ];
 
@@ -163,94 +162,7 @@ function mayoSegments() {
   return dedupe(raw);
 }
 
-// ── 冰裂纹：按面积优先递归剖分凸多边形 ──
-//    每条裂线都是一条**弦**，两端终止在已有的边上 —— 这正是「线不相交」的由来，
-//    也是冰裂纹区别于普通网格的本质：它是「裂」出来的，不是「排」出来的。
-function binglieSegments() {
-  const rnd = mulberry32(20260206);
-  const segs = [];
-  const area = (p) => {
-    let s = 0;
-    for (let i = 0; i < p.length; i++) {
-      const q = p[(i + 1) % p.length];
-      s += p[i][0] * q[1] - q[0] * p[i][1];
-    }
-    return Math.abs(s) / 2;
-  };
-  /** 还能继续裂的片 */
-  let active = [[
-    [FIELD.x0, FIELD.y0], [FIELD.x1, FIELD.y0], [FIELD.x1, FIELD.y1], [FIELD.x0, FIELD.y1],
-  ]];
-  const done = [];
-  const TARGET = 74;      // 目标裂片数
-  const MIN_AREA = 46;
-  const MIN_EDGE = 7;
-
-  for (let guard = 0; guard < 900 && active.length && active.length + done.length < TARGET; guard++) {
-    // 每轮取面积最大的那片来裂 —— 裂片尺寸分布才均匀，不会一处密一处空
-    let bi = 0;
-    for (let i = 1; i < active.length; i++) if (area(active[i]) > area(active[bi])) bi = i;
-    const poly = active[bi];
-    if (area(poly) < MIN_AREA * 2) { done.push(...active.splice(bi, 1)); continue; }
-
-    const n = poly.length;
-    const elen = (e) => Math.hypot(
-      poly[(e + 1) % n][0] - poly[e][0], poly[(e + 1) % n][1] - poly[e][1],
-    );
-    const lerp = (e, t) => {
-      const p0 = poly[e], p1 = poly[(e + 1) % n];
-      return [p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t];
-    };
-    const walk = (from, to, startPt, endPt) => {
-      const out = [startPt];
-      let k = (from + 1) % n;
-      while (k !== (to + 1) % n) { out.push(poly[k]); k = (k + 1) % n; }
-      out.push(endPt);
-      return out;
-    };
-    /** 紧凑度：周长²/面积。越小越接近正多边形，越大越是长条碎渣 */
-    const compactness = (p) => {
-      let per = 0;
-      for (let k = 0; k < p.length; k++) {
-        const q = p[(k + 1) % p.length];
-        per += Math.hypot(q[0] - p[k][0], q[1] - p[k][1]);
-      }
-      return (per * per) / Math.max(area(p), 1e-6);
-    };
-
-    // 采样若干候选切法，取「让两片都尽量紧凑」的那一刀。
-    // 单纯随机会让竖长的片一直被水平弦切，越切越像百叶窗；
-    // 按紧凑度择优才能得到冰裂特有的不规则多边形。
-    let best = null, bestScore = Infinity;
-    for (let tries = 0; tries < 26; tries++) {
-      const i = Math.floor(rnd() * n);
-      const off = 1 + Math.floor(rnd() * (n - 1));
-      const j = (i + off) % n;
-      if (j === i) continue;
-      if (elen(i) < MIN_EDGE || elen(j) < MIN_EDGE) continue;
-      const A = lerp(i, 0.3 + rnd() * 0.4);
-      const B = lerp(j, 0.3 + rnd() * 0.4);
-      const p1 = walk(i, j, A, B);
-      const p2 = walk(j, i, B, A);
-      const a1 = area(p1), a2 = area(p2);
-      if (a1 < MIN_AREA || a2 < MIN_AREA) continue;
-      // 面积失衡也惩罚一点，避免总是切下一小条
-      const balance = Math.abs(a1 - a2) / (a1 + a2);
-      const score = Math.max(compactness(p1), compactness(p2)) + balance * 12;
-      if (score < bestScore) { bestScore = score; best = { A, B, p1, p2 }; }
-    }
-    if (!best) {
-      // 这片已经裂到位，退出候选
-      done.push(...active.splice(bi, 1));
-      continue;
-    }
-    segs.push({ x0: best.A[0], y0: best.A[1], x1: best.B[0], y1: best.B[1], w: RIB });
-    active.splice(bi, 1, best.p1, best.p2);
-  }
-  return segs;
-}
-
-const GENERATORS = { wanzi: wanziSegments, mayo: mayoSegments, binglie: binglieSegments };
+const GENERATORS = { mayo: mayoSegments, wanzi: wanziSegments };
 
 /** 取某纹样的全部线段（含边框） */
 export function latticeSegments(patternId) {

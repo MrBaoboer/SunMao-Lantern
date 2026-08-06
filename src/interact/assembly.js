@@ -181,7 +181,6 @@ export class DragAssembly {
     if (near && !a.nearFired) {
       a.nearFired = true;
       this.ctx.lantern.highlight(a.partId, 0xc8a063, 0.4);
-      this.ctx.sfx.play('UI_HINT', { gain: 0.5 });
     } else if (!near && a.nearFired) {
       a.nearFired = false;
       this.ctx.lantern.highlight(a.partId, 0xc8a063, 0.14);
@@ -191,7 +190,7 @@ export class DragAssembly {
     if (s.wedge && u > 1 - J3.WEDGE_LEN / a.gap && !a.wedgeFired) {
       a.wedgeFired = true;
       this.ctx.sfx.play('WEDGE_TIGHT', { gain: 0.7 });
-      this.ctx.hud.setHint('最后一点会紧，推到底', { pulse: true });
+      this.ctx.hud.setCue('最后一点会紧，推到底');
     }
   }
 
@@ -213,7 +212,6 @@ export class DragAssembly {
       const u1 = a.u - J3.WEDGE_LEN / a.gap;
       await tween(0.22, (k) => this.ctx.lantern.setAssemblyProgress(a.partId, a.u + (u1 - a.u) * k), { ease: Ease.outQuad });
       this.ctx.hud.toast('再用点力，推到底才会咬住');
-      this.ctx.sfx.play('UI_REJECT', { gain: 0.5 });
     } else {
       // 推进不足 —— 缓慢滑回原位
       const u0 = a.u;
@@ -235,7 +233,6 @@ export class DragAssembly {
     const s = this.session;
     const u0 = a.u;
     await tween(0.3, (k) => this.ctx.lantern.setAssemblyProgress(a.partId, u0 * (1 - Ease.outQuad(k))), { ease: Ease.linear });
-    this.ctx.sfx.play('UI_REJECT');
     this.ctx.hud.toast(s.wrongHint || '沿着木条的方向推进去');
   }
 

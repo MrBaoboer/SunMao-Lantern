@@ -1,0 +1,315 @@
+/*
+ * 常驻界面
+ *
+ * 翻页在两侧，像翻一本书；章节在顶上，随时可以跳回去。
+ * 底部只留讲述和这一步的任务，不再摆导航按钮。
+ */
+
+/* ═══════════════ 开场 ═══════════════ */
+
+#boot {
+  position: fixed; inset: 0; z-index: var(--z-boot);
+  display: grid; place-items: center;
+  background: radial-gradient(ellipse 64% 46% at 50% 52%, var(--surface) 0%, var(--bg) 74%);
+  transition: opacity var(--t-veil) var(--ease);
+}
+#boot.gone { opacity: 0; pointer-events: none; }
+
+.boot-inner { text-align: center; padding: 0 var(--s6); }
+
+.boot-eyebrow {
+  font-size: var(--fs-mark);
+  letter-spacing: var(--ls-vast); text-indent: var(--ls-vast);
+  color: var(--accent-soft);
+  margin-bottom: var(--s5);
+  animation: rise 1.4s var(--ease) both;
+}
+.boot-title {
+  font-family: var(--serif); font-weight: 400;
+  font-size: var(--fs-boot);
+  letter-spacing: 0.4em; text-indent: 0.4em;
+  color: var(--text);
+  margin-bottom: var(--s5);
+  animation: rise 1.6s 0.12s var(--ease) both;
+}
+.boot-sub {
+  font-size: var(--fs-mini);
+  letter-spacing: var(--ls-vast); text-indent: var(--ls-vast);
+  color: var(--text-3);
+  margin-bottom: var(--s8);
+  animation: rise 1.6s 0.28s var(--ease) both;
+}
+.boot-line {
+  width: min(200px, 44vw); height: 1px; margin: 0 auto var(--s4);
+  background: var(--line); overflow: hidden;
+}
+.boot-line i {
+  display: block; height: 100%; width: 0;
+  background: var(--accent);
+  transition: width var(--t-slow) var(--ease);
+}
+.boot-msg {
+  font-size: var(--fs-mark); letter-spacing: var(--ls-wide);
+  color: var(--text-3); min-height: 1.4em;
+}
+.boot-msg.bad { color: var(--seal); }
+
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+
+/* ═══════════════ 顶部 · 章节 ═══════════════ */
+
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-chrome);
+  padding: var(--edge) var(--edge) 0;
+  pointer-events: none;
+  transition: opacity var(--t-slow) var(--ease);
+}
+#topbar[data-quiet="1"] { opacity: 0; }
+
+/* 五章，每章底下是这一章的几步。哪一步都点得到 */
+.chapters { display: flex; gap: var(--s4); pointer-events: auto; }
+.ch { flex: 1 1 0; min-width: 0; }
+.ch-ticks { display: flex; gap: 3px; }
+
+.tick {
+  flex: 1; height: 12px;
+  display: flex; align-items: flex-start;
+  position: relative;
+}
+.tick::before {
+  content: ''; display: block; width: 100%; height: 2px;
+  background: var(--line);
+  border-radius: 1px;
+  transition: background var(--t-base) var(--ease), height var(--t-fast) var(--ease);
+}
+.tick[data-state="done"]::before { background: var(--accent-soft); }
+.tick[data-state="now"]::before  { background: var(--accent); height: 3px; }
+.tick:hover::before { background: var(--accent); height: 3px; }
+
+.ch-nm {
+  display: block; margin-top: var(--s2);
+  font-size: var(--fs-mark); letter-spacing: var(--ls-base);
+  color: var(--text-4);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: color var(--t-base) var(--ease);
+}
+.ch[data-on="1"] .ch-nm { color: var(--text-2); }
+.ch[data-done="1"] .ch-nm { color: var(--text-3); }
+
+/* 悬停时告诉你那一步是什么 */
+.tick-tip {
+  position: fixed; z-index: var(--z-menu);
+  transform: translate(-50%, 0);
+  padding: 6px var(--s3);
+  border-radius: var(--r-xs);
+  background: var(--surface); color: var(--text);
+  font-size: var(--fs-mini); letter-spacing: var(--ls-base); white-space: nowrap;
+  box-shadow: var(--hair), var(--lift-2);
+  pointer-events: none;
+  animation: fade var(--t-fast) var(--ease) both;
+}
+.tick-tip b { font-family: var(--mono); font-weight: 400; color: var(--text-3); margin-right: var(--s2); }
+
+.toprow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s5); margin-top: var(--s3);
+}
+.where { display: flex; align-items: baseline; gap: var(--s3); min-width: 0; }
+.stepno {
+  font-family: var(--mono); font-size: var(--fs-mark);
+  letter-spacing: var(--ls-tight); color: var(--text-4);
+  flex: none;
+}
+.steptitle {
+  font-family: var(--serif); font-weight: 400;
+  font-size: var(--fs-tiny); letter-spacing: var(--ls-wide);
+  color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ═══════════════ 两侧翻页 ═══════════════ */
+
+.nav {
+  position: fixed; top: 50%; z-index: var(--z-chrome);
+  transform: translateY(-50%);
+  display: grid; place-items: center;
+  width: 52px; height: 52px; border-radius: 50%;
+  color: var(--text-3);
+  transition: color var(--t-base) var(--ease),
+              background var(--t-base) var(--ease),
+              opacity var(--t-base) var(--ease),
+              transform var(--t-fast) var(--ease);
+}
+.nav .ico { width: 26px; height: 26px; stroke-width: 1.1; }
+.nav-prev { left: max(var(--s2), calc(var(--edge) - 14px)); }
+.nav-next { right: max(var(--s2), calc(var(--edge) - 14px)); }
+
+.nav:hover:not(:disabled) { color: var(--accent); background: var(--shade); }
+.nav-prev:hover:not(:disabled) { transform: translateY(-50%) translateX(-3px); }
+.nav-next:hover:not(:disabled) { transform: translateY(-50%) translateX(3px); }
+.nav:disabled { opacity: 0.18; }
+#topbar[data-quiet="1"] ~ .nav { opacity: 0; pointer-events: none; }
+
+/* 任务做完了，箭头亮一下 */
+.nav.ready { color: var(--accent); animation: nav-ready 1.5s var(--ease) 2; }
+@keyframes nav-ready {
+  0%, 100% { transform: translateY(-50%) translateX(0); }
+  50%      { transform: translateY(-50%) translateX(5px); }
+}
+
+/* ═══════════════ 工艺笔记 ═══════════════ */
+
+.note {
+  position: fixed; right: var(--edge); top: calc(var(--edge) + 80px);
+  z-index: var(--z-note);
+  width: min(272px, 34vw);
+  padding: var(--s5);
+  color: var(--slip-ink);
+  background: var(--slip);
+  background-image: var(--grain);
+  background-blend-mode: multiply;
+  border-radius: var(--r-xs);
+  box-shadow: var(--hair), var(--lift-3);
+  transform-origin: 88% 0;
+  animation: slip-in var(--t-slow) var(--ease) both;
+  pointer-events: none;   /* 只是一张写着字的纸，不该挡住背后的转动 */
+}
+@keyframes slip-in { from { opacity: 0; transform: translateY(-10px) rotate(-1deg); } }
+
+.note-hd {
+  font-family: var(--serif); font-weight: 600;
+  font-size: var(--fs-mid); letter-spacing: var(--ls-base);
+  color: var(--slip-ink); margin-bottom: var(--s3);
+}
+.note p { font-size: var(--fs-tiny); line-height: var(--lh-body); color: var(--slip-body); }
+.note p + p { margin-top: var(--s2); }
+.note em { font-style: normal; color: var(--slip-mark); font-weight: 600; }
+
+/* 规格行：中间用点线牵住，比表格轻，比并排清楚 */
+.note-spec { margin: 0 0 var(--s3); }
+.note-spec .sp {
+  display: flex; align-items: baseline; gap: var(--s2);
+  font-size: var(--fs-tiny); color: var(--slip-body);
+  padding: 3px 0;
+}
+.note-spec .sp i {
+  flex: 1; height: 0;
+  border-bottom: 1px dotted var(--slip-rule);
+  transform: translateY(-3px);
+}
+.note-spec .sp b {
+  font-family: var(--mono); font-weight: 400;
+  font-size: var(--fs-tiny); color: #6d5324; white-space: nowrap;
+}
+
+.note-foot {
+  margin-top: var(--s3); padding-top: var(--s3);
+  border-top: 1px solid var(--slip-rule);
+  font-size: var(--fs-mini); line-height: var(--lh-tight);
+  color: var(--slip-mute);
+}
+
+/* 窄屏：折成右缘一枚纸角，点开才展开 —— 内容一句不少 */
+.note-tab {
+  position: fixed; right: 0; top: 40vh; z-index: var(--z-note);
+  display: none; align-items: center;
+  padding: var(--s3) var(--s2);
+  border-radius: var(--r-xs) 0 0 var(--r-xs);
+  background: var(--slip); color: var(--slip-ink);
+  font-size: var(--fs-mark); letter-spacing: var(--ls-wide);
+  writing-mode: vertical-rl;
+  box-shadow: var(--lift-2);
+}
+
+/* ═══════════════ 短提示 ═══════════════ */
+
+.toast {
+  position: fixed; left: 50%; top: 20%; z-index: var(--z-toast);
+  transform: translateX(-50%);
+  max-width: min(560px, 82vw);
+  padding: var(--s2) var(--s5);
+  border-radius: var(--r-full);
+  pointer-events: none; text-align: center;
+  font-family: var(--serif);
+  font-size: var(--fs-read); letter-spacing: var(--ls-base); line-height: var(--lh-tight);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-2);
+  animation: toast-in var(--t-base) var(--ease) both;
+}
+.toast.gold { color: var(--accent); box-shadow: var(--hair-gold), var(--lift-2); }
+@keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(8px); } }
+
+/* ═══════════════ 底部 · 讲述与这一步的任务 ═══════════════ */
+
+#bottom {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-chrome);
+  padding: 96px calc(var(--edge) + 56px) var(--edge);
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--s3);
+  pointer-events: none;
+  background: var(--scrim);
+  transition: opacity var(--t-slow) var(--ease);
+}
+#bottom[data-quiet="1"] { opacity: 0; pointer-events: none; }
+
+/* 操作提示：告诉手该做什么，不抢旁白的位置 */
+.cue {
+  display: flex; align-items: center; gap: var(--s2);
+  min-height: 18px;
+  font-size: var(--fs-mini); letter-spacing: var(--ls-wide);
+  color: var(--text-3);
+  transition: opacity var(--t-base) var(--ease);
+}
+.cue:empty { opacity: 0; }
+.cue .ico { width: 14px; height: 14px; color: var(--accent-soft); }
+.cue em { font-style: normal; color: var(--accent); }
+.cue b { font-family: var(--mono); font-weight: 400; color: var(--text-2); }
+
+/* 旁白：全片唯一的衬线阅读行 */
+.narration {
+  max-width: min(34em, 88vw); min-height: 2.6em;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: var(--fs-read); line-height: var(--lh-loose); letter-spacing: var(--ls-base);
+  color: var(--text);
+  transition: opacity var(--t-base) var(--ease);
+}
+.narration[data-lyric="1"] {
+  font-size: var(--fs-lede); line-height: 2.4; letter-spacing: var(--ls-wide);
+  color: var(--text-2);
+}
+
+.actions {
+  display: flex; align-items: center; gap: var(--s3);
+  min-height: 46px;
+  pointer-events: auto;
+}
+.alts { display: flex; align-items: center; gap: var(--s1); }
+
+/* ═══════════════ 窄屏 ═══════════════ */
+
+@media (max-width: 900px) {
+  .ch-nm { display: none; }
+  .chapters { gap: var(--s3); }
+  .note { width: min(248px, 44vw); padding: var(--s4); }
+}
+
+@media (max-width: 680px) {
+  .nav { width: 40px; height: 40px; }
+  .nav .ico { width: 20px; height: 20px; }
+  .nav-prev { left: 2px; }
+  .nav-next { right: 2px; }
+
+  .note {
+    left: var(--s3); right: var(--s3); top: calc(var(--edge) + 56px);
+    width: auto; max-height: 44vh; overflow-y: auto;
+    padding: var(--s5) var(--s4);
+    transform-origin: 50% 0;
+    pointer-events: auto;
+  }
+  .note-tab { display: flex; }
+
+  #bottom { padding: 72px 44px var(--s5); gap: var(--s2); }
+  .narration { min-height: 3.4em; }
+}

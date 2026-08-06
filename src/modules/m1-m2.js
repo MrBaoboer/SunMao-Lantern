@@ -11,8 +11,9 @@ const junk = new Junk(null);
 const level = (c) => Math.min(1.4, 1 + c.state.riddleScore * 0.08);
 
 // ══════════════════════════════════════════════════════════
-// 点灯 —— 长按引火。亮度走指数曲线：前九成时间只到三成亮，
-//         最后一下才冲满。线性上升会让「点亮」这件事变得平淡。
+// 点灯
+//   长按引火。亮度走指数曲线：前九成时间只到三成亮，最后一下才冲满。
+//   线性上升会让「点亮」这件事变得平淡。
 // ══════════════════════════════════════════════════════════
 export function openM1(c, onExit) {
   junk.scene = c.stage.scene;
@@ -34,112 +35,117 @@ export function openM1(c, onExit) {
     onExit?.();
   };
 
-  c.hud.showOverlay(`<div class="dock">
-      <div id="tip" style="font-size:12px;letter-spacing:.16em;color:var(--paper-3)">长按不放，等它烧起来</div>
-      <svg id="ring" class="ignite" viewBox="0 0 100 100" style="transform:rotate(-90deg)">
-        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(239,233,221,.13)" stroke-width="4"/>
-        <circle id="arc" cx="50" cy="50" r="44" fill="none" stroke="#d3aa63" stroke-width="4"
+  c.hud.dock({
+    body: `<p class="dock-hint" id="tip">按住不放，等这一圈走满</p>
+      <svg id="ring" class="ignite" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(242,236,224,.13)" stroke-width="3"/>
+        <circle id="arc" cx="50" cy="50" r="44" fill="none" stroke="#d3aa63" stroke-width="3"
                 stroke-linecap="round" stroke-dasharray="276" stroke-dashoffset="276"/>
       </svg>
-      <button id="fire" class="primary">按住点灯</button>
-      <div id="tools" hidden style="display:flex;flex-direction:column;align-items:center;gap:14px">
-        <div class="slider"><span>亮度</span><input id="bright" type="range" min="14" max="100" value="100"></div>
-        <div style="display:flex;gap:8px">
-          <button id="again" class="ghost">再点一次</button>
-          <button id="back" class="ghost">回去</button>
-        </div>
-      </div>
-    </div>`, { veil: false, onMount: (o) => {
-    const fire = o.querySelector('#fire');
-    const arc = o.querySelector('#arc');
-    const tip = o.querySelector('#tip');
-    const ring = o.querySelector('#ring');
-    const tools = o.querySelector('#tools');
+      <div id="tools" class="dock-row" hidden>
+        <div class="slider"><span>亮度</span>
+          <input id="bright" type="range" min="14" max="100" value="100" aria-label="亮度"></div>
+      </div>`,
+    actions: [
+      { id: 'fire', label: '按住点灯', kind: 'primary', ico: 'flame' },
+      { id: 'again', label: '再点一次', ico: 'refresh', hidden: true },
+      { label: '回去', ico: 'back', on: () => { close(); } },
+    ],
+    onMount: (o) => {
+      const fire = o.querySelector('#fire');
+      const arc = o.querySelector('#arc');
+      const tip = o.querySelector('#tip');
+      const ring = o.querySelector('#ring');
+      const tools = o.querySelector('#tools');
+      const again = o.querySelector('#again');
 
-    const done = async () => {
-      lit = true;
-      c.state.lit = true;
-      c.sfx.stopLoop('FLAME_IGNITE');
-      c.sfx.play('LIGHT_BLOOM');
-      c.sfx.loop('FLAME_LOOP');
-      fire.style.display = 'none';
-      ring.style.display = 'none';
-      tip.textContent = '';
-      c.stage.setRecommended({ az: 55, el: 10, dist: 470, target: V(0, 0, 96), ease: 2.2 });
-      await tween(0.9, (t) => {
-        c.lantern.setLit(level(c) * (0.3 + 0.7 * t));
-        c.lantern.root.position.z = a(0.5) * Math.sin(t * Math.PI) * 0.6;
-      }, { ease: Ease.outCubic });
-      c.lantern.root.position.z = 0;
-      c.lantern.setLit(level(c));
-      await wait(1.4);
-      c.voice.play('M1', `亮了。
-光从绵纸里透出来，被木头挡成一格一格的 —— 这就是你刚才选的那个花纹。
+      const done = async () => {
+        lit = true;
+        c.state.lit = true;
+        c.sfx.stopLoop('FLAME_IGNITE');
+        c.sfx.play('LIGHT_BLOOM');
+        c.sfx.loop('FLAME_LOOP');
+        fire.hidden = true;
+        ring.style.display = 'none';
+        tip.textContent = '';
+        c.stage.setRecommended({ az: 55, el: 10, dist: 470, target: V(0, 0, 96), ease: 2.2 });
+        await tween(0.9, (t) => {
+          c.lantern.setLit(level(c) * (0.3 + 0.7 * t));
+          c.lantern.root.position.z = a(0.5) * Math.sin(t * Math.PI) * 0.6;
+        }, { ease: Ease.outCubic });
+        c.lantern.root.position.z = 0;
+        c.lantern.setLit(level(c));
+        await wait(1.4);
+        c.voice.play('M1', `亮了。
+光从绵纸里透出来，被木头挡成一格一格的 —— 这就是你选的那个花纹。
 （停顿 1.0 s）
 看地上。`, { cps: 3.6 });
-      tools.hidden = false;
-      c.state.modulesDone = { ...c.state.modulesDone, M1: true };
-    };
+        tools.hidden = false;
+        again.hidden = false;
+        c.state.modulesDone = { ...c.state.modulesDone, M1: true };
+      };
 
-    const start = () => {
-      if (lit || holding) return;
-      holding = true; held = 0;
-      c.sfx.loop('FLAME_IGNITE', { dur: need });
-      tip.textContent = '别松手';
-    };
-    const stop = () => {
-      if (!holding || lit) return;
-      holding = false;
-      c.sfx.stopLoop('FLAME_IGNITE');
-      if (held >= need) return;
-      misses++;
-      if (misses >= 3) need = 0.8;      // 悄悄放宽，不告诉用户
-      tip.textContent = '再按久一点';
-      tween(0.5, (t) => {
-        const v = k * (1 - t);
-        c.lantern.setLit(v * level(c));
-        arc.style.strokeDashoffset = String(276 * (1 - v));
-      }, { onDone: () => { k = 0; } });
-    };
+      const start = () => {
+        if (lit || holding) return;
+        holding = true; held = 0;
+        c.sfx.loop('FLAME_IGNITE', { dur: need });
+        tip.textContent = '别松手';
+      };
+      const stop = () => {
+        if (!holding || lit) return;
+        holding = false;
+        c.sfx.stopLoop('FLAME_IGNITE');
+        if (held >= need) return;
+        misses++;
+        if (misses >= 3) need = 0.8;      // 悄悄放宽，不告诉用户
+        tip.textContent = '再按久一点';
+        tween(0.5, (t) => {
+          const v = k * (1 - t);
+          c.lantern.setLit(v * level(c));
+          arc.style.strokeDashoffset = String(276 * (1 - v));
+        }, { onDone: () => { k = 0; } });
+      };
 
-    fire.addEventListener('pointerdown', start);
-    fire.addEventListener('pointerleave', stop);
-    addEventListener('pointerup', stop);
+      fire.addEventListener('pointerdown', start);
+      fire.addEventListener('pointerleave', stop);
+      addEventListener('pointerup', stop);
 
-    const upd = (dt) => {
-      if (!holding || lit) return;
-      held += dt;
-      const t = Math.min(1, held / need);
-      k = Ease.ignite(t);
-      c.lantern.setLit(k * level(c));
-      arc.style.strokeDashoffset = String(276 * (1 - t));
-      if (t >= 1) { holding = false; done(); }
-    };
-    c.stage.updaters.add(upd);
-    junk.add({ dispose: () => { c.stage.updaters.delete(upd); removeEventListener('pointerup', stop); } });
+      const upd = (dt) => {
+        if (!holding || lit) return;
+        held += dt;
+        const t = Math.min(1, held / need);
+        k = Ease.ignite(t);
+        c.lantern.setLit(k * level(c));
+        arc.style.strokeDashoffset = String(276 * (1 - t));
+        if (t >= 1) { holding = false; done(); }
+      };
+      c.stage.updaters.add(upd);
+      junk.add({ dispose: () => { c.stage.updaters.delete(upd); removeEventListener('pointerup', stop); } });
 
-    o.querySelector('#bright').addEventListener('input', (e) => {
-      c.state.litLevel = e.target.value / 100;
-      c.lantern.setLit(level(c) * c.state.litLevel);
-    });
-    o.querySelector('#again').addEventListener('click', () => {
-      lit = false; k = 0; c.state.lit = false;
-      c.lantern.setLit(0);
-      c.sfx.stopLoop('FLAME_LOOP');
-      fire.style.display = ''; ring.style.display = '';
-      tools.hidden = true; tip.textContent = '长按不放，等它烧起来';
-    });
-    o.querySelector('#back').addEventListener('click', () => { c.sfx.play('PORTAL_ENTER'); close(); });
+      o.querySelector('#bright').addEventListener('input', (e) => {
+        c.state.litLevel = e.target.value / 100;
+        c.lantern.setLit(level(c) * c.state.litLevel);
+      });
+      again.addEventListener('click', () => {
+        lit = false; k = 0; c.state.lit = false;
+        c.lantern.setLit(0);
+        c.sfx.stopLoop('FLAME_LOOP');
+        fire.hidden = false; ring.style.display = '';
+        tools.hidden = true; again.hidden = true;
+        tip.textContent = '按住不放，等这一圈走满';
+      });
 
-    if (lit) done();
-  } });
+      if (lit) done();
+    },
+  });
 
   return close;
 }
 
 // ══════════════════════════════════════════════════════════
-// 猜灯谜 —— 答错不扣分、不阻断、不重来，也不用红色。
-//           前四题是流传已久的民间谜面，最后一题留给刚学的东西。
+// 猜灯谜
+//   答错不扣分、不阻断、不重来，也不用红色。
+//   前四题是流传已久的民间谜面，最后一题留给刚学的东西。
 // ══════════════════════════════════════════════════════════
 const RIDDLES = [
   {
@@ -165,7 +171,7 @@ const RIDDLES = [
   {
     face: '不用一钉，不用一胶\n一凹一凸，两木咬牢', tag: '打一木作工艺',
     key: '榫卯', opts: ['榫卯', '斗拱', '雕花', '髹漆'],
-    why: '凸的叫榫，凹的叫卯 —— 你在第二章见过它。',
+    why: '凸的叫榫，凹的叫卯 —— 你在第二幕见过它。',
     last: true,
   },
 ];
@@ -185,70 +191,70 @@ export function openM2(c, onExit) {
 
   const ask = () => {
     const q = RIDDLES[i];
-    c.hud.showOverlay(`<div class="sheet">
-      <p class="lede" style="margin-bottom:8px">第 ${i + 1} 题 / 共 5 题 · ${q.tag}</p>
-      <div class="riddle">${q.face.replace(/\n/g, '<br>')}</div>
-      <div class="opts">${q.opts.map((o) => `<button class="opt" data-o="${o}">${o}</button>`).join('')}</div>
-      <div class="answer" id="ans"></div>
-      <div class="foot">
-        <button id="skip" class="ghost">想不出来</button>
-        <button id="next" class="primary" hidden></button>
-      </div>
-    </div>`, { onMount: (o) => {
-      c.sfx.play('PAPER_UNROLL');
-      c.voice.play(`M2-${i + 1}`, q.face.replace(/\n/g, ''), { cps: 3.5 });
-      const ans = o.querySelector('#ans');
-      const next = o.querySelector('#next');
+    const last = i === RIDDLES.length - 1;
+    c.hud.sheet({
+      eyebrow: `第 ${i + 1} 题 / 共 5 题 · ${q.tag}`,
+      body: `<div class="riddle">${q.face.replace(/\n/g, '<br>')}</div>
+        <div class="opts">${q.opts.map((o) => `
+          <button class="opt" type="button" data-o="${o}">${o}</button>`).join('')}</div>
+        <div class="answer" id="ans"></div>`,
+      actions: [
+        { id: 'skip', label: '想不出来' },
+        { id: 'next', label: last ? '看看结果' : '下一题', kind: 'primary', hidden: true },
+      ],
+      onMount: (o) => {
+        c.sfx.play('PAPER', { gain: 0.6 });
+        c.voice.play(`M2-${i + 1}`, q.face.replace(/\n/g, ''), { cps: 3.5 });
+        const ans = o.querySelector('#ans');
+        const next = o.querySelector('#next');
 
-      const answer = (picked) => {
-        o.querySelectorAll('.opt').forEach((b) => {
-          b.disabled = true;
-          b.classList.add(b.dataset.o === q.key ? 'yes' : 'no');
-        });
-        const right = picked === q.key;
-        if (right) {
-          score++;
-          c.state.riddleScore = score;
-          c.sfx.play('RIDDLE_CORRECT');
-          c.lantern.setLit(c.state.lit ? level(c) : score * 0.08);
-          c.sfx.play('LIGHT_ABSORB', { delay: 0.3 });
-          ans.innerHTML = `<div class="k">对了 · 灯又亮了一分</div><div class="v">${q.why}</div>`;
-        } else {
-          c.sfx.play('RIDDLE_SOFT');
-          ans.innerHTML = `<div class="k">${q.key}</div><div class="v">${q.why}</div>`;
-        }
-        if (q.last && right) {
-          c.voice.play('M2-fin', `这一题，你答得出来，是因为前面那二十多步你都看过了。
+        const answer = (picked) => {
+          o.querySelectorAll('.opt').forEach((b) => {
+            b.disabled = true;
+            b.classList.add(b.dataset.o === q.key ? 'yes' : 'no');
+          });
+          const right = picked === q.key;
+          if (right) {
+            score++;
+            c.state.riddleScore = score;
+            c.sfx.play('SUCCESS');
+            c.lantern.setLit(c.state.lit ? level(c) : score * 0.08);
+                        ans.innerHTML = `<div class="answer-k">对了 · 灯又亮了一分</div>
+                             <div class="answer-v">${q.why}</div>`;
+          } else {
+                        ans.innerHTML = `<div class="answer-k">${q.key}</div>
+                             <div class="answer-v">${q.why}</div>`;
+          }
+          if (q.last && right) {
+            c.voice.play('M2-fin', `这一题你答得出来，是因为前面那二十多步你都看过了。
 不用一根钉，不用一滴胶 —— 一凹，一凸，两块木头就咬死了。
 这就是榫卯。`, { cps: 3.5 });
-        }
-        next.hidden = false;
-        next.textContent = i === RIDDLES.length - 1 ? '看看结果' : '下一题';
-      };
+          }
+          next.hidden = false;
+        };
 
-      o.querySelectorAll('.opt').forEach((b) =>
-        b.addEventListener('click', () => answer(b.dataset.o)));
-      o.querySelector('#skip').addEventListener('click', () => answer(null));
-      next.addEventListener('click', () => { i++; if (i < RIDDLES.length) ask(); else result(); });
-    } });
+        o.querySelectorAll('.opt').forEach((b) =>
+          b.addEventListener('click', () => answer(b.dataset.o)));
+        o.querySelector('#skip').addEventListener('click', () => answer(null));
+        next.addEventListener('click', () => { i++; if (i < RIDDLES.length) ask(); else result(); });
+      },
+    });
   };
 
   const result = () => {
     const name = score === 5 ? '榫卯通' : score === 4 ? '巧手' : score === 3 ? '明白人' : '学徒';
     c.state.riddleDone = true;
     c.state.modulesDone = { ...c.state.modulesDone, M2: true };
-    c.sfx.play('ACHIEVEMENT_MID');
-    c.hud.showOverlay(`<div class="sheet">
-      <h2>${name}</h2>
-      <p class="lede">答对 ${score} 题 · 灯笼亮了 ${score * 8}%</p>
-      <div class="foot">
-        <button id="retry" class="ghost">再来一次</button>
-        <button id="ok" class="primary">回去</button>
-      </div>
-    </div>`, { onMount: (o) => {
-      o.querySelector('#retry').addEventListener('click', () => { i = 0; score = 0; ask(); });
-      o.querySelector('#ok').addEventListener('click', close);
-    } });
+    c.sfx.play('SUCCESS');
+    c.hud.sheet({
+      eyebrow: `答对 ${score} 题`,
+      title: name,
+      lede: score ? `灯笼比刚才亮了 ${score * 8}%` : '灯笼还是原来的亮度',
+      actions: [
+        { label: '再来一次', ico: 'refresh', on: () => { i = 0; score = 0; ask(); } },
+        { label: '回去', kind: 'primary', on: close },
+      ],
+    });
   };
 
   ask();

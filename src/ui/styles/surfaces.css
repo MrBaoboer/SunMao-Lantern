@@ -1,0 +1,278 @@
+/*
+ * 覆盖层
+ *
+ * 两种形态：
+ *   卷（sheet）—— 盖住画面，讲一件需要专心看的事；
+ *   坞（dock）—— 停在底部，把画面完整让出来。
+ */
+
+.overlay {
+  position: fixed; inset: 0; z-index: var(--z-overlay);
+  display: flex; align-items: center; justify-content: center;
+  animation: fade var(--t-base) var(--ease) both;
+}
+.overlay.veil {
+  background: var(--veil);
+  backdrop-filter: blur(22px);
+}
+.overlay.bare { background: none; pointer-events: none; }
+.overlay.bare .sheet, .overlay.bare .dock { pointer-events: auto; }
+
+/* ═══════════════ 卷 ═══════════════ */
+
+.sheet {
+  width: min(680px, 84vw); max-height: 82vh;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--s2) var(--s1);
+  text-align: center;
+  animation: sheet-in var(--t-slow) var(--ease) both;
+}
+@keyframes sheet-in { from { opacity: 0; transform: translateY(14px); } }
+
+.sheet-title {
+  font-family: var(--serif); font-weight: 400;
+  font-size: var(--fs-head);
+  letter-spacing: var(--ls-vast); text-indent: var(--ls-vast);
+  color: var(--text);
+  margin-top: var(--s3);
+}
+.sheet-lede {
+  max-width: 30em; margin: var(--s3) auto 0;
+  font-size: var(--fs-mini); line-height: var(--lh-body); letter-spacing: var(--ls-wide);
+  color: var(--text-3);
+}
+.sheet-body { margin-top: var(--s7); }
+
+.sheet-act {
+  display: flex; align-items: center; justify-content: center; gap: var(--s3);
+  flex-wrap: wrap; margin-top: var(--s7);
+}
+
+/* ═══════════════ 坞 ═══════════════ */
+
+.dock {
+  position: fixed; left: 0; right: 0; bottom: var(--edge);
+  display: flex; flex-direction: column; align-items: center; gap: var(--s4);
+  padding: 0 calc(var(--edge) + 56px);
+  animation: dock-in var(--t-base) var(--ease) both;
+}
+@keyframes dock-in { from { opacity: 0; transform: translateY(12px); } }
+.dock-row { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; justify-content: center; }
+.dock-hint { font-size: var(--fs-mini); letter-spacing: var(--ls-wide); color: var(--text-3); }
+
+/* ═══════════════ 五道门 ═══════════════ */
+
+.doors { display: flex; flex-wrap: wrap; gap: var(--s3); justify-content: center; }
+
+.door {
+  position: relative;
+  width: 146px; padding: var(--s5) var(--s3) var(--s4);
+  border-radius: var(--r-sm); text-align: center;
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-1);
+  transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.door:hover { transform: translateY(-5px); box-shadow: var(--hair-gold), var(--lift-2); }
+.door:hover .door-ic { color: var(--accent); }
+
+.door-ic {
+  display: grid; place-items: center; margin: 0 auto var(--s4);
+  width: 34px; height: 34px; color: var(--text-3);
+  transition: color var(--t-base) var(--ease);
+}
+.door-ic .ico { width: 32px; height: 32px; stroke-width: 1.1; }
+.door-nm {
+  display: block; font-family: var(--serif); font-size: var(--fs-mid);
+  letter-spacing: var(--ls-wide); text-indent: var(--ls-wide); color: var(--text);
+}
+.door-ds {
+  display: block; margin-top: var(--s2);
+  font-size: var(--fs-mark); line-height: var(--lh-tight); color: var(--text-3);
+}
+
+/* 做完了盖一枚印 */
+.seal {
+  position: absolute; top: var(--s2); right: var(--s2);
+  width: 20px; height: 20px; border-radius: 2px;
+  display: grid; place-items: center;
+  background: var(--seal); color: #fffaee;
+  font-family: var(--serif); font-size: var(--fs-mini); line-height: 1;
+  animation: stamp var(--t-slow) var(--ease-spring) both;
+}
+@keyframes stamp { from { opacity: 0; transform: scale(2.2) rotate(-14deg); } }
+
+/* ═══════════════ 纹样选择 ═══════════════ */
+
+.picks { display: flex; gap: var(--s4); justify-content: center; flex-wrap: wrap; }
+
+.pick {
+  position: relative;
+  width: 200px; border-radius: var(--r-sm); overflow: hidden; text-align: center;
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-1);
+  transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.pick:hover { transform: translateY(-5px); box-shadow: var(--hair-gold), var(--lift-2); }
+.pick[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--accent), var(--lift-2); }
+.pick canvas { display: block; width: 100%; aspect-ratio: 1; background: #0a0806; }
+.pick-meta { padding: var(--s4) var(--s3) var(--s5); }
+.pick-nm {
+  font-family: var(--serif); font-size: var(--fs-mid);
+  letter-spacing: var(--ls-vast); text-indent: var(--ls-vast); color: var(--text);
+}
+.pick-mn {
+  margin-top: var(--s2); font-size: var(--fs-mark);
+  line-height: var(--lh-tight); color: var(--text-3);
+}
+.pick[aria-pressed="true"] .pick-mn { color: var(--accent); }
+.pick-on {
+  position: absolute; top: var(--s2); right: var(--s2);
+  display: none; place-items: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent);
+}
+.pick-on .ico { width: 13px; height: 13px; stroke-width: 2; }
+.pick[aria-pressed="true"] .pick-on { display: grid; }
+
+/* ═══════════════ 灯谜 ═══════════════ */
+
+.riddle {
+  font-family: var(--serif);
+  font-size: var(--fs-lede); line-height: var(--lh-loose);
+  letter-spacing: var(--ls-vast); text-indent: var(--ls-vast);
+  color: var(--text);
+  margin-bottom: var(--s7);
+}
+
+.opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s2); max-width: 460px; margin: 0 auto; }
+.opt {
+  padding: var(--s4) var(--s2);
+  border-radius: var(--r-sm);
+  font-family: var(--serif); font-size: var(--fs-mid);
+  letter-spacing: var(--ls-wide); text-indent: var(--ls-wide);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--hair);
+  transition: background var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease),
+              transform var(--t-fast) var(--ease),
+              opacity var(--t-base) var(--ease);
+}
+.opt:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--hair-gold), var(--lift-1); }
+.opt.yes { color: var(--accent); background: var(--accent-faint); box-shadow: inset 0 0 0 1px var(--accent); }
+.opt.no { opacity: 0.32; }
+
+.answer { margin-top: var(--s6); min-height: 66px; }
+.answer-k {
+  font-family: var(--serif); font-size: var(--fs-mid);
+  letter-spacing: var(--ls-wide); color: var(--accent);
+}
+.answer-v {
+  max-width: 26em; margin: var(--s2) auto 0;
+  font-size: var(--fs-tiny); line-height: var(--lh-body); color: var(--text-2);
+}
+
+/* ═══════════════ 祝福语 ═══════════════ */
+
+.wishes { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); max-width: 480px; margin: 0 auto; }
+.wish {
+  padding: var(--s5) var(--s2);
+  border-radius: var(--r-xs);
+  font-family: var(--serif); font-size: var(--fs-mid);
+  letter-spacing: var(--ls-wide); text-indent: var(--ls-wide);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--hair);
+  transition: background var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease),
+              color var(--t-base) var(--ease),
+              transform var(--t-fast) var(--ease);
+}
+.wish:hover { transform: translateY(-2px); box-shadow: var(--hair-gold), var(--lift-1); }
+.wish[aria-pressed="true"] { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* 自己凑一句 */
+.combo-grp + .combo-grp { margin-top: var(--s5); }
+.combo-k {
+  font-size: var(--fs-mark); letter-spacing: var(--ls-vast);
+  color: var(--text-3); margin-bottom: var(--s2);
+}
+.combo-row { display: flex; gap: var(--s2); flex-wrap: wrap; justify-content: center; }
+.combo-row .wish { padding: 10px var(--s4); font-size: var(--fs-base); }
+.combo-out {
+  margin-top: var(--s6);
+  font-family: var(--serif); font-size: var(--fs-lede);
+  letter-spacing: var(--ls-wide); color: var(--accent);
+}
+
+/* ═══════════════ 规格清单 ═══════════════ */
+
+.spec { max-width: 380px; margin: 0 auto; text-align: left; }
+.spec .sp {
+  display: flex; align-items: baseline; gap: var(--s3);
+  padding: 10px 0;
+  font-size: var(--fs-tiny); letter-spacing: var(--ls-base); color: var(--text-2);
+}
+.spec .sp i { flex: 1; height: 0; border-bottom: 1px dotted var(--line); transform: translateY(-4px); }
+.spec .sp b {
+  font-family: var(--mono); font-weight: 400; font-size: var(--fs-base);
+  color: var(--text); white-space: nowrap;
+}
+.spec .sp.sum { margin-top: var(--s2); padding-top: var(--s4); border-top: 1px solid var(--line); }
+.spec .sp.sum b { color: var(--accent); font-size: var(--fs-mid); }
+
+.verdict {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  margin-top: var(--s5);
+  font-size: var(--fs-mini); letter-spacing: var(--ls-wide); color: var(--text-3);
+}
+.verdict .ico { width: 14px; height: 14px; color: var(--accent); }
+
+/* ═══════════════ 分层控制 ═══════════════ */
+
+.layers { display: flex; gap: var(--s1); flex-wrap: wrap; justify-content: center; }
+.layer {
+  display: inline-flex; align-items: baseline; gap: var(--s2);
+  padding: 8px var(--s4); border-radius: var(--r-full);
+  font-size: var(--fs-mini); letter-spacing: var(--ls-base);
+  color: var(--text-3);
+  background: var(--surface);
+  box-shadow: var(--hair);
+  transition: color var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.layer b { font-family: var(--mono); font-weight: 400; font-size: var(--fs-mark); color: var(--text-4); }
+.layer:hover, .layer[aria-pressed="true"] { color: var(--accent); box-shadow: var(--hair-gold); }
+.layer[aria-pressed="true"] b { color: var(--accent-soft); }
+
+/* ═══════════════ 书写与海报 ═══════════════ */
+
+.ink-pad {
+  width: 100%; max-width: 680px; margin: 0 auto;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  box-shadow: var(--hair);
+}
+.poster {
+  max-height: 60vh; max-width: 100%;
+  border-radius: var(--r-xs);
+  box-shadow: var(--lift-3);
+}
+
+/* ═══════════════ 片尾卡 ═══════════════ */
+
+.finale {
+  font-family: var(--serif); font-size: var(--fs-hero);
+  letter-spacing: var(--ls-vast); text-indent: var(--ls-vast);
+  line-height: 2.4; color: var(--text);
+}
+
+/* ═══════════════ 窄屏 ═══════════════ */
+
+@media (max-width: 680px) {
+  .dock { padding: 0 44px; }
+  .door { width: calc(50% - var(--s2)); }
+  .pick { width: calc(50% - var(--s2)); }
+  .wishes { grid-template-columns: repeat(2, 1fr); }
+  .sheet-body { margin-top: var(--s6); }
+  .riddle { margin-bottom: var(--s6); }
+}

@@ -1,11 +1,11 @@
 /**
  * 分步引擎
  *
- * V3.0 重构后主线为 24 步（原 33 步）。合并的全部是纯过场与重复劳动，
- * §13.4 的导演红线一条未动：
- *   静默点① S08 ｜ 静默点② S30 巡礼 ｜ S21 对比动画 ｜
- *   S27 三段式装板 ｜ S29 首个角花手动安装 ｜ S30 灯芯不提前点亮 ｜
- *   M5 片尾卡三行文字 ｜ S01 开场钩子与 M5 片尾闭环 ｜ 语义色纪律
+ * 一步 = 一份声明：机位、氛围、旁白、笔记、进入与退出。
+ * 引擎负责把上一步收干净，再把下一步铺开 —— 步骤本身不必操心清场。
+ *
+ * 翻页永远不被拦住：旁白没念完、任务没做完，都可以往前走。
+ * 需要动手的步骤把动作放在底部那一个任务按钮上，与导航互不相干。
  */
 
 import * as THREE from 'three';
@@ -19,22 +19,13 @@ export class Engine {
     this.index = -1;
     this.busy = false;
 
-    // 有些步骤的主行动不是「继续」，而是一个动作（例如「明白了，开工」）。
-    // 那一下按完，主按钮才变回「继续」。
-    this.override = null;
-    ctx.hud.onNext = async () => {
-      if (this.override) {
-        const fn = this.override;
-        this.override = null;
-        this.lock();
-        await fn();
-        return;
-      }
-      this.next();
-    };
-    ctx.hud.onBack = () => this.back();
+    ctx.hud.onNext = () => this.next();
+    ctx.hud.onPrev = () => this.back();
+    ctx.hud.onJump = (i) => this.go(i);
+
+    // 互动模块把主界面收起来了，这时方向键不该在背后翻页
     addEventListener('keydown', (e) => {
-      if (ctx.hud.overlayOpen) return;
+      if (!ctx.hud.navVisible) return;
       if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); this.next(); }
       if (e.key === 'ArrowLeft') this.back();
     });
@@ -43,28 +34,30 @@ export class Engine {
   setSteps(list) {
     this.steps = list;
     this.byId = new Map(list.map((s, i) => [s.id, i]));
+    this.ctx.hud.setChapters(list);
   }
 
   get current() { return this.steps[this.index]; }
 
-  /** §S31 构件详情卡的深链接入口 */
   goToStep(id) {
     const i = this.byId.get(id);
-    if (i !== undefined) this.go(i);
+    if (i !== undefined) return this.go(i);
+    return undefined;
   }
 
   async next() { if (this.index < this.steps.length - 1) await this.go(this.index + 1); }
   async back() { if (this.index > 0) await this.go(this.index - 1); }
 
   async go(i) {
-    if (this.busy || i < 0 || i >= this.steps.length) return;
+    if (i < 0 || i >= this.steps.length || i === this.index) return;
+    // 上一步的动画还没跑完也照样翻 —— 取消它，别让用户等
+    cancelAll();
     this.busy = true;
     const { ctx } = this;
     const prev = this.current;
 
     try {
       // ── 收尾 ──
-      cancelAll();
       ctx.voice.stop();
       await prev?.exit?.(ctx);
       ctx.drag.cancel();
@@ -73,9 +66,11 @@ export class Engine {
       ctx.hud.clearSpots();
       ctx.hud.setNote(null);
       ctx.hud.setAlts([]);
-      ctx.hud.setHint('');
-      ctx.hud.setSubtitle('');
+      ctx.hud.setTask(null);
+      ctx.hud.setCue('');
+      ctx.hud.setNarration('');
       ctx.hud.quiet(false);
+      ctx.hud.hideOverlay();
       ctx.lantern.clearHighlights();
       ctx.lantern.setSection(null, false);
 
@@ -84,15 +79,8 @@ export class Engine {
       const s = this.current;
       if (i > ctx.state.maxStep) ctx.state.maxStep = i;
 
-      ctx.hud.setTitle(s.title);
-      ctx.hud.setPhase(s.phase ?? 0, s.phaseRatio ?? 1);
-      this.override = s.primary ? () => s.primary.onClick(ctx, this) : null;
-      ctx.hud.setNext({
-        label: s.primary?.label || s.nextLabel || '继续',
-        enabled: s.primary ? true : !s.gate,
-        hidden: !!s.hideNext,
-      });
-      ctx.hud.setBack({ enabled: i > 0 });
+      ctx.hud.setStep(i, this.steps.length, s.title);
+      if (s.task) ctx.hud.setTask(s.task.label, () => s.task.onClick(ctx, this));
       if (s.mood) ctx.stage.setMood(s.mood);
       if (s.bgm) ctx.bgm.play(s.bgm, { level: s.bgmLevel ?? 1 });
       if (s.cam) {
@@ -104,24 +92,13 @@ export class Engine {
         if (s.cam.snap) ctx.stage.snapToRecommended();
       }
       if (s.note) ctx.hud.setNote(s.note);
-      if (s.hint) ctx.hud.setHint(s.hint);
+      if (s.cue) ctx.hud.setCue(s.cue.text, s.cue.ico);
 
-      // enter 里有大量动画 await。万一某个动画因故不解析（例如页面长时间不可见
-      // 导致 rAF 停摆），不能让导航永久锁死 —— 超时后放行，步骤自身会继续跑完。
-      if (s.enter) {
-        let bail;
-        const guard = new Promise((r) => { bail = setTimeout(r, 20000); });
-        await Promise.race([Promise.resolve(s.enter(ctx, this)), guard]);
-        clearTimeout(bail);
-      }
-
+      // 旁白与画面同时开始，谁也不等谁
       if (s.narration) {
-        ctx.voice.play(s.id, s.narration, {
-          cps: s.cps ?? 4.0,
-          lyric: !!s.lyric,
-          onDone: () => s.onNarrationDone?.(ctx, this),
-        });
+        ctx.voice.play(s.id, s.narration, { cps: s.cps ?? 4.0, lyric: !!s.lyric });
       }
+      if (s.enter) await s.enter(ctx, this);
     } catch (e) {
       console.error(`[step ${this.steps[i]?.id}]`, e);
     } finally {
@@ -129,12 +106,10 @@ export class Engine {
     }
   }
 
-  /** 任务完成 → 解锁「继续」 */
-  unlock(label) {
-    this.ctx.hud.setNext({ label: label || this.current?.nextLabel || '继续', enabled: true });
-  }
-
-  lock() {
-    this.ctx.hud.setNext({ enabled: false });
+  /** 任务做完了：收起任务按钮，让右边那枚箭头亮一下 */
+  done() {
+    this.ctx.hud.setTask(null);
+    this.ctx.hud.setAlts([]);
+    this.ctx.hud.readyNext();
   }
 }

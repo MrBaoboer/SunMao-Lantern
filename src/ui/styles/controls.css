@@ -1,0 +1,176 @@
+/*
+ * 控件
+ *
+ * 一屏只有一个金色按钮。它就是当下唯一该按的地方。
+ */
+
+/* ═══════════════ 按钮 ═══════════════ */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  padding: 12px var(--s6);
+  border-radius: var(--r-full);
+  font-size: var(--fs-tiny); letter-spacing: var(--ls-wide); text-indent: var(--ls-wide);
+  white-space: nowrap; text-decoration: none;
+  transition: background var(--t-base) var(--ease),
+              color var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease),
+              transform var(--t-fast) var(--ease),
+              opacity var(--t-base) var(--ease);
+}
+.btn .ico { width: 15px; height: 15px; text-indent: 0; }
+
+.btn-primary { background: var(--accent); color: var(--on-accent); font-weight: 500; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-lift); transform: translateY(-1px); }
+.btn-primary:active:not(:disabled) { transform: translateY(0); }
+.btn-primary:disabled { background: none; color: var(--text-4); box-shadow: var(--hair); }
+
+.btn-quiet {
+  color: var(--text-2);
+  background: var(--surface);
+  box-shadow: var(--hair);
+}
+.btn-quiet:hover:not(:disabled) { color: var(--text); box-shadow: var(--hair-gold); }
+
+/* 次要行动一律是无框文字，永远不与主行动争夺注意力 */
+.btn-text {
+  padding: 12px var(--s4);
+  font-size: var(--fs-tiny); letter-spacing: var(--ls-base);
+  color: var(--text-3);
+  transition: color var(--t-base) var(--ease);
+}
+.btn-text:hover:not(:disabled) { color: var(--text); }
+
+/* 图标按钮 */
+.icon-btn {
+  pointer-events: auto;
+  display: grid; place-items: center;
+  width: 34px; height: 34px; border-radius: var(--r-full);
+  color: var(--text-3);
+  transition: color var(--t-base) var(--ease), background var(--t-base) var(--ease);
+}
+.icon-btn .ico { width: 17px; height: 17px; }
+.icon-btn:hover:not(:disabled) { color: var(--text); background: var(--shade); }
+.icon-btn:disabled { opacity: 0.24; }
+
+/* ═══════════════ 滑杆 ═══════════════ */
+
+.slider {
+  display: flex; align-items: center; gap: var(--s3);
+  font-size: var(--fs-mark); letter-spacing: var(--ls-wide); color: var(--text-3);
+}
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: clamp(150px, 24vw, 250px); height: 16px;
+  background: none; outline: none; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--line); }
+input[type="range"]::-moz-range-track { height: 1px; background: var(--line); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px; margin-top: -5.5px;
+  border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 5px var(--accent-faint);
+  transition: box-shadow var(--t-base) var(--ease);
+}
+input[type="range"]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 7px var(--accent-faint); }
+input[type="range"]::-moz-range-thumb {
+  width: 12px; height: 12px; border: 0; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 5px var(--accent-faint);
+}
+
+/* ═══════════════ 设置菜单 ═══════════════ */
+
+.menu {
+  position: fixed; right: var(--edge); top: calc(var(--edge) + 74px);
+  z-index: var(--z-menu);
+  min-width: 212px; padding: var(--s2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-3);
+  animation: menu-in var(--t-base) var(--ease) both;
+}
+@keyframes menu-in { from { opacity: 0; transform: translateY(-8px) scale(0.98); } }
+
+.menu button {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; padding: 10px var(--s3);
+  border-radius: var(--r-xs);
+  font-size: var(--fs-tiny); letter-spacing: var(--ls-base);
+  color: var(--text-2);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.menu button:hover { background: var(--shade); color: var(--text); }
+.menu button .ico { width: 15px; height: 15px; color: var(--text-3); }
+.menu button:hover .ico { color: var(--accent); }
+.menu button span { flex: 1; text-align: left; }
+.menu .sep { height: 1px; background: var(--line); margin: var(--s2) var(--s3); }
+
+/* 开关 */
+.sw {
+  flex: none; width: 26px; height: 14px; border-radius: var(--r-full);
+  background: var(--line); position: relative;
+  transition: background var(--t-base) var(--ease);
+}
+.sw::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-3);
+  transition: transform var(--t-base) var(--ease), background var(--t-base) var(--ease);
+}
+[aria-checked="true"] .sw { background: var(--accent-soft); }
+[aria-checked="true"] .sw::after { transform: translateX(12px); background: var(--accent); }
+
+/* ═══════════════ 三维锚点标注 ═══════════════ */
+
+.spot {
+  position: fixed; z-index: var(--z-anchor);
+  transform: translate(-50%, -50%);
+  display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  font-family: var(--serif); font-size: var(--fs-mini); line-height: 1;
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px currentColor, var(--lift-1);
+  opacity: 0.72;
+  transition: opacity var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
+}
+.spot .ico { width: 13px; height: 13px; }
+.spot:hover, .spot[aria-pressed="true"] { opacity: 1; }
+.spot:hover { transform: translate(-50%, -50%) scale(1.08); }
+.spot[aria-pressed="true"] { background: currentColor; }
+.spot[aria-pressed="true"] > * { color: var(--surface); }
+
+.spot-label {
+  position: fixed; z-index: var(--z-anchor);
+  transform: translate(16px, -50%);
+  pointer-events: none; white-space: nowrap;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-xs);
+  background: var(--slip); color: var(--slip-ink);
+  font-size: var(--fs-tiny); letter-spacing: var(--ls-tight);
+  box-shadow: var(--lift-2);
+  animation: fade var(--t-fast) var(--ease) both;
+}
+.spot-label small {
+  display: block; margin-top: 2px;
+  font-size: var(--fs-mini); letter-spacing: 0; color: var(--slip-mute);
+}
+
+/* ═══════════════ 方向引导 ═══════════════ */
+
+.arrow {
+  position: fixed; z-index: var(--z-anchor);
+  transform: translate(-50%, -50%);
+  pointer-events: none; color: var(--accent);
+  animation: breathe 2.2s ease-in-out infinite;
+}
+.arrow .ico { width: 26px; height: 26px; }
+@keyframes breathe { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+/* ═══════════════ 引火环 ═══════════════ */
+
+.ignite { width: 64px; height: 64px; transform: rotate(-90deg); }
+.ignite circle { transition: stroke-dashoffset 60ms linear; }
+
+@keyframes fade { from { opacity: 0; } }

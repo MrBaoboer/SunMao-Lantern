@@ -13,7 +13,7 @@ const junk = new Junk(null);
 // ══════════════════════════════════════════════════════════
 // 写心愿
 //   不要姓名、不要手机号、不用登录，愿望也不上传。
-//   画在你自己的设备上，编号是本地随机生成的。
+//   海报在本机合成，编号是本地随机生成的。
 // ══════════════════════════════════════════════════════════
 const WISHES = [
   '岁岁平安', '万事顺遂', '身体康健',
@@ -41,77 +41,72 @@ export function openM3(c, onExit) {
   const phrase = (s) => `愿${COMBO[0].v[s[0]]}${COMBO[1].v[s[1]]}${COMBO[2].v[s[2]]}，${COMBO[3].v[s[3]]}`;
 
   const choose = () => {
-    c.hud.showOverlay(`<div class="sheet">
-      <h2>写一句话</h2>
-      <p class="lede">从前过年，人们把心愿写在灯上 · 灯亮着，愿望就一直亮着</p>
-      <div class="wishes">
-        ${WISHES.map((w) => `<button class="wish ${w === picked ? 'on' : ''}" data-w="${w}">${w}</button>`).join('')}
-      </div>
-      <div class="foot">
-        <button id="own" class="ghost">自己凑一句</button>
-        <button id="go" class="primary" ${picked ? '' : 'disabled'}>写上去</button>
-        <button id="back" class="ghost">回去</button>
-      </div>
-    </div>`, { onMount: (o) => {
-      o.querySelectorAll('.wish').forEach((b) => b.addEventListener('click', () => {
-        picked = b.dataset.w;
-        o.querySelectorAll('.wish').forEach((x) => x.classList.remove('on'));
-        b.classList.add('on');
-        o.querySelector('#go').disabled = false;
-        c.sfx.play('UI_TAP');
-      }));
-      o.querySelector('#own').addEventListener('click', combo);
-      o.querySelector('#go').addEventListener('click', () => picked && write());
-      o.querySelector('#back').addEventListener('click', close);
-    } });
+    c.hud.sheet({
+      title: '写一句话',
+      lede: '从前过年，人们把心愿写在灯上。灯亮着，愿望就亮着。',
+      body: `<div class="wishes">${WISHES.map((w) => `
+        <button class="wish" type="button" data-w="${w}"
+                aria-pressed="${w === picked}">${w}</button>`).join('')}</div>`,
+      actions: [
+        { label: '回去', on: close },
+        { label: '自己凑一句', id: 'own' },
+        { label: '写上去', kind: 'primary', ico: 'brush', id: 'go', disabled: !picked },
+      ],
+      onMount: (o) => {
+        o.querySelectorAll('.wish').forEach((b) => b.addEventListener('click', () => {
+          picked = b.dataset.w;
+          o.querySelectorAll('.wish').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+          b.setAttribute('aria-pressed', 'true');
+          o.querySelector('#go').disabled = false;
+          c.sfx.play('UI_TAP');
+        }));
+        o.querySelector('#own').addEventListener('click', combo);
+        o.querySelector('#go').addEventListener('click', () => picked && write());
+      },
+    });
   };
 
   const combo = () => {
     const s = [0, 0, 0, 0];
-    const draw = () => c.hud.showOverlay(`<div class="sheet">
-      <h2>自己凑一句</h2>
-      <p class="lede">挑四个词</p>
-      ${COMBO.map((g, gi) => `<div style="margin-bottom:18px">
-        <div style="font-size:11px;letter-spacing:.2em;color:var(--paper-3);margin-bottom:9px">${g.k}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
-          ${g.v.map((v, vi) => `<button class="wish ${s[gi] === vi ? 'on' : ''}"
-             style="padding:11px 18px;font-size:15px" data-g="${gi}" data-v="${vi}">${v}</button>`).join('')}
-        </div></div>`).join('')}
-      <div style="margin-top:16px;font-family:var(--serif);font-size:22px;letter-spacing:.16em;color:var(--gold)">
-        ${phrase(s)}
-      </div>
-      <div class="foot">
-        <button id="back2" class="ghost">还是挑现成的</button>
-        <button id="ok" class="primary">就写这句</button>
-      </div>
-    </div>`, { onMount: (o) => {
-      o.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => {
-        s[+b.dataset.g] = +b.dataset.v;
-        c.sfx.play('UI_TAP');
-        draw();
-      }));
-      o.querySelector('#ok').addEventListener('click', () => { picked = phrase(s); write(); });
-      o.querySelector('#back2').addEventListener('click', choose);
-    } });
+    const draw = () => c.hud.sheet({
+      title: '自己凑一句',
+      lede: '挑四个词',
+      body: `${COMBO.map((g, gi) => `<div class="combo-grp">
+          <div class="combo-k">${g.k}</div>
+          <div class="combo-row">${g.v.map((v, vi) => `
+            <button class="wish" type="button" data-g="${gi}" data-v="${vi}"
+                    aria-pressed="${s[gi] === vi}">${v}</button>`).join('')}</div>
+        </div>`).join('')}
+        <p class="combo-out">${phrase(s)}</p>`,
+      actions: [
+        { label: '还是挑现成的', on: choose },
+        { label: '就写这句', kind: 'primary', ico: 'brush', on: () => { picked = phrase(s); write(); } },
+      ],
+      onMount: (o) => {
+        o.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => {
+          s[+b.dataset.g] = +b.dataset.v;
+          c.sfx.play('UI_TAP');
+          draw();
+        }));
+      },
+    });
     draw();
   };
 
   const write = async () => {
     c.state.wishText = picked;
-    c.hud.showOverlay(`<div class="sheet">
-      <canvas id="ink" width="760" height="230"
-        style="max-width:100%;border-radius:2px;background:rgba(20,16,13,.5)"></canvas>
-      <div class="foot"><button id="skip" class="ghost">写快一点</button></div>
-    </div>`);
+    let fast = false;
+    c.hud.sheet({
+      body: '<canvas id="ink" class="ink-pad" width="760" height="230"></canvas>',
+      actions: [{ label: '写快一点', on: () => { fast = true; } }],
+    });
     const cv = document.getElementById('ink');
     const g = cv.getContext('2d');
     const chars = [...picked];
     const size = Math.min(112, 700 / chars.length);
     const y = 140;
-    let fast = false;
-    document.getElementById('skip').addEventListener('click', () => { fast = true; });
 
-    c.sfx.play('INK_DIP');
+    c.sfx.play('BRUSH', { gain: 0.5 });
     await wait(0.4);
     g.font = `${size}px ${getComputedStyle(document.body).getPropertyValue('--serif')}`;
     g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -127,7 +122,7 @@ export function openM3(c, onExit) {
         g.fillStyle = '#1c1a17';
         g.fillText(ch, cx, y);
         g.restore();
-        c.sfx.play('BRUSH_STROKE');
+        c.sfx.play('BRUSH');
         await wait(0.13);
       }
       if (fast) break;
@@ -137,75 +132,76 @@ export function openM3(c, onExit) {
       g.fillStyle = mix('#1c1a17', '#d3aa63', t);
       chars.forEach((ch, ci) => g.fillText(ch, (760 / chars.length) * (ci + 0.5), y));
     });
-    c.sfx.play('SHIMMER_WARM');
+    c.sfx.play('SUCCESS', { gain: 0.6 });
     await wait(0.7);
     poster();
   };
 
   const poster = () => {
     if (!c.state.posterNo) c.state.posterNo = makePosterNo();
-    const W = 1080, H = 1920;
-    const cv = document.createElement('canvas');
-    cv.width = W; cv.height = H;
-    const g = cv.getContext('2d');
-    const serif = getComputedStyle(document.body).getPropertyValue('--serif');
-
-    const grd = g.createLinearGradient(0, 0, 0, H);
-    grd.addColorStop(0, '#171310'); grd.addColorStop(0.55, '#0b0907'); grd.addColorStop(1, '#120e0a');
-    g.fillStyle = grd; g.fillRect(0, 0, W, H);
-
-    g.textAlign = 'center';
-    g.fillStyle = '#efe9dd';
-    g.font = `72px ${serif}`;
-    g.fillText('我做了一盏灯', W / 2, 180);
-    g.font = '24px sans-serif';
-    g.fillStyle = 'rgba(239,233,221,.42)';
-    g.fillText('榫卯灯笼 · 国风流光', W / 2, 234);
-
-    const shot = c.stage.renderer.domElement;
-    const dw = W * 0.88, dh = dw * (shot.height / shot.width);
-    g.drawImage(shot, 0, 0, shot.width, shot.height, (W - dw) / 2, 320, dw, dh);
-
-    const tex = buildPatternTexture(c.state.patternId, 512);
-    g.globalAlpha = 0.13;
-    for (let x = 0; x < W; x += 190) {
-      g.drawImage(tex.image, x, H - 440, 190, 190);
-    }
-    g.globalAlpha = 1;
-    tex.dispose();
-
-    g.fillStyle = '#d3aa63';
-    g.font = `86px ${serif}`;
-    g.fillText(c.state.wishText, W / 2, H - 250);
-
-    g.font = '22px monospace';
-    g.fillStyle = 'rgba(239,233,221,.36)';
-    g.textAlign = 'left';
-    g.fillText(c.state.posterNo, 72, H - 62);
-    g.textAlign = 'right';
-    g.fillText('13 根木条 · 0 颗钉子', W - 72, H - 62);
-
-    const url = cv.toDataURL('image/png');
+    const url = drawPoster(c);
     c.state.modulesDone = { ...c.state.modulesDone, M3: true };
-    c.sfx.play('SUCCESS_SOFT');
-
-    c.hud.showOverlay(`<div class="sheet">
-      <img src="${url}" style="max-height:64vh;border-radius:2px">
-      <div class="foot">
-        <a id="save" class="primary" style="text-decoration:none;display:inline-block"
-           href="${url}" download="榫卯灯笼-${c.state.posterNo}.png">存下来</a>
-        <button id="redo" class="ghost">换一句</button>
-        <button id="out" class="ghost">回去</button>
-      </div>
-      <p class="lede" style="margin-top:18px">画在你自己的设备上，没有上传任何东西</p>
-    </div>`, { onMount: (o) => {
-      o.querySelector('#redo').addEventListener('click', choose);
-      o.querySelector('#out').addEventListener('click', close);
-    } });
+    c.sfx.play('SUCCESS');
+    c.hud.sheet({
+      body: `<img class="poster" src="${url}" alt="写着「${c.state.wishText}」的灯笼海报">`,
+      lede: '海报在本机生成，没有上传任何内容',
+      actions: [
+        { label: '回去', on: close },
+        { label: '换一句', ico: 'refresh', on: choose },
+        {
+          label: '存下来', kind: 'primary', ico: 'save',
+          href: url, download: `榫卯灯笼-${c.state.posterNo}.png`,
+        },
+      ],
+    });
   };
 
   choose();
   return close;
+}
+
+/** 竖版海报：标题 + 当前画面 + 纹样脚线 + 心愿 + 编号 */
+function drawPoster(c) {
+  const W = 1080, H = 1920;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const serif = getComputedStyle(document.body).getPropertyValue('--serif');
+
+  const grd = g.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, '#171310'); grd.addColorStop(0.55, '#0b0907'); grd.addColorStop(1, '#120e0a');
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+
+  g.textAlign = 'center';
+  g.fillStyle = '#f2ece0';
+  g.font = `72px ${serif}`;
+  g.fillText('我做了一盏灯', W / 2, 180);
+  g.font = '24px sans-serif';
+  g.fillStyle = 'rgba(242,236,224,.42)';
+  g.fillText('榫卯灯笼 · 国风流光', W / 2, 234);
+
+  const shot = c.stage.renderer.domElement;
+  const dw = W * 0.88, dh = dw * (shot.height / shot.width);
+  g.drawImage(shot, 0, 0, shot.width, shot.height, (W - dw) / 2, 320, dw, dh);
+
+  const tex = buildPatternTexture(c.state.patternId, 512);
+  g.globalAlpha = 0.13;
+  for (let x = 0; x < W; x += 190) g.drawImage(tex.image, x, H - 440, 190, 190);
+  g.globalAlpha = 1;
+  tex.dispose();
+
+  g.fillStyle = '#d3aa63';
+  g.font = `86px ${serif}`;
+  g.fillText(c.state.wishText, W / 2, H - 250);
+
+  g.font = '22px monospace';
+  g.fillStyle = 'rgba(242,236,224,.36)';
+  g.textAlign = 'left';
+  g.fillText(c.state.posterNo, 72, H - 62);
+  g.textAlign = 'right';
+  g.fillText('13 根木条 · 0 颗钉子', W - 72, H - 62);
+
+  return cv.toDataURL('image/png');
 }
 
 function mix(a, b, k) {
@@ -238,44 +234,46 @@ export function openM4(c, onExit) {
 
   const close = () => { junk.clear(); c.hud.hideOverlay(); c.voice.stop(); onExit?.(); };
 
-  const draw = () => c.hud.showOverlay(`<div class="dock">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
-        <button id="add" class="primary">挂一盏（${placed.length}/6）</button>
-        <button id="shot" class="ghost">拍下来</button>
-        <button id="clr" class="ghost">收起来</button>
-        <button id="out" class="ghost">回去</button>
-      </div>
-    </div>`, { veil: false, onMount: (o) => {
-    o.querySelector('#add').addEventListener('click', () => {
-      if (placed.length >= 6) { c.hud.toast('已经很热闹了'); return; }
-      const clone = c.lantern.root.clone(true);
-      const th = Math.random() * Math.PI * 2;
-      const r = 280 + Math.random() * 440;
-      clone.position.set(Math.cos(th) * r, Math.sin(th) * r, 40 + Math.random() * 280);
-      clone.scale.setScalar(0.7 + Math.random() * 0.5);
-      clone.userData.phase = Math.random() * 6;
-      c.stage.scene.add(clone);
-      placed.push(clone);
-      junk.add(clone);
-      c.sfx.play('LANTERN_PLACE', { pitch: placed.length * 1.5 });
-      draw();
-    });
-    o.querySelector('#clr').addEventListener('click', () => {
-      for (const p of placed) c.stage.scene.remove(p);
-      placed.length = 0;
-      draw();
-    });
-    o.querySelector('#shot').addEventListener('click', () => {
-      c.sfx.play('SHUTTER');
-      c.stage.composer.render();
-      const link = document.createElement('a');
-      link.href = c.stage.renderer.domElement.toDataURL('image/png');
-      link.download = '榫卯灯笼.png';
-      link.click();
-      c.hud.toast('存下来了', { gold: true });
-    });
-    o.querySelector('#out').addEventListener('click', close);
-  } });
+  const hang = () => {
+    if (placed.length >= 6) { c.hud.toast('已经很热闹了'); return; }
+    const clone = c.lantern.root.clone(true);
+    const th = Math.random() * Math.PI * 2;
+    const r = 280 + Math.random() * 440;
+    clone.position.set(Math.cos(th) * r, Math.sin(th) * r, 40 + Math.random() * 280);
+    clone.scale.setScalar(0.7 + Math.random() * 0.5);
+    clone.userData.phase = Math.random() * 6;
+    c.stage.scene.add(clone);
+    placed.push(clone);
+    junk.add(clone);
+    c.sfx.play('WOOD_TAP', { pitch: placed.length * 1.5 });
+    draw();
+  };
+
+  const shoot = () => {
+    c.sfx.play('SHUTTER');
+    c.stage.composer.render();
+    const link = document.createElement('a');
+    link.href = c.stage.renderer.domElement.toDataURL('image/png');
+    link.download = '榫卯灯笼.png';
+    link.click();
+    c.hud.toast('存下来了', { gold: true });
+  };
+
+  const takeDown = () => {
+    for (const p of placed) c.stage.scene.remove(p);
+    placed.length = 0;
+    draw();
+  };
+
+  const draw = () => c.hud.dock({
+    actions: [
+      { label: `挂一盏 ${placed.length}/6`, kind: 'primary', ico: 'plus', on: hang },
+      { label: '拍下来', ico: 'camera', on: shoot },
+      { label: '收起来', ico: 'refresh', on: takeDown },
+      { label: '回去', ico: 'back', on: close },
+    ],
+    hint: '转动视角找个位置，再挂一盏上去',
+  });
 
   const upd = (dt, t) => {
     for (const p of placed) p.rotation.z = Math.sin(t * 0.6 + p.userData.phase) * 0.06;
@@ -285,12 +283,11 @@ export function openM4(c, onExit) {
   junk.add({ dispose: () => c.stage.updaters.delete(upd) });
 
   draw();
-  c.hud.setHint('转动视角找个位置，<em>挂一盏</em>上去');
   c.state.modulesDone = { ...c.state.modulesDone, M4: true };
   c.voice.play('M4', `把它挂起来。
-转一转视角，找个喜欢的位置，挂上去。
+转一转视角，找个喜欢的位置，点一下就挂上去。
 （气口）
-想挂几盏都行。从不同角度看，它是不一样的。
+想挂几盏都行。绕着走一圈 —— 从不同角度看，它是不一样的。
 拍张照吧。这是你做的。`, { cps: 3.8 });
 
   return close;
@@ -357,10 +354,9 @@ export function openM5(c, onExit) {
         vx: 0, vy: 0, vz: 0, r: 1, g: 0.75, b: 0.4, life: 0.35, age: 0, drag: 0.8,
       });
     }, { ease: Ease.outQuad, onDone: () => {
-      const variant = { peony: 0, double: 1, willow: 2, ring: 3, fu: 4 }[type] ?? 0;
       c.fx.fireworks.burst(type, at, color);
       count++;
-      c.sfx.play(type === 'fu' ? 'FIREWORK_FU' : 'FIREWORK_BURST', { delay: SOUND_LAG, variant });
+      c.sfx.play('FIREWORK_BURST', { delay: SOUND_LAG, pitch: type === 'fu' ? -3 : 0 });
       c.sfx.play('FIREWORK_CRACKLE', { delay: SOUND_LAG + 0.15, gain: 0.7 });
       // 每一发都照一下灯笼，颜色取自这一发 —— 否则烟花和灯笼像两张贴在一起的图
       const base = c.state.lit ? 1 : 0;
@@ -370,7 +366,7 @@ export function openM5(c, onExit) {
         c.lantern.setLit(base + pulse * (base ? 0.35 : 0.28));
       }, { onDone: () => { c.lantern.setLit(base); c.lantern.innerLight.color.setHex(0xffa54f); } });
       if (type === 'fu') c.voice.play('M5-fu', '哎 —— 是个「福」字。', { cps: 4.2 });
-      if (count === 12) c.hud.setHint('可以放<em>压轴</em>了');
+      if (count === 12) c.hud.toast('可以放压轴了', { gold: true });
     } });
   };
 
@@ -426,7 +422,6 @@ export function openM5(c, onExit) {
 
   const outro = async () => {
     c.state.modulesDone = { ...c.state.modulesDone, M5: true };
-    c.hud.setHint('');
     c.stage.setRecommended({ az: 55, el: 8, dist: 360, target: V(0, 0, 96), ease: 0.35 });
     c.voice.play('M5-outro', `烟花放完了，灯还亮着。
 （停顿 1.0 s）
@@ -435,34 +430,29 @@ export function openM5(c, onExit) {
 （停顿 1.5 s）
 新年快乐。`, { cps: 3.3 });
     await wait(7.5);
-    c.hud.showOverlay(`<div class="sheet">
-      <div style="font-family:var(--serif);font-size:clamp(26px,4.4vw,46px);
-                  letter-spacing:.26em;text-indent:.26em;line-height:2.5">
+    c.hud.sheet({
+      body: `<div class="finale">
         <div class="ln">13 根木条</div><div class="ln">0 颗钉子</div><div class="ln">7000 年</div>
-      </div>
-      <div class="foot"><button id="fin" class="primary">回去</button></div>
-    </div>`, { onMount: (o) => {
-      o.querySelectorAll('.ln').forEach((el, i) => {
-        el.style.opacity = 0;
-        setTimeout(() => tween(0.7, (k) => { el.style.opacity = k; }), i * 900);
-      });
-      o.querySelector('#fin').addEventListener('click', close);
-    } });
+      </div>`,
+      actions: [{ label: '回去', kind: 'primary', on: close }],
+      onMount: (o) => {
+        o.querySelectorAll('.ln').forEach((el, i) => {
+          el.style.opacity = 0;
+          setTimeout(() => tween(0.7, (k) => { el.style.opacity = k; }), i * 900);
+        });
+      },
+    });
   };
 
-  c.hud.showOverlay(`<div class="dock">
-    <div style="display:flex;gap:8px">
-      <button id="fin" class="ghost">压轴</button>
-      <button id="out" class="ghost">回去</button>
-    </div>
-  </div>`, { veil: false, onMount: (o) => {
-    o.querySelector('#fin').addEventListener('click', finale);
-    o.querySelector('#out').addEventListener('click', close);
-  } });
-
-  c.hud.setHint('点一下 · 往上划 · 画个圈 · 长按再松手');
-  c.voice.play('M5', `最后 —— 放烟花。
-在屏幕上点一下，划一下，画个圈，都能放出不一样的花。
+  c.hud.dock({
+    actions: [
+      { label: '压轴', kind: 'quiet', ico: 'spark', on: finale },
+      { label: '回去', ico: 'back', on: close },
+    ],
+    hint: '点一下 · 往上划 · 画个圈 · 长按再松手',
+  });
+  c.voice.play('M5', `最后，放烟花。
+点一下，划一下，画个圈，放出来的花都不一样。
 试试看。`, { cps: 3.8 });
 
   return close;

@@ -57,11 +57,25 @@ export function tween(dur, onUpdate, opts = {}) {
   });
 }
 
+const waits = new Set();
+
+/**
+ * 等一会儿。
+ * 被 cancelAll 取消时**不会**兑现 —— 于是 `await wait(...)` 之后的那些代码
+ * 就此打住。翻页时这一条很要紧：上一步排在后面的动作不该落到下一步的画面上。
+ */
+export const wait = (s) => new Promise((resolve) => {
+  const rec = { id: 0 };
+  rec.id = setTimeout(() => { waits.delete(rec); resolve(); }, s * 1000);
+  waits.add(rec);
+});
+
+/** 掐断所有在跑的动画与等待 */
 export function cancelAll() {
   for (const t of [...running]) t.cancel();
+  for (const w of waits) clearTimeout(w.id);
+  waits.clear();
 }
-
-export const wait = (s) => new Promise((r) => setTimeout(r, s * 1000));
 
 /** 数值弹簧（用于拖拽阻尼与回弹） */
 export class Spring {

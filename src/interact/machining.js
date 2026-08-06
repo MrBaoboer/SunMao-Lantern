@@ -185,7 +185,6 @@ export class Machining {
     if (!d.warned && d.perp > 18 && d.perp > d.along * 2.4) {
       d.warned = true;
       this.ctx.hud.toast(j.wrongHint || '沿着槽的方向来回拉');
-      this.ctx.sfx.play('UI_REJECT', { gain: 0.5 });
       this.dragging = null;
       this.ctx.stage.controls.enabled = true;
       return;

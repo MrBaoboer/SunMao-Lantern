@@ -20,15 +20,26 @@ export const FOCUS = new THREE.Vector3(0, 0, M.HEIGHT / 2);
 
 /**
  * 场景基调预设。
- * craft/studio 为主线工作台（§11.2 主光 4500K 暖调）；
- * ink 为 S08 静默点的宣纸白；night 为 M1/M5 夜色（环境光降至 15%）。
+ *
+ * craft / studio 是工作台，跟随界面主题：浅色模式下是明亮的宣纸桌面，
+ * 深色模式下是暖调的暗房。dusk / night 是傍晚与夜色 —— 这两个不跟主题走，
+ * 因为灯笼只有在暗处才亮得起来。
  */
 const MOODS = {
-  craft:  { env: 0.55, key: 2.1,  fill: 0.55, rim: 0.90, amb: 0.35, bg: 0x1a1611, ground: false, bloom: 0.30 },
-  studio: { env: 0.70, key: 2.4,  fill: 0.70, rim: 1.00, amb: 0.45, bg: 0x241f19, ground: false, bloom: 0.34 },
-  ink:    { env: 0.95, key: 1.5,  fill: 1.10, rim: 0.50, amb: 0.85, bg: 0xe6e0d4, ground: false, bloom: 0.20 },
-  night:  { env: 0.12, key: 0.22, fill: 0.10, rim: 0.28, amb: 0.09, bg: 0x070a12, ground: true,  bloom: 0.45 },
-  dark:   { env: 0.22, key: 0.55, fill: 0.20, rim: 0.50, amb: 0.14, bg: 0x14110e, ground: false, bloom: 0.55 },
+  dark: {
+    craft:  { env: 0.55, key: 2.10, fill: 0.55, rim: 0.90, amb: 0.35, bg: 0x1a1611, ground: false, bloom: 0.30 },
+    studio: { env: 0.70, key: 2.40, fill: 0.70, rim: 1.00, amb: 0.45, bg: 0x241f19, ground: false, bloom: 0.34 },
+    dusk:   { env: 0.30, key: 0.70, fill: 0.26, rim: 0.60, amb: 0.18, bg: 0x1b1712, ground: false, bloom: 0.50 },
+  },
+  light: {
+    craft:  { env: 1.25, key: 2.20, fill: 1.10, rim: 0.55, amb: 1.05, bg: 0xece5d5, ground: false, bloom: 0.10 },
+    studio: { env: 1.40, key: 2.40, fill: 1.25, rim: 0.60, amb: 1.20, bg: 0xf3ecdd, ground: false, bloom: 0.12 },
+    dusk:   { env: 0.95, key: 1.40, fill: 0.80, rim: 0.70, amb: 0.80, bg: 0xdcd0ba, ground: false, bloom: 0.20 },
+  },
+  /** 夜色不跟主题走 —— 灯笼只有在暗处才亮得起来 */
+  fixed: {
+    night: { env: 0.12, key: 0.22, fill: 0.10, rim: 0.28, amb: 0.09, bg: 0x070a12, ground: true, bloom: 0.45 },
+  },
 };
 
 /**
@@ -209,11 +220,18 @@ export class Stage {
 
   stop() { this.running = false; cancelAnimationFrame(this._raf); }
 
-  /** 环境亮度整体调节（夜色场景 §11.2：环境光 15%） */
+  /** 切换界面主题时，工作台的光跟着换一套 */
+  setTheme(theme) {
+    this.theme = theme === 'dark' ? 'dark' : 'light';
+    this.setMood(this.moodName || 'craft');
+  }
+
+  /** 环境亮度整体调节 */
   setMood(mode) {
-    const preset = MOODS[mode] || MOODS.craft;
+    const theme = this.theme || 'light';
+    const preset = MOODS.fixed[mode] || MOODS[theme][mode] || MOODS[theme].craft;
     this.mood = preset;
-    this.moodName = MOODS[mode] ? mode : 'craft';
+    this.moodName = (MOODS.fixed[mode] || MOODS[theme][mode]) ? mode : 'craft';
     this.scene.environmentIntensity = preset.env;
     this.key.intensity = preset.key;
     this.fill.intensity = preset.fill;
@@ -222,6 +240,7 @@ export class Stage {
     this.scene.background = new THREE.Color(preset.bg);
     this.ground.visible = preset.ground;
     this.bloom.strength = preset.bloom;
+    this.onMood?.(this.moodName);
   }
 
   dispose() {

@@ -63,10 +63,6 @@ export function buildLanternRiver(scene) {
         }, l.delay * 1000);
       }
     },
-    /** 其余 12 盏同时熄灭 —— 语义：从民俗，进入结构 */
-    dimAll() {
-      for (const l of lamps) { l.mat.opacity = 0.1; l.mat.color.setHex(0x6b3a2c); }
-    },
     dispose() { scene.remove(g); },
   };
 }

@@ -58,7 +58,7 @@ export class VoiceTrack {
     clearTimeout(this.timer);
     this.timer = null;
     if (this.audio) { this.audio.pause(); this.audio.src = ''; this.audio = null; }
-    this.ui.setSubtitle('');
+    this.ui.setNarration('');
   }
 
   /**
@@ -77,12 +77,12 @@ export class VoiceTrack {
       let i = 0;
       const step = () => {
         if (i >= lines.length) {
-          this.ui.setSubtitle('');
+          this.ui.setNarration('');
           o.onDone?.();
           return;
         }
         const l = lines[i++];
-        if (this.state.captions) this.ui.setSubtitle(l.text, { lyric: o.lyric });
+        if (this.state.captions) this.ui.setNarration(l.text, { lyric: o.lyric });
         this.timer = setTimeout(step, l.dur * scale * 1000);
       };
       step();
