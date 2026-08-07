@@ -2,7 +2,7 @@
  * 点灯 · 猜灯谜
  */
 
-import { V, a, C, Junk, buildNightSky, FIT_LANTERN } from '../steps/util.js';
+import { V, a, C, Junk, buildNightSky, AIM_LANTERN, FIT_LANTERN } from '../steps/util.js';
 import { playVO } from './vo.js';
 import { tween, Ease, wait } from '../util/tween.js';
 
@@ -72,7 +72,7 @@ export function openM1(c, onExit) {
         fire.hidden = true;
         ring.style.display = 'none';
         tip.textContent = '';
-        c.stage.setRecommended({ az: 55, el: 10, dist: 470, target: V(0, 0, 96), ease: 2.2, fit: FIT_LANTERN });
+        c.stage.setRecommended({ az: 55, el: 10, dist: 470, target: V(...AIM_LANTERN), ease: 2.2, fit: FIT_LANTERN });
         await tween(0.9, (t) => {
           c.lantern.setLit(level(c) * (0.3 + 0.7 * t));
           c.lantern.root.position.z = a(0.5) * Math.sin(t * Math.PI) * 0.6;

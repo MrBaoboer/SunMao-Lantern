@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import {
-  V, a, av, C, M, J3, J4, PALETTE, Junk, BENCH_Z, ghostBox, outlineBox,
+  V, a, av, C, M, J2, J3, J4, PALETTE, Junk, BENCH_Z, BENCH_TOP, ghostBox, outlineBox,
   FIT_FRAME, FIT_RING, FIT_BENCH,
 } from './util.js';
 import { OP } from '../core/parts.js';
@@ -126,11 +126,12 @@ export function act3(ctx) {
           const ops = [OP.SHORTEN, OP.FORK, OP.BEAR_SHOULDER];
           const names = ['截短', '开叉口', '切出承重面'];
           let stage = 0;
-          // 横切：锯与料轴垂直，走刀跨过截短线 —— 顺着料轴走会变成把料从中间剖开
+          // 横切：锯与料轴垂直，走刀跨过截短线 —— 顺着料轴走会变成把料从中间剖开。
+          // 刃线取料厚的一半：锯板一半没在缝里、一半露在外面，才像在锯
           cut(c, {
             tool: 'saw',
-            from: V(-av(2.2), a(4), BENCH_Z + av(1.2)),
-            to: V(av(2.2), a(4), BENCH_Z + av(1.2)),
+            from: V(-av(2.2), J2.BEAM_LEN / 2, BENCH_Z),
+            to: V(av(2.2), J2.BEAM_LEN / 2, BENCH_Z),
             faceNormal: V(0, 0, -1),
             strokes: 3,
             sfx: 'SAW',
@@ -149,11 +150,13 @@ export function act3(ctx) {
 
         // ── 第一段：两根顺枨开槽 ──
         // 槽的长向是 Y（自内侧面向外的盲槽），凿子须顺着槽走 ——
-        // 沿 X 走会横着碾过旁白强调要保留的榫舌
+        // 沿 X 走会横着碾过旁白强调要保留的榫舌。
+        // 陈列后这条槽落在 y ∈ [−6, 0]、深至顶面下 6：走刀线取槽的半深，
+        // 前后各留一点余量，手势才拉得开。
         cut(c, {
           tool: 'chisel',
-          from: V(-a(1 / 3), -av(1.0), BENCH_Z + av(1.2)),
-          to: V(-a(1 / 3), av(1.0), BENCH_Z + av(1.2)),
+          from: V(-a(1 / 3), -a(5 / 6), BENCH_TOP - J2.SLOT_D / 2),
+          to: V(-a(1 / 3), a(1 / 3), BENCH_TOP - J2.SLOT_D / 2),
           faceNormal: V(0, 0, -1),
           strokes: 3,
           sfx: 'CHISEL',
@@ -255,19 +258,22 @@ export function act3(ctx) {
           c.lantern.setOps('LB-B2', 'blank');
           bench(c, 'LB-B1', [0, 0, 0]);
           c.lantern.parts.get('LB-B2').mesh.visible = false;
-          c.stage.setRecommended({ az: 70, el: 26, dist: 210, target: V(0, 0, BENCH_Z), fit: FIT_BENCH });
+          c.stage.setRecommended({ az: 25, el: 28, dist: 210, target: V(0, 0, BENCH_Z), fit: FIT_BENCH });
 
           // 三道工序各有各的位置与进刀方向：透眼与柱窝的开口都在侧面，
-          // 刀得横着进 —— 立在顶面剁，孔却在侧面出现，画面就说不通了
+          // 刀得横着进 —— 立在顶面剁，孔却在侧面出现，画面就说不通了。
+          // 陈列后这根横枨占 x ∈ [−6, 6]：柱窝挖掉的是 x ∈ [0, 6] 那半边，
+          // 所以刀一律从 +X 侧进，刃线落在被挖掉的那半边里。
           const seq = [
             { op: OP.MORTISE, name: '凿孔', tool: 'chisel', sfx: 'CHISEL', done: '凿穿了',
-              from: V(av(2.0), -av(3.8), BENCH_Z), to: V(av(2.0), av(3.8), BENCH_Z),
+              from: V(a(1 / 6), -av(3.8), BENCH_Z), to: V(a(1 / 6), av(3.8), BENCH_Z),
               normal: V(-1, 0, 0), chip: V(1, 0, 0) },
             { op: OP.SOCKET, name: '铣柱窝', tool: 'router', sfx: 'ROUTER', done: '柱窝好了',
-              from: V(av(2.2), -av(4.4), BENCH_Z), to: V(av(2.2), av(4.4), BENCH_Z),
+              from: V(J3.SOCKET_DX / 2, -av(4.4), BENCH_Z), to: V(J3.SOCKET_DX / 2, av(4.4), BENCH_Z),
               normal: V(-1, 0, 0), chip: V(1, 0, 0) },
             { op: OP.PANEL_SLOT, name: '开装板槽', tool: 'router', sfx: 'ROUTER', done: '装板槽好了',
-              from: V(3, -av(3.5), BENCH_Z + av(1.4)), to: V(3, av(3.5), BENCH_Z + av(1.4)),
+              from: V(3, -av(3.5), BENCH_TOP - J4.SLOT_LOW_D / 2),
+              to: V(3, av(3.5), BENCH_TOP - J4.SLOT_LOW_D / 2),
               normal: V(0, 0, -1), chip: V(0, 0, 1) },
           ];
           let i = 0;
@@ -312,11 +318,13 @@ export function act3(ctx) {
         };
 
         // ── 第一段：切四个榫头 ──
-        // 在榫肩线（x = 内口边界）横切下去，锯身与顺枨垂直
+        // 在榫肩线（x = 内口边界）横切下去，锯身与顺枨垂直；刃线取枨料的半高。
+        // 行程跨过顺枨中心线前后各一个模数 —— 拉得比料宽长一点是锯的常态，
+        // 但不能像原先那样一路荡到料外两个身位，那会让开镜第一眼就是"锯悬在半空"
         cut(c, {
           tool: 'saw',
-          from: V(C.INNER_FACE, av(2.0), C.LOWER_Z1 + a(1)),
-          to: V(C.INNER_FACE, av(6.0), C.LOWER_Z1 + a(1)),
+          from: V(C.INNER_FACE, C.RAIL_A_Y - a(1), (C.LOWER_Z0 + C.LOWER_Z1) / 2),
+          to: V(C.INNER_FACE, C.RAIL_A_Y + a(1), (C.LOWER_Z0 + C.LOWER_Z1) / 2),
           faceNormal: V(0, 0, -1),
           strokes: 3,
           sfx: 'SAW',
@@ -402,7 +410,7 @@ export function act3(ctx) {
       id: 'C6', phase: 2,
       title: '上面那个框：中间一刀都不动',
       mood: 'craft',
-      cam: { az: 34, el: 26, dist: 340, target: [0, 0, C.UPPER_Z0], snap: true, fit: { r: 100, h: 140 } },
+      cam: { az: 34, el: 26, dist: 340, target: [0, 0, 96], snap: true, fit: { r: 100, h: 104 } },
       cps: 3.8,
       narration: `上面这个框，做法几乎一样，但有一处必须不一样。
 下面那个框中间架着中梁，所以顺枨要开槽。
@@ -435,7 +443,7 @@ export function act3(ctx) {
           c.hud.setCue('<em>拖动横枨</em>，套住两个榫头', 'drag');
           for (const id of ['UB-A1', 'UB-A2']) c.lantern.parts.get(id).installed = true;
           c.lantern.applyAssembly();
-          c.stage.setRecommended({ az: 40, el: 40, dist: 350, target: V(0, 0, C.UPPER_Z0), fit: { r: 104, h: 140 } });
+          c.stage.setRecommended({ az: 40, el: 40, dist: 350, target: V(0, 0, 96), fit: { r: 104, h: 126 } });
 
           c.drag.begin({
             parts: ['UB-B1', 'UB-B2'], snap: 6, seatSfx: 'SNAP_IN',
@@ -517,6 +525,18 @@ export function act3(ctx) {
           color: PALETTE.SOCKET, opacity: 0.26,
         })));
 
+        // 两个枨框的轮廓也画出来。旁白要说的是"这两处正对着上下两个框"——
+        // 与其在柱子上贴一张写着这句话的标签（它正好压住柱子和刀），
+        // 不如把框摆在它该在的高度上，让画面自己说。
+        // 顺带填满了这一步的横向空场：一根 12 见方的柱子撑不起 16:9。
+        for (const [z0, z1] of [J3.SEG.NECK2, J3.SEG.NECK1]) {
+          junk.add(outlineBox(c.stage.scene, {
+            size: [M.OUTER, M.OUTER, z1 - z0],
+            pos: [0, 0, (z0 + z1) / 2 - M.HEIGHT / 2 + 96],
+            color: PALETTE.MORTISE,
+          }));
+        }
+
         const ops = [OP.NECK2, OP.NECK1];
         let stage = 0;
         const neck = () => {
@@ -526,20 +546,16 @@ export function act3(ctx) {
           // 但"三段两颈"这件事一旦裁掉柱身就说不成立了。
           c.stage.setRecommended({ az: 26, el: 6, dist: 300, target: V(0, 0, 96), fit: { r: 46, h: 104 } });
           marks.forEach((m, i) => { m.material.opacity = i === stage ? 0.5 : 0.16; });
-          c.hud.clearSpots();
-          c.hud.addSpot({
-            pos: V(0, 0, zw), badge: stage + 1,
-            label: stage === 0 ? '这一处对着下面那个框' : '这一处对着上面那个框',
-            color: 'var(--violet)', active: true,
-          });
-          c.hud.setCue(`第 <b>${stage + 1}</b> 处细颈 / 共 2 处`, 'drag');
+          c.hud.setCue(`<em>拖动铣刀</em>削第 <b>${stage + 1}</b> 处细颈 · 共 2 处`, 'drag');
           // 刀从柱子外侧横着走。走在轴线上会让刀身穿进柱子里，
-          // 既看不见刀，也看不出它在削哪一面
+          // 既看不见刀，也看不出它在削哪一面。
+          // 保留的是 −X/−Y 那个象限，要削掉的料在 +Y 一侧 ——
+          // 刀必须从 +Y 进，否则它得先穿过留下来的那一段才够得着。
           cut(c, {
             tool: 'router',
-            from: V(-av(1.4), -av(1.6), zw), to: V(av(1.4), -av(1.6), zw),
-            faceNormal: V(0, 1, 0),
-            strokes: 3, sfx: 'ROUTER', chipDir: V(0, -1, 0),
+            from: V(-av(1.4), J3.NECK / 2, zw), to: V(av(1.4), J3.NECK / 2, zw),
+            faceNormal: V(0, -1, 0),
+            strokes: 3, sfx: 'ROUTER', chipDir: V(0, 1, 0),
             onStroke: (n, total) => c.hud.setCue(`第 ${stage + 1} 处细颈 · 削掉 <b>${n}</b> / ${total} 个角`, 'drag'),
             onDone: async () => {
               for (const id of COLS) c.lantern.addOp(id, ops[stage]);

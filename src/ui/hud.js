@@ -65,7 +65,7 @@ export class HUD {
       note: $('note'), noteTab: $('note-tab'), toast: $('toast'),
       bottom: $('bottom'), cue: $('cue'), narration: $('narration'),
       alts: $('alts'), task: $('btn-task'),
-      menu: $('btn-menu'), overlay: $('overlay'),
+      menu: $('btn-menu'), overlay: $('overlay'), cover: $('cover'),
     };
     this.spots = [];
     this.hasVoice = false;
@@ -457,9 +457,21 @@ export class HUD {
     lb.style.display = active ? '' : 'none';
 
     document.body.append(el, lb);
+    el.inert = this.modalOpen;
     const h = { el, lb, pos: pos.clone(), active };
     el.addEventListener('click', () => {
       h.active = !h.active;
+      // 一次只摊开一张。
+      // 「榫的三个部位」这类步骤会连点三枚圆点，三张两行标签在屏幕上只差几十像素，
+      // 后点开的那张还会被更早创建的压在下面 —— 点了没反应，比拥挤更糟。
+      if (h.active) {
+        for (const s of this.spots) {
+          if (s === h || !s.active) continue;
+          s.active = false;
+          s.el.setAttribute('aria-pressed', 'false');
+          s.lb.style.display = 'none';
+        }
+      }
       el.setAttribute('aria-pressed', String(h.active));
       lb.style.display = h.active ? '' : 'none';
       onClick?.(h.active, h);
@@ -475,6 +487,10 @@ export class HUD {
 
   updateSpots(camera) {
     if (!this.spots.length) return;
+    // 右上角那张工艺笔记是一张不透明的纸，层级还压过标注 ——
+    // 只避视口右缘不够，标签会被它整块吃掉。把它的实际矩形当成右边界。
+    const nb = (!this.el.note.hidden && this.el.note.getClientRects().length)
+      ? this.el.note.getBoundingClientRect() : null;
     const v = new THREE.Vector3();
     for (const s of this.spots) {
       v.copy(s.pos).project(camera);
@@ -485,8 +501,10 @@ export class HUD {
       s.lb.style.display = behind || !s.active ? 'none' : '';
       s.el.style.left = `${x}px`; s.el.style.top = `${y}px`;
       // 标签贴近右缘时翻到左侧展开，并夹在视口里 —— 不夹取，
-      // 窄屏上的教学要点会被屏幕边裁掉（同文件 tick-tip 的老规矩）
-      const flip = x > innerWidth - 200;
+      // 窄屏上的教学要点会被屏幕边裁掉（同文件 tick-tip 的老规矩）。
+      // 纵向与笔记卡重叠时，右边界收到卡的左沿
+      const limit = (nb && y > nb.top - 24 && y < nb.bottom + 24) ? nb.left - 12 : innerWidth;
+      const flip = x > limit - 200;
       s.lb.dataset.side = flip ? 'left' : 'right';
       s.lb.style.left = `${flip ? x - 14 : x + 14}px`;
       s.lb.style.top = `${Math.min(Math.max(y, 56), innerHeight - 72)}px`;
@@ -516,11 +534,20 @@ export class HUD {
     return o;
   }
 
-  /** 模态打开时，背后的常驻界面退出无障碍树与 Tab 序列 */
+  /**
+   * 模态打开时，背后的常驻界面退出无障碍树与 Tab 序列。
+   *
+   * 名单里必须带上封面与三维标注：
+   *   · 封面上的「怎么操作」开卷时封面还没隐藏，Tab 两下就能按到背后的「开始做灯」；
+   *   · 标注是挂在 body 末尾的真按钮，DOM 顺序还排在覆盖层之后 ——
+   *     从卷里的「知道了」按一下 Tab 就落到它们身上，回车还能把标签切出来。
+   */
   #setChromeInert(on) {
-    for (const el of [this.el.topbar, this.el.bottom, this.el.prev, this.el.next, this.el.noteTab]) {
+    for (const el of [this.el.topbar, this.el.bottom, this.el.prev, this.el.next,
+      this.el.noteTab, this.el.cover]) {
       if (el) el.inert = on;
     }
+    for (const s of this.spots) s.el.inert = on;
   }
 
   /** 卷：盖住画面的一页 */

@@ -14,6 +14,14 @@ export { a, av, dim, M, C, J1, J2, J3, J4, PALETTE };
 
 /** 工作台陈列位（构件离位加工时的摆放高度） */
 export const BENCH_Z = a(8);
+/**
+ * 陈列在工作台上的枨料，其顶面高度。
+ *
+ * 离位陈列时 detach 把构件中心摆到 BENCH_Z，而枨料截面是 a 见方，
+ * 所以顶面就在中心之上半个截面。走刀路径的高度一律从这里推 ——
+ * 刀具约定「刃口落在 z = 0」，路径给的就是刃尖走过的线。
+ */
+export const BENCH_TOP = BENCH_Z + M.SEC / 2;
 
 /**
  * 取景范围（相对该步的镜头目标，毫米）。
@@ -21,6 +29,9 @@ export const BENCH_Z = a(8);
  * 每一步都得声明"这一步必须完整看到多大一块" —— 画幅装不下时相机自己后退。
  * 不声明的后果在竖屏上立刻可见：水平视场只有十几度，主体直接被裁掉两边。
  */
+/** 整盏灯的取景目标：木作本体的中心 */
+export const AIM_LANTERN = [0, 0, M.HEIGHT / 2];
+
 /**
  * 整盏灯：木作本体加柱头角花。
  * 流苏那截红线故意不算进来 —— 为了一根穗子把灯笼缩掉三成，不值。
@@ -271,14 +282,17 @@ export class Junk {
   add(...o) { this.items.push(...o); return o[0]; }
   clear() {
     for (const o of this.items) {
-      if (o.dispose) o.dispose();
-      else {
-        this.scene.remove(o);
-        o.geometry?.dispose?.();
+      if (o.dispose) { o.dispose(); continue; }
+      this.scene.remove(o);
+      // 必须递归：教学件是 Group，网格挂在组下、描边又挂在网格下，
+      // 只看传进来这一层等于一件都没释放。
+      // 共用真灯笼几何的克隆体（M4 的挂灯）不能走这条路，它们自带 dispose。
+      o.traverse?.((n) => {
+        n.geometry?.dispose?.();
+        const ms = Array.isArray(n.material) ? n.material : n.material ? [n.material] : [];
         // material.dispose() 不会连带释放贴图 —— M4 的全景天球每次 8MB，不能漏
-        o.material?.map?.dispose?.();
-        o.material?.dispose?.();
-      }
+        for (const m of ms) { m.map?.dispose?.(); m.alphaMap?.dispose?.(); m.dispose(); }
+      });
     }
     this.items = [];
   }

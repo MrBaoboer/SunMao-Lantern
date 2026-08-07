@@ -40,8 +40,11 @@ export function buildCornerBracket({ sx, sy }) {
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth: J5.TENON_T, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 1, curveSegments: 12,
   });
-  // 局部 (u=沿 x, v=沿 z, 挤出沿 +Z) → 摆到世界
+  // 局部 (u=沿 x, v=沿 z, 挤出沿 +Z) → 摆到世界。
+  // rotateX(+π/2) 把 (x,y,z) 送到 (x,−z,y)，挤出方向因此落在 **−y**：
+  // 不补这一下，云头板会整体退到插舌背后一个板厚，两块只剩一条棱相连。
   geo.rotateX(Math.PI / 2);
+  geo.translate(0, J5.TENON_T, 0);
   const g = new THREE.Group();
   const mesh = new THREE.Mesh(geo, makeWoodMaterial({
     grainAxis: 0, center: new THREE.Vector3(0, 0, 0), tone: 0.22,
@@ -101,15 +104,19 @@ export function buildCornerPlate({ sx, sy }) {
   tongue.position.set(inn + J6.TONGUE_L / 2, C.RAIL_A_Y + J6.TONGUE_T / 2, zTop - J6.TONGUE_T / 2);
   g.add(tongue);
 
-  // 龙纹：三道回旋脊线（低面数的意象化处理，非写实龙）
+  // 卷草脊线 ×3：顺着 L 形板带走一圈，绕过角点再出去。
+  // 必须始终压在板上（x ≤ head0 或 y ≤ head0）—— 一旦飘进中间那个方孔，
+  // 就整段扎进柱头实心段里（柱头 z 到 192），只剩两截露在孔外。
   for (let i = 0; i < 3; i++) {
+    const o = i * 1.6;
     const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(inn + 3 + i * 2, inn + 16 - i * 3, zTop + t),
-      new THREE.Vector3(inn + 9 + i * 2, inn + 12 - i * 2, zTop + t + 1.1),
-      new THREE.Vector3(inn + 15 - i, inn + 5 + i, zTop + t + 0.7),
-      new THREE.Vector3(inn + 18 + i, inn + 1 + i * 2, zTop + t),
-    ]);
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.7, 5, false), mat);
+      [inn + 2 + o * 0.5, out - 2 - o],
+      [inn + 2.5 + o * 0.6, inn + 10],
+      [inn + 4 - o * 0.3, inn + 4 + o * 0.3],
+      [inn + 10, inn + 2.5 + o * 0.6],
+      [out - 2 - o, inn + 2 + o * 0.5],
+    ].map(([x, y]) => new THREE.Vector3(x, y, zTop + t + 0.2)));
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 18, 0.8, 5, false), mat);
     g.add(tube);
   }
 
