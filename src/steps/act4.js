@@ -3,7 +3,7 @@
  */
 
 import * as THREE from 'three';
-import { V, a, C, J4, PALETTE, Junk, FIT_LANTERN, FIT_FRAME } from './util.js';
+import { V, a, C, M, J4, PALETTE, Junk, AIM_LANTERN, FIT_LANTERN, FIT_FRAME } from './util.js';
 import { PATTERNS, buildPatternTexture } from '../render/lattice.js';
 import { EXPLODE_LAYERS } from '../render/lantern.js';
 import { icon } from '../ui/icons.js';
@@ -33,11 +33,11 @@ export function act4(ctx) {
       title: '选一个花纹',
       mood: 'studio',
       bgm: 'BGM_C_FESTIVE',
-      cam: { az: 90, el: 4, dist: 360, target: [0, 0, 96], snap: true, fit: FIT_FRAME },
+      cam: { az: 40, el: 10, dist: 360, target: [0, 0, 96], snap: true, fit: FIT_FRAME },
       narration: `框架好了，四个面还空着。
 要用一片叫「格心」的木板填上 —— 在一整块板上镂空做出花纹，这样才够结实。
 （气口）
-麻叶纹，六出放射，寓意生生不息；
+麻叶纹，放射相连，寓意生生不息；
 万字纹，回环相连，叫「万福不断头」。
 挑一个，四面都用它。`,
       async enter(c, engine) {
@@ -103,7 +103,7 @@ export function act4(ctx) {
       id: 'D2', phase: 3,
       title: '把板子装进去',
       mood: 'studio',
-      cam: { az: 90, el: 6, dist: 350, target: [0, 0, 96], snap: true, fit: FIT_FRAME },
+      cam: { az: 35, el: 14, dist: 350, target: [0, 0, 96], snap: true, fit: FIT_FRAME },
       narration: `装板不靠榫，也不靠胶：上下两道槽把板夹住，就完了。
 可板比空腔还高一点，怎么塞进去？
 （气口）
@@ -112,7 +112,6 @@ export function act4(ctx) {
 不粘不钉。木头会热胀冷缩，留着余地，它才不会开裂。`,
       note: {
         title: '上槽是下槽的三倍深',
-        body: '深出来的那一截，正好是把板<em>塞进去</em>需要的余量。',
         foot: '两边一样深，这块板就根本塞不进去。',
       },
       async enter(c, engine) {
@@ -195,7 +194,7 @@ export function act4(ctx) {
       id: 'D3', phase: 3,
       title: '糊纸，贴花，上锁',
       mood: 'studio',
-      cam: { az: 55, el: 16, dist: 430, target: [0, 0, 96], snap: true, fit: FIT_LANTERN },
+      cam: { az: 55, el: 16, dist: 430, target: AIM_LANTERN, snap: true, fit: FIT_LANTERN },
       narration: `接下来是灯笼的「皮」。
 先在里面糊一层绵纸 —— 它挡在灯和木头之间，把硬光揉软；再在外面贴上红纸窗花。
 （气口）
@@ -332,7 +331,9 @@ export function act4(ctx) {
       id: 'D4', phase: 3,
       title: '拆开看一遍',
       mood: 'studio',
-      cam: { az: 48, el: 22, dist: 660, target: [0, 0, 96], snap: true, fit: { r: 258, h: 172 } },
+      // 分层拆开后最高的是柱头角花、最低的是穗子 —— 取景按这两端的实际跨度给，
+      // 原先的 h=172 兜不住向下抽出的穗子
+      cam: { az: 48, el: 22, dist: 660, target: [0, 0, 92], snap: true, fit: { r: 200, h: 178 } },
       cps: 3.9,
       narration: `我们把它拆开看一遍。
 最底下是下面那个框：四根木条穿成井字，中间横着一根中梁。
@@ -402,10 +403,9 @@ export function act4(ctx) {
       title: '过年该做的事',
       mood: 'night',
       bgm: 'BGM_C_FESTIVE_LOOP',
-      cam: { az: 50, el: 14, dist: 500, target: [0, 0, 96], snap: true, fit: FIT_LANTERN },
+      cam: { az: 50, el: 14, dist: 500, target: AIM_LANTERN, snap: true, fit: FIT_LANTERN },
       narration: `灯笼做好了。
-接下来是过年该做的事：点上它，猜几个灯谜，写一句愿望，把它挂起来，再放一场烟花。
-想先做哪个都行。`,
+剩下的，是过年该做的几件事。`,
       async enter(c) {
         junk.clear();
         framed(c);

@@ -11,13 +11,13 @@
 
 import * as THREE from 'three';
 import { tween, Ease, wait } from '../util/tween.js';
-import { makeCoreMaterial, makeGoldMaterial } from '../render/materials.js';
+import { makeGoldMaterial } from '../render/materials.js';
 
 /**
  * 一段收成薄刃的料：拿一个盒子，把 -Z 那一端的厚度收掉。
  * 盒的顶点本来就按面拆开，改完位置重算法线即可得到规整的斜刃。
  */
-function bevelled(w, t, len, tipRatio = 0.14) {
+function bevelled(w, t, len, tipRatio = 0.12) {
   const g = new THREE.BoxGeometry(w, t, len);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
@@ -28,7 +28,10 @@ function bevelled(w, t, len, tipRatio = 0.14) {
   return g;
 }
 
-/** 锯齿：一条锯齿形轮廓挤出成一个几何，不是二十几个小锥体 */
+/**
+ * 锯齿：一条锯齿形轮廓挤出成一个几何，不是二十几个小锥体。
+ * 齿尖落在 z = 0，齿背在 +Z —— 与刃口约定一致，直接摆在原点即可。
+ */
 function sawTeeth(len, pitch, depth, thick) {
   const s = new THREE.Shape();
   s.moveTo(-len / 2, depth);
@@ -37,73 +40,101 @@ function sawTeeth(len, pitch, depth, thick) {
     s.lineTo(x + pitch, depth);
   }
   s.lineTo(len / 2, depth);
-  s.lineTo(len / 2, depth + 1.2);
-  s.lineTo(-len / 2, depth + 1.2);
+  s.lineTo(len / 2, depth + 1.4);
+  s.lineTo(-len / 2, depth + 1.4);
   s.closePath();
   const g = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: false });
   g.translate(0, 0, -thick / 2);
-  g.rotateX(Math.PI / 2);              // shape 的 +Y → 世界 +Z，齿尖因此朝 -Z
+  g.rotateX(Math.PI / 2);              // shape 的 +Y → 世界 +Z，齿尖因此落在 z = 0
+  return g;
+}
+
+/** 绕 Z 均布若干片薄刃，给铣刀一圈能看出来的切削刃 */
+function flutes(n, r, len, mat) {
+  const g = new THREE.Group();
+  for (let i = 0; i < n; i++) {
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.8, r * 2.05, len), mat);
+    f.rotation.z = (i / n) * Math.PI;
+    g.add(f);
+  }
   return g;
 }
 
 /**
  * 虚拟刀具 TOOL-*。
  *
- * 全部按同一个约定建模：**刃口朝 -Z，柄在 +Z，走刀方向沿 +X**。
- * 摆位的 _orientTool() 依赖这个约定，改模型时别把朝向调头。
+ * 统一约定，摆位的 _orientTool() 与 act3 的走刀路径都依赖它：
+ *   · **刃口落在 z = 0**，刀体一律向 +Z 生长；
+ *   · 走刀方向沿 +X；
+ *   · 刀身厚度方向为 Y。
+ *
+ * 「刃口在 z = 0」这一条是要害：走刀路径上给的坐标就是**刃尖真正走过的线**，
+ * 于是步骤脚本里写工件表面的坐标即可，不必再反推一个抵消刀长的偏移量。
  */
 export function buildTool(kind) {
   const g = new THREE.Group();
-  const steel = new THREE.MeshStandardMaterial({ color: 0xb9bfc4, roughness: 0.32, metalness: 0.9 });
-  const wood = new THREE.MeshStandardMaterial({ color: 0x6f4a28, roughness: 0.7 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0xb9bfc4, roughness: 0.3, metalness: 0.9 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x3f4247, roughness: 0.5, metalness: 0.6 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x7a4d28, roughness: 0.66 });
 
   if (kind === 'saw') {
-    // 刃在下沿（-Z），齿尖朝下；背脊在上。
-    // 柄从刀尾斜向后上方伸出、整体抬到刃线以上 —— 走刀半没入木料时柄不会跟着埋进去
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(58, 1.0, 13), steel);
-    blade.position.set(3, 0, -8.5);
-    const teeth = new THREE.Mesh(sawTeeth(58, 2.6, 2.4, 1.0), steel);
-    teeth.position.set(3, 0, -15);
-    const spine = new THREE.Mesh(new THREE.BoxGeometry(58, 2.2, 2.2), steel);
-    spine.position.set(3, 0, -1.2);
-    const cheek = new THREE.Mesh(new THREE.BoxGeometry(9, 3.4, 12), wood);
-    cheek.position.set(-27, 0, -5);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(6.5, 5.5, 19), wood);
-    grip.rotation.y = -0.62;
-    grip.position.set(-33.5, 0, 3.5);
-    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 6.4, 8), steel);
-    bolt.rotation.z = Math.PI / 2;
-    bolt.position.set(-27, 0, -5);
-    g.add(blade, teeth, spine, cheek, grip, bolt);
+    // 手锯：齿尖压在 z=0，锯板在其上，背脊再上一档；柄在刀尾、抬到刃线以上。
+    // 走刀时刃线没入木料，锯板露在外面 —— 这正是锯留在锯缝里的样子。
+    const L = 54;
+    const teeth = new THREE.Mesh(sawTeeth(L, 2.6, 2.6, 0.9), steel);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(L, 0.9, 11), steel);
+    blade.position.set(0, 0, 7.5);          // z 2–13，齿尖因此露出 2.6
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(L, 2.4, 2.2), steel);
+    spine.position.set(0, 0, 14);
+    // 柄：与锯板同轴向后接出，抬到背脊一线 —— 半没入木料时柄不会跟着埋进去
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(8, 3.2, 9), steel);
+    neck.position.set(-L / 2 - 3, 0, 12);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.8, 21, 12), wood);
+    grip.rotation.z = Math.PI / 2;
+    grip.position.set(-L / 2 - 17, 0, 13);
+    const butt = new THREE.Mesh(new THREE.CylinderGeometry(5.2, 5.2, 2.6, 12), wood);
+    butt.rotation.z = Math.PI / 2;
+    butt.position.set(-L / 2 - 28, 0, 13);
+    g.add(teeth, blade, spine, neck, grip, butt);
   } else if (kind === 'router') {
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(7, 8, 24, 16), makeCoreMaterial());
-    body.rotation.x = Math.PI / 2; body.position.z = 8;
-    const collar = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 5, 12), steel);
-    collar.rotation.x = Math.PI / 2; collar.position.z = -6;
-    const bit = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 13, 12), steel);
-    bit.rotation.x = Math.PI / 2; bit.position.z = -14;
-    g.add(body, collar, bit);
+    // 铣刀：刃在最下，往上依次是夹头、滚花箍、机身。
+    // 机身是深色金属 —— 用灯芯那套暖金材质会读成一段黄铜管，不像刀具。
+    const bit = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 12, 14), steel);
+    bit.rotation.x = Math.PI / 2; bit.position.z = 6;
+    const edges = flutes(3, 2.8, 11.4, dark);
+    edges.position.z = 6;
+    const collet = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 5.6, 8, 14), steel);
+    collet.rotation.x = Math.PI / 2; collet.position.z = 16;
+    const knurl = new THREE.Mesh(new THREE.CylinderGeometry(6.4, 6.4, 5, 20), dark);
+    knurl.rotation.x = Math.PI / 2; knurl.position.z = 22.5;
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(9.2, 8.0, 26, 18), dark);
+    body.rotation.x = Math.PI / 2; body.position.z = 38;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(9.2, 9.2, 3, 18), steel);
+    cap.rotation.x = Math.PI / 2; cap.position.z = 52.5;
+    g.add(bit, edges, collet, knurl, body, cap);
     g.userData.bit = bit;
-  } else { // chisel 凿刀：木柄 · 铁箍 · 扁身 · 斜刃
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 6.0, 26, 14), wood);
-    handle.rotation.x = Math.PI / 2; handle.position.z = 25;
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 6.2, 2.4, 14), steel);
-    cap.rotation.x = Math.PI / 2; cap.position.z = 38;
-    const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 4.8, 4, 14), steel);
-    ferrule.rotation.x = Math.PI / 2; ferrule.position.z = 11;
-    const shank = new THREE.Mesh(new THREE.BoxGeometry(7, 3, 20), steel);
-    shank.position.z = -1;
-    const tip = new THREE.Mesh(bevelled(7, 3, 8), steel);
-    tip.position.z = -15;
-    g.add(handle, cap, ferrule, shank, tip);
+  } else { // chisel 凿刀：斜刃 · 扁身 · 铁箍 · 木柄 · 顶箍
+    const tip = new THREE.Mesh(bevelled(7, 3.2, 12), steel);
+    tip.position.z = 6;                     // z 0–12，下半段收成斜刃
+    const shank = new THREE.Mesh(new THREE.BoxGeometry(7, 3.2, 16), steel);
+    shank.position.z = 19;
+    const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 5.0, 4, 14), steel);
+    ferrule.rotation.x = Math.PI / 2; ferrule.position.z = 29;
+    // 柄身两段：自铁箍向上先鼓起、再收向柄尾，这才是手握得住的形
+    const lower = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 4.6, 14, 14), wood);
+    lower.rotation.x = Math.PI / 2; lower.position.z = 38;
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 6.2, 12, 14), wood);
+    upper.rotation.x = Math.PI / 2; upper.position.z = 51;
+    const hoop = new THREE.Mesh(new THREE.CylinderGeometry(5.4, 5.4, 2.4, 14), steel);
+    hoop.rotation.x = Math.PI / 2; hoop.position.z = 58;
+    g.add(tip, shank, ferrule, lower, upper, hoop);
   }
 
-  // 走刀进度环（3 段式，叠在刀具上方）
-  const ringGeo = new THREE.RingGeometry(9, 11, 32, 1, 0, Math.PI * 2);
+  // 走刀进度环：叠在刀尾上方，永远压在画面最前
   const ringMat = makeGoldMaterial();
   ringMat.transparent = true; ringMat.opacity = 0.9; ringMat.depthTest = false;
-  const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.position.z = 46;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(10, 12.4, 32, 1, 0, Math.PI * 2), ringMat);
+  ring.position.z = kind === 'saw' ? 30 : 68;
   ring.renderOrder = 8;
   ring.visible = false;
   g.add(ring);
@@ -205,7 +236,7 @@ export class Machining {
     if (!this.tool) return;
     const ring = this.tool.userData.ring;
     ring.geometry.dispose();
-    ring.geometry = new THREE.RingGeometry(9, 11, 32, 1, Math.PI / 2, -Math.PI * 2 * k);
+    ring.geometry = new THREE.RingGeometry(10, 12.4, 32, 1, Math.PI / 2, -Math.PI * 2 * k);
   }
 
   onDown(e) {

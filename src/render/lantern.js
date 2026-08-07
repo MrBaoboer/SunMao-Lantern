@@ -128,7 +128,7 @@ export class Lantern {
         id: pl.id, mesh: g, material: mat, home: new THREE.Vector3(...pl.pos),
         meta: partMeta(pl.id), ops: new Set(ALL_OPS), installed: false,
         assembly: { dir: [...pl.outward], gap: a(2), seq: 5 }, layer: 4, isPanel: true,
-        latticeMesh: mesh, placement: pl, index: i,
+        baseRot: pl.rotZ, latticeMesh: mesh, placement: pl, index: i,
       });
       return g;
     });
@@ -262,14 +262,22 @@ export class Lantern {
     this.applyAssembly();
   }
 
-  /** 按 installed 状态摆位：未装的构件沿其唯一合法方向退到待装位 */
+  /**
+   * 按 installed 状态摆位：未装的构件沿其唯一合法方向退到待装位。
+   *
+   * 姿态要**复位到构件自己的基准角**，不是一律清零。
+   * 十三根木构件的几何本来就建在最终装配位上，基准角确实是 0；
+   * 但四片格心共用同一份棂格几何（建在 XZ 平面、厚度沿 Y），
+   * 靠 rotZ 转到各自的面上 —— 清零会把 ±X 那两片放平到错误的平面里，
+   * 整片横穿灯笼内腔、从两侧戳出去。
+   */
   applyAssembly() {
     for (const p of this.parts.values()) {
       if (!p.assembly || p.detached) continue;
       const d = new THREE.Vector3(...p.assembly.dir);
       const off = p.installed ? 0 : p.assembly.gap;
       p.mesh.position.copy(p.home).addScaledVector(d, -off);
-      p.mesh.rotation.set(0, 0, 0);
+      p.mesh.rotation.set(0, 0, p.baseRot ?? 0);
       p.mesh.scale.setScalar(1);
     }
   }
@@ -386,9 +394,10 @@ export class Lantern {
       const q = g.userData.slideIn.clone().normalize().multiplyScalar(-1);
       g.position.copy(g.userData.home).addScaledVector(q, (mode === 'unified' ? 130 : 66) * t);
     });
+    // 穗子向下别太贪：拆到底时它是全场最低的一件，推远了就掉出画幅
     for (const [obj, vec, d] of [
-      [this.knot, new THREE.Vector3(0, 0, -1), 70],
-      [this.tassel, new THREE.Vector3(0, 0, -1), 120],
+      [this.knot, new THREE.Vector3(0, 0, -1), 62],
+      [this.tassel, new THREE.Vector3(0, 0, -1), 90],
       [this.core, new THREE.Vector3(0, 0, 1), 60],
     ]) {
       if (!obj.userData.home) obj.userData.home = obj.position.clone();

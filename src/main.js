@@ -15,7 +15,7 @@ import { DragAssembly } from './interact/assembly.js';
 import { Machining } from './interact/machining.js';
 import { Engine } from './app/engine.js';
 import { tick as tickTweens } from './util/tween.js';
-import { makeSimpleDrag, FIT_LANTERN } from './steps/util.js';
+import { makeSimpleDrag, AIM_LANTERN, FIT_LANTERN } from './steps/util.js';
 import { act1 } from './steps/act1.js';
 import { act3 } from './steps/act3.js';
 import { act4 } from './steps/act4.js';
@@ -147,7 +147,7 @@ async function main() {
         });
       },
     });
-    hud.setCue(n === DOORS.length ? '五件事都做完了 · 灯还亮着'
+    hud.setCue(n === DOORS.length ? '五件事都做完了'
       : n ? `五件事，做完了 <b>${n}</b> 件`
         : '想先做哪个都行');
   };
@@ -278,7 +278,7 @@ async function main() {
   let az = 62;
   const drift = (dt) => {
     az += dt * 2.0;
-    stage.setRecommended({ az, el: 10, dist: 620, fit: FIT_LANTERN });
+    stage.setRecommended({ az, el: 10, dist: 620, target: new THREE.Vector3(...AIM_LANTERN), fit: FIT_LANTERN });
   };
   drift(0);
   stage.snapToRecommended();

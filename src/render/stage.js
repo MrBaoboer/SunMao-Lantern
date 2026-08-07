@@ -189,6 +189,11 @@ export class Stage {
 
     // ── 后期：仅高光溢出（灯焰、辉光、烟花），阈值调高以免木料泛白 ──
     this.composer = new EffectComposer(renderer);
+    // EffectComposer 自建的离屏目标默认单采样，构造器上的 antialias 只管默认帧缓冲。
+    // 不补这一下，开着 bloom 的桌面端全程没有抗锯齿，反倒是关掉 bloom 的低配档有 ——
+    // 这盏灯满屏都是 3 mm 的棂条和高对比木棱，镜头又一直在缓慢环绕，锯齿会爬。
+    this.composer.renderTarget1.samples = 4;
+    this.composer.renderTarget2.samples = 4;
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.72, 0.86);
     this.composer.addPass(this.bloom);

@@ -93,7 +93,7 @@
 .cover-meta {
   margin-top: var(--s4);
   font-size: var(--fs-mark); letter-spacing: var(--ls-wide);
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
@@ -133,7 +133,7 @@
 .ch-nm {
   display: block; margin-top: -2px;
   font-size: var(--fs-mark); letter-spacing: var(--ls-base);
-  color: var(--text-4);
+  color: var(--text-3);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: color var(--t-base) var(--ease);
 }
@@ -311,7 +311,8 @@
  * 底部的字随时可能压在灯笼身上 —— 渐隐的暗角够不到那么高。
  * 给它们各自带一圈与底色同色的柔光，浅色深色都成立，也不必压暗画面。
  */
-.cue, .narration, .dock-hint { text-shadow: 0 0 10px var(--bg), 0 0 22px var(--bg); }
+.cue, .narration, .dock-hint,
+.stepno, .steptitle, .ch-nm { text-shadow: 0 0 10px var(--bg), 0 0 22px var(--bg); }
 
 /* 操作提示：告诉手该做什么，不抢旁白的位置 */
 .cue {

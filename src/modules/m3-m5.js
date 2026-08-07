@@ -3,7 +3,7 @@
  */
 
 import * as THREE from 'three';
-import { V, Junk, buildNightSky, FIT_LANTERN } from '../steps/util.js';
+import { V, Junk, buildNightSky, AIM_LANTERN, FIT_LANTERN } from '../steps/util.js';
 import { playVO } from './vo.js';
 import { buildPatternTexture } from '../render/lattice.js';
 import { makePosterNo } from '../core/state.js';
@@ -34,7 +34,7 @@ export function openM3(c, onExit) {
   c.stage.setMood('night');
   c.bgm.play('BGM_C_WISH');
   junk.add(buildNightSky(c.stage.scene));
-  c.stage.setRecommended({ az: 90, el: 8, dist: 330, target: V(0, 0, 96), fit: FIT_LANTERN });
+  c.stage.setRecommended({ az: 52, el: 8, dist: 330, target: V(...AIM_LANTERN), fit: FIT_LANTERN });
   c.stage.snapToRecommended();
 
   let picked = c.state.wishText || '';
@@ -239,7 +239,7 @@ export function openM4(c, onExit) {
   junk.add(sky);
 
   const placed = [];
-  c.stage.setRecommended({ az: 60, el: 6, dist: 540, target: V(0, 0, 96), fit: FIT_LANTERN });
+  c.stage.setRecommended({ az: 60, el: 6, dist: 540, target: V(...AIM_LANTERN), fit: FIT_LANTERN });
   c.stage.snapToRecommended();
 
   const close = () => { junk.clear(); c.hud.hideOverlay(); c.voice.stop(); onExit?.(); };
@@ -247,6 +247,13 @@ export function openM4(c, onExit) {
   const hang = () => {
     if (placed.length >= 6) { c.hud.toast('最多挂六盏 —— 想换位置，先收起来'); return; }
     const clone = c.lantern.root.clone(true);
+    // root 底下挂着内光与纹样聚光灯，clone(true) 会把它们一并复制。
+    // 挂六盏就是多出六组光源：总辐照远超 stage.js 定下的曝光上限，画面糊成一片奶白；
+    // 灯数一变还会让全场材质重新编译着色器，每点一次都卡一下。
+    // 远处的挂灯本来也不需要真光源 —— 纸面的自发光是材质上的，克隆体照样继承。
+    const lights = [];
+    clone.traverse((o) => { if (o.isLight) lights.push(o); });
+    for (const l of lights) l.removeFromParent();
     // 挂在镜头正对的方向附近（±30°）—— 文案承诺「转一转视角，找个位置」，
     // 全随机方位会把灯挂到镜头背后去
     const cam = c.stage.camera.position;
@@ -257,7 +264,8 @@ export function openM4(c, onExit) {
     clone.userData.phase = Math.random() * 6;
     c.stage.scene.add(clone);
     placed.push(clone);
-    junk.add(clone);
+    // 克隆体与真灯笼共用几何和材质 —— 只摘出场景，绝不能连带 dispose
+    junk.add({ dispose: () => c.stage.scene.remove(clone) });
     c.sfx.play('WOOD_TAP', { pitch: placed.length * 1.5 });
     draw();
   };
@@ -442,8 +450,8 @@ export function openM5(c, onExit) {
 
   const outro = async () => {
     c.state.modulesDone = { ...c.state.modulesDone, M5: true };
-    c.stage.setRecommended({ az: 55, el: 8, dist: 360, target: V(0, 0, 96), ease: 0.35, fit: FIT_LANTERN });
-    playVO(c, 'M5-outro');
+    c.stage.setRecommended({ az: 55, el: 8, dist: 360, target: V(...AIM_LANTERN), ease: 0.35, fit: FIT_LANTERN });
+    playVO(c, c.state.lit ? 'M5-outro' : 'M5-outro-dark');
     await wait(7.5);
     if (closed) return;
     c.hud.sheet({

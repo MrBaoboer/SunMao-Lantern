@@ -3,7 +3,7 @@
  */
 
 import {
-  V, a, av, J1, J2, PALETTE, Junk, buildLanternRiver, FIT_LANTERN,
+  V, a, av, J1, J2, PALETTE, Junk, buildLanternRiver, AIM_LANTERN, FIT_LANTERN,
   box, demoSolid,
 } from './util.js';
 import { tween, Ease, wait } from '../util/tween.js';
@@ -20,7 +20,7 @@ export function act1(ctx) {
       title: '一盏灯，为一年收尾',
       mood: 'dusk',
       bgm: 'BGM_A_OPENING',
-      cam: { az: 62, el: 12, dist: 470, snap: true, fit: FIT_LANTERN },
+      cam: { az: 62, el: 12, dist: 470, target: AIM_LANTERN, snap: true, fit: FIT_LANTERN },
       cps: 3.6,
       cue: { ico: 'drag', text: '拖动画面，换个角度看' },
       narration: `每到岁末，中国人会用一盏灯，为一年收尾。
@@ -254,11 +254,6 @@ export function act1(ctx) {
 你夹住我，我也夹住你。
 （气口）
 还有一点很重要：它只能从上往下落。这样重力会帮你压住它。`,
-      note: {
-        title: '夹榫',
-        body: '两个方向同时锁住：叉口落进槽，槽中间的榫舌又卡回叉口里。',
-        foot: '反过来做，重力就会把它拽下来。',
-      },
       async enter(c, engine) {
         junk.clear();
         c.lantern.showOnly([]);
