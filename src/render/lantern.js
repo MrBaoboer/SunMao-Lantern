@@ -322,7 +322,7 @@ export class Lantern {
 
   showPanels(v) { this.panels.forEach((g) => { g.visible = v; }); }
 
-  /** 换纹样 —— state.patternId 贯穿 S26→S31→M1 地面投影→M3 海报→M4/M5 */
+  /** 换纹样 —— state.patternId 贯穿 S26→S31→M1 地面投影→M3 海报→M4 */
   setPattern(patternId) {
     this.state.patternId = patternId;
     for (const p of this.panels) {

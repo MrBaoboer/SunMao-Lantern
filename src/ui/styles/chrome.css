@@ -46,38 +46,47 @@
   font-size: var(--fs-mark);
   letter-spacing: var(--ls-vast); text-indent: var(--ls-vast);
   color: var(--accent);
-  margin-bottom: var(--s5);
+  margin-bottom: var(--s3);
   animation: rise 1.4s var(--ease) both;
 }
+/* 题字压在三维之上，字重给足才立得住 */
 .cover-title {
-  font-family: var(--serif); font-weight: 400;
-  font-size: var(--fs-boot);
-  letter-spacing: 0.4em; text-indent: 0.4em;
+  font-family: var(--serif); font-weight: 600;
+  font-size: var(--fs-boot); line-height: 1.16;
+  letter-spacing: 0.34em; text-indent: 0.34em;
   color: var(--text);
-  margin-bottom: var(--s5);
   animation: rise 1.6s 0.12s var(--ease) both;
 }
 .cover-sub {
   font-size: var(--fs-mini);
   letter-spacing: var(--ls-vast); text-indent: var(--ls-vast);
   color: var(--text-3);
-  margin-bottom: var(--s8);
   animation: rise 1.6s 0.28s var(--ease) both;
 }
 
-/* 加载进度：一条会走满的细线。走满即隐去 */
+/*
+ * 题字与副题之间那道线，加载时兼作进度条：走满之后不隐去，
+ * 收成一道浅金的分隔 —— 少一个凭空消失的元素，版面也更稳。
+ */
 .cover-rule {
-  width: min(200px, 44vw); height: 1px; margin: 0 auto var(--s4);
+  width: min(168px, 38vw); height: 1px;
+  margin: var(--s5) auto;
   background: var(--line); overflow: hidden;
-  transition: opacity var(--t-slow) var(--ease);
 }
 .cover-rule i {
   display: block; height: 100%; width: 0;
   background: var(--accent);
-  transition: width var(--t-slow) var(--ease);
+  transition: width var(--t-slow) var(--ease),
+              background var(--t-slow) var(--ease);
 }
-.cover[data-ready="1"] .cover-rule { opacity: 0; }
+.cover[data-ready="1"] .cover-rule i { background: var(--accent-soft); }
 
+/* 加载文案与入口共用一个定高的槽：按钮顶上来时题字不跟着跳 */
+.cover-foot {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-height: 132px; margin-top: var(--s6);
+}
 .cover-msg {
   font-size: var(--fs-mark); letter-spacing: var(--ls-wide);
   color: var(--text-3); min-height: 1.4em;
@@ -85,15 +94,15 @@
 .cover-msg.bad { color: var(--seal); }
 
 .cover-act {
-  display: flex; flex-direction: column; align-items: center; gap: var(--s1);
-  margin-top: var(--s6);
+  display: flex; flex-direction: column; align-items: center; gap: var(--s2);
   animation: rise var(--t-slow) var(--ease) both;
 }
 .cover-alt { display: flex; align-items: center; gap: var(--s2); }
+/* 出错时按钮下面那句补充说明 —— 正常路径上封面没有这一行 */
 .cover-meta {
-  margin-top: var(--s4);
-  font-size: var(--fs-mark); letter-spacing: var(--ls-wide);
-  color: var(--text-3);
+  margin-top: var(--s3); max-width: 30em;
+  font-size: var(--fs-mark); line-height: var(--lh-tight);
+  letter-spacing: var(--ls-wide); color: var(--text-3);
 }
 
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
@@ -122,7 +131,7 @@
 @media (pointer: coarse) { .tick { height: 32px; } }
 .tick::before {
   content: ''; display: block; width: 100%; height: 2px;
-  background: var(--line);
+  background: var(--text-4);
   border-radius: 1px;
   transition: background var(--t-base) var(--ease), height var(--t-fast) var(--ease);
 }
@@ -133,12 +142,12 @@
 .ch-nm {
   display: block; margin-top: -2px;
   font-size: var(--fs-mark); letter-spacing: var(--ls-base);
-  color: var(--text-3);
+  color: var(--text-2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: color var(--t-base) var(--ease);
 }
-.ch[data-on="1"] .ch-nm { color: var(--text-2); }
-.ch[data-done="1"] .ch-nm { color: var(--text-3); }
+.ch[data-on="1"] .ch-nm { color: var(--text); font-weight: 600; }
+.ch[data-done="1"] .ch-nm { color: var(--text-2); }
 
 /* 悬停时告诉你那一步是什么 */
 .tick-tip {
@@ -161,13 +170,13 @@
 .where { display: flex; align-items: baseline; gap: var(--s3); min-width: 0; }
 .stepno {
   font-family: var(--mono); font-size: var(--fs-mark);
-  letter-spacing: var(--ls-tight); color: var(--text-3);
+  letter-spacing: var(--ls-tight); color: var(--text-2);
   flex: none;
 }
 .steptitle {
   font-family: var(--serif); font-weight: 400;
   font-size: var(--fs-tiny); letter-spacing: var(--ls-wide);
-  color: var(--text-2);
+  color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
@@ -311,8 +320,7 @@
  * 底部的字随时可能压在灯笼身上 —— 渐隐的暗角够不到那么高。
  * 给它们各自带一圈与底色同色的柔光，浅色深色都成立，也不必压暗画面。
  */
-.cue, .narration, .dock-hint,
-.stepno, .steptitle, .ch-nm { text-shadow: 0 0 10px var(--bg), 0 0 22px var(--bg); }
+.cue, .narration, .dock-hint { text-shadow: 0 0 10px var(--bg), 0 0 22px var(--bg); }
 
 /* 操作提示：告诉手该做什么，不抢旁白的位置 */
 .cue {

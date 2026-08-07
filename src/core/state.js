@@ -9,7 +9,7 @@
  * 一盏灯做一遍只要八分钟。半截存档换来的是一次「你上次停在……」的提问，
  * 而这个问题在你刚打开页面、还没想好要不要玩的时候，是纯粹的干扰。
  *
- * patternId 是这一遍里唯一的个性化选择：格心 → 爆炸图 → 地面投影 → 海报 → 烟花。
+ * patternId 是这一遍里唯一的个性化选择：格心 → 爆炸图 → 地面投影 → 海报。
  */
 
 const KEY = 'sunmao.v3.state';
@@ -25,7 +25,7 @@ const PREFS = {
 
 /** 这一遍的进度，刷新即归零 */
 const RUN = {
-  patternId: 'mayo',     // 麻叶纹 / 万字纹
+  patternId: 'wanzi',    // 万字纹（默认）/ 麻叶纹
   lit: false,            // M1 是否已点亮
   litLevel: 0,           // 当前亮度（含 M2 加亮）
   riddleScore: 0,        // M2 得分 0–5

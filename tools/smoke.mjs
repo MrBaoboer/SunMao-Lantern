@@ -257,26 +257,13 @@ for (const vp of VIEWPORTS) {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(900);
 
-    // M5 放一发，退出后不许再有后续（异步链守卫）
-    await page.evaluate(() => document.querySelector('.door[data-m="M5"]')?.click());
-    await page.waitForTimeout(1500);
-    await page.mouse.click(Math.round(vp.width / 2), Math.round(vp.height * 0.42));
-    const burstOk = await page.waitForFunction(() => window.__ctx.fx.fireworks.parts.length > 0, null, { timeout: 20000 })
-      .then(() => true).catch(() => false);
-    if (!burstOk) note(vp.name, 'M5 点击没有放出烟花');
-    await page.evaluate(() => {
-      document.querySelectorAll('.dock button').forEach((b) => { if (b.textContent.includes('回去')) b.click(); });
-    });
-    await page.waitForTimeout(1600);
-    const leak = await page.evaluate(() => window.__ctx.fx.fireworks.parts.length);
-    if (leak > 0) note(vp.name, `M5 退出后烟花仍在继续（${leak} 粒）`);
   }
 
-  // 五个互动模块的入口
+  // 四个互动模块的入口
   await page.evaluate(() => window.__ctx.openHub());
   await page.waitForTimeout(700);
   const doors = await page.$$eval('.door', (els) => els.length);
-  if (doors !== 5) note(vp.name, `收尾应有 5 个入口，实际 ${doors} 个`);
+  if (doors !== 4) note(vp.name, `收尾应有 4 个入口，实际 ${doors} 个`);
 
   // 主题切换：两套颜色都要能落到页面上
   for (const theme of ['dark', 'light']) {

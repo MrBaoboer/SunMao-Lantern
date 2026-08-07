@@ -49,7 +49,6 @@ class SFXEngine {
     this.masterGain = master;
 
     // 预留：BGM 若改走 WebAudio（MediaElementSource → GainNode），
-    // 把那个 GainNode 挂到这里，duck() 即可在 M5 爆炸时做 sidechain 让位。
     // HTMLAudio 的 volume 不是 AudioParam，接不进来 —— 现阶段 duck() 是空转
     this.duckTarget = null;
 
@@ -89,7 +88,7 @@ class SFXEngine {
     return { src, out: g };
   }
 
-  /** 带通滤过的噪声（凿、锯、铣、摩擦、烟花尾焰都用它） */
+  /** 带通滤过的噪声（凿、锯、铣、摩擦都用它） */
   bandNoise(t, {
     f = 1200, q = 2.4, dur = 0.12, gain = 0.3,
     attack = 0.004, sweepTo = null, type = 'bandpass', decayShape = 2.2,
@@ -192,21 +191,12 @@ class SFXEngine {
     if (s) { s(); this._loops.delete(id); }
   }
 
-  /** M5：爆炸时让 BGM 短暂让位 −4 dB */
-  duck(amount = 0.63, hold = 0.18) {
-    if (!this.duckTarget || !this.ctx) return;
-    const t = this.ctx.currentTime;
-    const gp = this.duckTarget.gain;
-    gp.cancelScheduledValues(t);
-    gp.setTargetAtTime(this.duckBase * amount, t, 0.02);
-    gp.setTargetAtTime(this.duckBase, t + hold, 0.18);
-  }
 }
 
 // ══════════════════════════════════════════════════════════
 // 音效表
 //
-// 只保留有物理来由的声音：木头、纸、火、烟花，外加一记极轻的点击。
+// 只保留有物理来由的声音：木头、纸、火，外加一记极轻的点击。
 // 界面不该有「叮」「嘀」「唰」—— 那是提示音，不是这盏灯该发出的声音。
 // ══════════════════════════════════════════════════════════
 
@@ -338,29 +328,6 @@ const RECIPES = {
     S.thump(t, { f: 70 * p, drop: 34, dur: 0.5, gain: 0.12 * g });
   },
 
-  // ── 烟花 ──────────────────────────────────────────
-
-  FIREWORK_LAUNCH: (S, t, p, g) => {
-    S.bandNoise(t, {
-      f: 700 * p, q: 1.8, dur: 0.55, gain: 0.07 * g,
-      sweepTo: 2600 * p, attack: 0.05, decayShape: 1.1,
-    });
-  },
-
-  FIREWORK_BURST: (S, t, p, g) => {
-    S.thump(t, { f: 130 * p, drop: 40, dur: 0.4, gain: 0.42 * g });
-    S.bandNoise(t, { f: 1500 * p, q: 0.5, dur: 0.22, gain: 0.24 * g, sweepTo: 350 * p });
-    S.duck();
-  },
-
-  FIREWORK_CRACKLE: (S, t, p, g) => {
-    for (let i = 0; i < 14; i++) {
-      S.bandNoise(t + Math.random() * 0.7, {
-        f: (3000 + Math.random() * 3000) * p, q: 5, dur: 0.015, gain: 0.05 * g,
-      });
-    }
-  },
-
   // ── 界面：只有三记 ────────────────────────────────
 
   /** 极轻的一点，用于选中 */
@@ -410,7 +377,6 @@ const ALIASES = {
   PAPER_UNROLL: ['PAPER', 1],
   BRUSH_STROKE: ['BRUSH', 1],
   TASSEL_SWAY: ['KNOT_SWING', 0.8],
-  FIREWORK_FU: ['FIREWORK_BURST', 1],
   UI_TAP_WOOD: ['UI_TAP', 1],
   RIDDLE_CORRECT: ['SUCCESS', 1],
   SUCCESS_SOFT: ['SUCCESS', 0.8],

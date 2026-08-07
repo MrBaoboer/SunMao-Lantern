@@ -1,7 +1,7 @@
 /**
- * 格心纹样（麻叶纹 · 冰裂纹 · 万字纹）—— 程序化生成真实镂空棂条
+ * 格心纹样（万字纹 · 麻叶纹）—— 程序化生成真实镂空棂条
  *
- * 三种纹样都表述为一组「二维线段 + 线宽」，再挤出成厚 a/3 的棂条。
+ * 两种纹样都表述为一组「二维线段 + 线宽」，再挤出成厚 a/3 的棂条。
  * 用真几何而非 alpha 贴图，是因为 M1 点亮时「光被木格挡成一格一格」
  * 依赖真实遮挡关系；同时地面纹样光斑的投影贴图也由同一份线段数据烘出，
  * 保证「你选的纹样」在灯笼上、在地上、在海报上永远是同一个。
@@ -13,8 +13,8 @@ import * as THREE from 'three';
 import { a, C, M, J4 } from '../core/modulus.js';
 
 export const PATTERNS = [
-  { id: 'mayo', name: '麻叶纹', sub: '组子经典 · 四格一星', meaning: '放射相连，寓意生生不息' },
   { id: 'wanzi', name: '万字纹', sub: '吉祥连续纹 · 回环无尽', meaning: '回环相连，谓「万福不断头」' },
+  { id: 'mayo', name: '麻叶纹', sub: '明清窗棂常见 · 放射对称', meaning: '六出放射，寓意生生不息' },
 ];
 
 const W = J4.PANEL_W;            // 96
@@ -23,23 +23,6 @@ const H = J4.PANEL_H;            // 125
 const T = J4.PANEL_T;            // 4
 const FRAME = a(1 / 3);          // 边框棂条宽 4
 const RIB = a(1 / 4);            // 内部棂条宽 3
-
-/** 确定性随机 —— 同一纹样每次生成结果一致 */
-function mulberry32(seed) {
-  return function () {
-    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** 板肩轮廓：返回给定高度 v（以板底为 0）处的半宽 */
-function halfWidthAt(v) {
-  if (v <= J4.SHOULDER_BOT) return WS / 2;
-  if (v >= H - J4.SHOULDER_TOP) return WS / 2;
-  return W / 2;
-}
 
 /** 边框（含板肩台阶）—— 线段列表 */
 function frameSegments() {
@@ -133,61 +116,40 @@ function wanziSegments() {
   return dedupe(raw);
 }
 
-// ── 麻叶纹（角麻叶）—— 传统组子的正统做法 ──
-//
-//     方格划两条对角线，分成四个三角；每个三角自三个角各出一条棂条，
-//     交于该三角的形心。四格相会之处因此聚出一颗放射星 ——
-//     这是麻叶纹最认得出的样子，也是实物组子的排法。
-//
-//     格子取偶数，好让放射星正落在格心板的正中；
-//     格宽随板面等分，横竖各二，与实物一致。
-const MAYO_COLS = 2, MAYO_ROWS = 2;
-
+// ── 麻叶纹：六边形棂格 + 每格六出放射，相邻格共边 ──
+//     「六出放射，像麻叶舒展，寓意生生不息」
 function mayoSegments() {
   const raw = [];
-  const sx = (FIELD.x1 - FIELD.x0) / MAYO_COLS;
-  const sy = (FIELD.y1 - FIELD.y0) / MAYO_ROWS;
-
-  for (let r = 0; r < MAYO_ROWS; r++) {
-    for (let c = 0; c < MAYO_COLS; c++) {
-      const x0 = FIELD.x0 + c * sx, y0 = FIELD.y0 + r * sy;
-      const x1 = x0 + sx, y1 = y0 + sy;
-      const ox = (x0 + x1) / 2, oy = (y0 + y1) / 2;
-
-      // 两条对角线：把方格分成四个三角
-      raw.push(clipSeg(x0, y0, x1, y1));
-      raw.push(clipSeg(x1, y0, x0, y1));
-
-      // 每个三角三出到形心
-      const corner = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
-      for (let k = 0; k < 4; k++) {
-        const A = corner[k], B = corner[(k + 1) % 4];
-        const gx = (A[0] + B[0] + ox) / 3;
-        const gy = (A[1] + B[1] + oy) / 3;
-        raw.push(clipSeg(A[0], A[1], gx, gy, RIB * 0.85));
-        raw.push(clipSeg(B[0], B[1], gx, gy, RIB * 0.85));
-        raw.push(clipSeg(ox, oy, gx, gy, RIB * 0.85));
+  const R = 15;                              // 六边形外接圆半径
+  const stepX = 1.5 * R, stepY = Math.sqrt(3) * R;
+  const cols = Math.ceil((FIELD.x1 - FIELD.x0) / stepX) + 2;
+  const rows = Math.ceil((FIELD.y1 - FIELD.y0) / stepY) + 2;
+  const ox = (FIELD.x0 + FIELD.x1) / 2 - ((cols - 1) * stepX) / 2;
+  const oy = (FIELD.y0 + FIELD.y1) / 2 - ((rows - 1) * stepY) / 2;
+  const vert = (cx, cy, k) => [
+    cx + R * Math.cos((k * Math.PI) / 3),
+    cy + R * Math.sin((k * Math.PI) / 3),
+  ];
+  for (let r = -1; r < rows; r++) {
+    for (let c = -1; c < cols; c++) {
+      // 平顶六边形密铺：奇数列在 Y 上错开半格
+      const cx = ox + c * stepX;
+      const cy = oy + r * stepY + (c % 2 ? stepY / 2 : 0);
+      for (let k = 0; k < 6; k++) {
+        const v0 = vert(cx, cy, k), v1 = vert(cx, cy, k + 1);
+        raw.push(clipSeg(v0[0], v0[1], v1[0], v1[1]));           // 六边形边
+        raw.push(clipSeg(cx, cy, v0[0], v0[1], RIB * 0.82));     // 六出放射
       }
     }
-  }
-
-  // 格与格之间的分隔棂条，比内部放射粗一档 —— 实物上它们是先立起来的骨
-  for (let c = 1; c < MAYO_COLS; c++) {
-    const x = FIELD.x0 + c * sx;
-    raw.push(clipSeg(x, FIELD.y0, x, FIELD.y1, FRAME));
-  }
-  for (let r = 1; r < MAYO_ROWS; r++) {
-    const y = FIELD.y0 + r * sy;
-    raw.push(clipSeg(FIELD.x0, y, FIELD.x1, y, FRAME));
   }
   return dedupe(raw);
 }
 
-const GENERATORS = { mayo: mayoSegments, wanzi: wanziSegments };
+const GENERATORS = { wanzi: wanziSegments, mayo: mayoSegments };
 
 /** 取某纹样的全部线段（含边框） */
 export function latticeSegments(patternId) {
-  const gen = GENERATORS[patternId] || GENERATORS.mayo;
+  const gen = GENERATORS[patternId] || GENERATORS.wanzi;
   return [...frameSegments(), ...gen()];
 }
 
