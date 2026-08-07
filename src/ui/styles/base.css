@@ -53,10 +53,10 @@ svg { display: block; }
 
 ::selection { background: var(--accent-soft); }
 
-/* 键盘可见的焦点圈 —— 鼠标点击时不出现 */
+/* 键盘可见的焦点圈 —— 鼠标点击时不出现。2px 起步，暗场里 1px 金线看不见 */
 :focus { outline: none; }
 :focus-visible {
-  outline: 1px solid var(--accent);
+  outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: var(--r-xs);
 }

@@ -230,9 +230,9 @@ export class Stage {
   /** 画面中真正可用的那一块：高度占比与中心相对整幅的偏移 */
   #viewport() {
     const h = this.canvas.clientHeight || innerHeight || 1;
-    // 下限 0.58：界面再厚也不能把主体挤成一枚邮票 ——
-    // 底部那层压着的是渐隐的暗角与居中的一行字，主体探进去一点仍然读得出来
-    const free = Math.max(h * 0.58, h - this.safe.top - this.safe.bottom);
+    // 下限 0.62：界面再厚也不能把主体挤成一枚邮票；但保底放得太低，
+    // 主体会大面积压进底部旁白与卡片的文字区，字和木纹叠在一起谁都读不清
+    const free = Math.max(h * 0.62, h - this.safe.top - this.safe.bottom);
     return { frac: free / h, lift: (this.safe.bottom - this.safe.top) / (2.4 * h) };
   }
 
@@ -316,7 +316,10 @@ export class Stage {
       const dt = Math.min(this.clock.getDelta(), 0.05);
       const t = this.clock.elapsedTime;
       this.update(dt);
-      for (const u of this.updaters) u(dt, t);
+      // 单个 updater 抛错不能连坐这一帧剩下的所有更新 —— 记录，继续走
+      for (const u of this.updaters) {
+        try { u(dt, t); } catch (e) { console.error('[updater]', e); }
+      }
       if (this.bloomEnabled) this.composer.render();
       else this.renderer.render(this.scene, this.camera);
     };

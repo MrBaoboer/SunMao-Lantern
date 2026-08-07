@@ -272,7 +272,13 @@ export class Junk {
   clear() {
     for (const o of this.items) {
       if (o.dispose) o.dispose();
-      else { this.scene.remove(o); o.geometry?.dispose?.(); o.material?.dispose?.(); }
+      else {
+        this.scene.remove(o);
+        o.geometry?.dispose?.();
+        // material.dispose() 不会连带释放贴图 —— M4 的全景天球每次 8MB，不能漏
+        o.material?.map?.dispose?.();
+        o.material?.dispose?.();
+      }
     }
     this.items = [];
   }

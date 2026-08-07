@@ -80,9 +80,6 @@ export class BGM {
       };
       f();
     }).catch(() => { /* 自动播放被拦 */ });
-
-    // 供 M5 爆炸做 sidechain 让位
-    this.sfx.duckTarget = { gain: { setTargetAtTime: () => {}, cancelScheduledValues: () => {} } };
   }
 
   targetVolume() {
@@ -104,7 +101,13 @@ export class BGM {
     f();
   }
 
-  stop(fade = 0.8) { this.setLevel(0, fade); this.current = null; }
+  stop(fade = 0.8) {
+    const a = this.el;
+    this.setLevel(0, fade);
+    this.current = null;
+    // 淡出结束后真正停下 —— 只把音量拉到 0，元素会以 0 音量永远循环解码
+    if (a) setTimeout(() => { if (this.el === a && this.levelScale === 0) a.pause(); }, fade * 1000 + 120);
+  }
 
   setEnabled(v) {
     this.state.sound = v;

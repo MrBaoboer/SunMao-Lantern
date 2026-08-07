@@ -15,18 +15,20 @@
   --surface:   #fffdf7;
   --surface-2: #fbf6ea;
 
+  /* text-3 用于 11–13px 的信息性小字，须过 4.5:1；text-4 只作纯装饰 */
   --text:      #221d16;
   --text-2:    #574c3d;
-  --text-3:    #8a7c69;
-  --text-4:    #b3a691;
+  --text-3:    #71634f;
+  --text-4:    #9a8c76;
 
   --line:      rgba(34, 29, 22, 0.14);
   --line-2:    rgba(34, 29, 22, 0.07);
 
-  --accent:      #9a7328;
-  --accent-lift: #7f5d1c;
-  --accent-soft: rgba(154, 115, 40, 0.28);
-  --accent-faint:rgba(154, 115, 40, 0.10);
+  /* 金压深一档：白字压金（主按钮）与金字压纸（cue 动作词）都要过 4.5:1 */
+  --accent:      #8a6520;
+  --accent-lift: #6f4f15;
+  --accent-soft: rgba(138, 101, 32, 0.30);
+  --accent-faint:rgba(138, 101, 32, 0.11);
   --on-accent:   #fffdf7;
 
   --slip:      #fffaee;
@@ -39,7 +41,7 @@
   --veil:  rgba(244, 239, 227, 0.90);
   /* 封面用的那层薄纱：比卷淡得多 —— 背后那盏灯是要看见的 */
   --veil-cover: rgba(244, 239, 227, 0.66);
-  --scrim: linear-gradient(to top, rgba(244, 239, 227, 0.94) 0%, rgba(244, 239, 227, 0.6) 46%, transparent 100%);
+  --scrim: linear-gradient(to top, rgba(244, 239, 227, 0.96) 0%, rgba(244, 239, 227, 0.68) 46%, transparent 100%);
   --shade: rgba(34, 29, 22, 0.06);
 
   --lift-1: 0 4px 14px rgba(60, 48, 30, 0.10);
@@ -62,8 +64,8 @@
 
   --text:      #f2ece0;
   --text-2:    rgba(242, 236, 224, 0.70);
-  --text-3:    rgba(242, 236, 224, 0.46);
-  --text-4:    rgba(242, 236, 224, 0.26);
+  --text-3:    rgba(242, 236, 224, 0.58);
+  --text-4:    rgba(242, 236, 224, 0.34);
 
   --line:      rgba(242, 236, 224, 0.13);
   --line-2:    rgba(242, 236, 224, 0.07);
@@ -83,7 +85,7 @@
 
   --veil:  rgba(8, 6, 5, 0.90);
   --veil-cover: rgba(8, 6, 5, 0.62);
-  --scrim: linear-gradient(to top, rgba(5, 4, 3, 0.88) 0%, rgba(5, 4, 3, 0.54) 46%, transparent 100%);
+  --scrim: linear-gradient(to top, rgba(5, 4, 3, 0.92) 0%, rgba(5, 4, 3, 0.62) 46%, transparent 100%);
   --shade: rgba(242, 236, 224, 0.07);
 
   --lift-1: 0 6px 18px rgba(0, 0, 0, 0.34);

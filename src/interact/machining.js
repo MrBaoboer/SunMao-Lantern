@@ -58,19 +58,23 @@ export function buildTool(kind) {
   const wood = new THREE.MeshStandardMaterial({ color: 0x6f4a28, roughness: 0.7 });
 
   if (kind === 'saw') {
-    // 刃在下沿（-Z），齿尖朝下；背脊在上，手柄在 -X 一端
+    // 刃在下沿（-Z），齿尖朝下；背脊在上。
+    // 柄从刀尾斜向后上方伸出、整体抬到刃线以上 —— 走刀半没入木料时柄不会跟着埋进去
     const blade = new THREE.Mesh(new THREE.BoxGeometry(58, 1.0, 13), steel);
     blade.position.set(3, 0, -8.5);
     const teeth = new THREE.Mesh(sawTeeth(58, 2.6, 2.4, 1.0), steel);
     teeth.position.set(3, 0, -15);
     const spine = new THREE.Mesh(new THREE.BoxGeometry(58, 2.2, 2.2), steel);
     spine.position.set(3, 0, -1.2);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(13, 5.5, 15), wood);
-    grip.position.set(-32, 0, -8);
+    const cheek = new THREE.Mesh(new THREE.BoxGeometry(9, 3.4, 12), wood);
+    cheek.position.set(-27, 0, -5);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(6.5, 5.5, 19), wood);
+    grip.rotation.y = -0.62;
+    grip.position.set(-33.5, 0, 3.5);
     const bolt = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 6.4, 8), steel);
     bolt.rotation.z = Math.PI / 2;
-    bolt.position.set(-32, 0, -8);
-    g.add(blade, teeth, spine, grip, bolt);
+    bolt.position.set(-27, 0, -5);
+    g.add(blade, teeth, spine, cheek, grip, bolt);
   } else if (kind === 'router') {
     const body = new THREE.Mesh(new THREE.CylinderGeometry(7, 8, 24, 16), makeCoreMaterial());
     body.rotation.x = Math.PI / 2; body.position.z = 8;
@@ -186,7 +190,12 @@ export class Machining {
   }
 
   end() {
-    if (this.tool) { this.ctx.stage.scene.remove(this.tool); this.tool = null; }
+    if (this.tool) {
+      this.ctx.stage.scene.remove(this.tool);
+      // 刀具每次开工都是新建的 —— 不释放，反复进出加工步会持续泄漏 GPU 资源
+      this.tool.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+      this.tool = null;
+    }
     this.job = null;
     this.dragging = null;
     this.ctx.stage.controls.enabled = true;
@@ -256,6 +265,8 @@ export class Machining {
 
   _setU(u) {
     const j = this.job;
+    // autoRun 收尾的 tween 可能在 end() 之后再 tick 到几次 —— 静默忽略
+    if (!j || !this.tool) return;
     j.u = u;
     this.tool.position.copy(j.from).addScaledVector(j.dir, u * j.len);
     // 一次往复（走到一端再回到另一端）算一刀
@@ -298,12 +309,12 @@ export class Machining {
   async autoRun() {
     const j = this.job;
     if (!j) return;
-    while (j.stroke < j.strokes) {
+    // 每一轮都确认当前 job 还是进来时那一个 —— job 被 end() 或换掉后立即收手
+    while (this.job === j && j.stroke < j.strokes) {
       const target = j.lastEnd === 1 ? 0 : 1;
       const from = j.u;
       await tween(0.5, (k) => this._setU(from + (target - from) * k), { ease: Ease.inOutQuad });
       await wait(0.08);
-      if (!this.job) return;
     }
   }
 }

@@ -40,6 +40,9 @@ export class VoiceTrack {
     this.timer = null;
     this.available = new Set();
     this.checked = false;
+    // 代际令牌：stop() 里置空 src 会异步触发该元素的 error 事件，
+    // 不加代际判断，被打断的旧步字幕会在新步上复活
+    this.gen = 0;
   }
 
   /** 读取生成清单，得知哪些步骤已有配音 */
@@ -55,6 +58,7 @@ export class VoiceTrack {
   }
 
   stop() {
+    this.gen++;
     clearTimeout(this.timer);
     this.timer = null;
     if (this.audio) { this.audio.pause(); this.audio.src = ''; this.audio = null; }
@@ -69,13 +73,16 @@ export class VoiceTrack {
    */
   play(stepId, text, o = {}) {
     this.stop();
+    const gen = this.gen;
     const lines = parseNarration(text, o.cps ?? BASE_CPS);
     if (!lines.length) { o.onDone?.(); return; }
     const total = lines.reduce((s, l) => s + l.dur, 0);
 
     const runCaptions = (scale = 1) => {
+      if (this.gen !== gen) return;
       let i = 0;
       const step = () => {
+        if (this.gen !== gen) return;
         if (i >= lines.length) {
           this.ui.setNarration('');
           o.onDone?.();

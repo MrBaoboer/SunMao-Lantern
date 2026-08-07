@@ -62,9 +62,11 @@
 
 /* ═══════════════ 五道门 ═══════════════ */
 
-/* 五件事一字排开，等宽等高 —— 谁也不比谁更值得先做 */
+/* 五件事一字排开，等宽等高 —— 谁也不比谁更值得先做。
+   minmax(0,…) + 上限宽：688~788px 的平板竖屏不再把两侧的卡裁出屏幕 */
 .doors {
-  display: grid; grid-template-columns: repeat(5, 148px);
+  display: grid; grid-template-columns: repeat(5, minmax(0, 148px));
+  width: min(100%, 788px); margin: 0 auto;
   gap: var(--s3); justify-content: center;
 }
 
@@ -291,8 +293,10 @@
 @media (max-width: 680px) {
   /* 与底部一样抬到翻页之上 */
   .dock { bottom: calc(var(--edge) + 52px); padding: 0 var(--s4); }
-  .doors { grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
+  /* 2+2+1：3 列放 5 张会在右下留一个洞 */
+  .doors { grid-template-columns: repeat(2, 1fr); gap: var(--s2); }
   .door { padding: var(--s4) var(--s2) var(--s3); }
+  .door:last-child { grid-column: 1 / -1; justify-self: center; width: calc(50% - var(--s2) / 2); }
   .door-ic { margin-bottom: var(--s2); width: 26px; height: 26px; }
   .door-ic .ico { width: 24px; height: 24px; }
   .pick { width: 100%; max-width: 300px; }

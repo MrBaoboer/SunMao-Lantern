@@ -17,10 +17,12 @@ const $ = (id) => document.getElementById(id);
 /** 四章 */
 export const PHASES = ['开场', '认识榫卯', '做骨架', '装点年味'];
 
-/** 怎么操作。前四条是第一次进来就该知道的，后两条留给完整版 */
+/** 怎么操作。前四条是第一次进来就该知道的，后两条留给完整版。touch 是触屏机型的替换句 */
 const GUIDE = [
-  { k: ['back', 'forward'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用' },
-  { k: ['drag'], t: '按住画面拖，换个角度看；滚轮缩放。松开手，镜头会自己转回来' },
+  { k: ['back', 'forward'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用',
+    touch: '点两侧箭头，翻到上一步、下一步' },
+  { k: ['drag'], t: '按住画面拖，换个角度看；滚轮缩放。松开手，镜头会自己转回来',
+    touch: '按住画面拖，换个角度看；双指开合缩放。松开手，镜头会自己转回来' },
   { k: ['layers'], t: '顶上一格就是一步，点一下直接跳过去' },
   { k: ['more'], t: '深色、声音、字幕，都在右上角' },
   { k: ['X'], t: '随时把灯笼拆开、调透明，看看里面', full: true },
@@ -341,6 +343,18 @@ export class HUD {
     this.el.menu.setAttribute('aria-expanded', 'true');
     m.querySelector('button')?.focus();
 
+    // 键盘：上下移焦；Tab 移出菜单即收起 —— 菜单不该悬在已失焦的页面上
+    m.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const bs = [...m.querySelectorAll('button')];
+      const i = bs.indexOf(document.activeElement);
+      bs[(i + (e.key === 'ArrowDown' ? 1 : bs.length - 1)) % bs.length]?.focus();
+    });
+    m.addEventListener('focusout', (e) => {
+      if (this._menu === m && !m.contains(e.relatedTarget)) this.closeMenu();
+    });
+
     m.addEventListener('click', (e) => {
       const b = e.target.closest('button');
       if (!b) return;
@@ -369,10 +383,15 @@ export class HUD {
 
   closeMenu() {
     if (!this._menu) return;
-    this._menu.remove();
+    // 先置空再移除：移除会同步触发 focusout，其监听里还会再叫 closeMenu
+    const m = this._menu;
     this._menu = null;
+    const hadFocus = m.contains(document.activeElement);
+    m.remove();
     this.el.menu.setAttribute('aria-expanded', 'false');
     if (this._away) { removeEventListener('pointerdown', this._away, true); this._away = null; }
+    // 焦点若还在菜单里，关掉后送回菜单按钮 —— 否则直接掉到 body
+    if (hadFocus) this.el.menu.focus();
   }
 
   setTheme(mode) {
@@ -407,13 +426,14 @@ export class HUD {
    */
   guide({ full = false, label = '知道了', onClose } = {}) {
     const rows = GUIDE.filter((r) => full || !r.full);
+    const touch = matchMedia('(pointer: coarse)').matches;
     const done = () => { this.hideOverlay(); onClose?.(); };
     this.sheet({
       title: '怎么操作',
       body: `<div class="guide">${rows.map((r) => `
         <div class="guide-row">
           <div class="guide-k">${r.k.map(cap).join('')}</div>
-          <div class="guide-t">${r.t}</div>
+          <div class="guide-t">${(touch && r.touch) || r.t}</div>
         </div>`).join('')}</div>`,
       actions: [{ label, kind: 'primary', on: done }],
       onEsc: done,
@@ -464,7 +484,12 @@ export class HUD {
       s.el.style.display = behind ? 'none' : '';
       s.lb.style.display = behind || !s.active ? 'none' : '';
       s.el.style.left = `${x}px`; s.el.style.top = `${y}px`;
-      s.lb.style.left = `${x + 14}px`; s.lb.style.top = `${y}px`;
+      // 标签贴近右缘时翻到左侧展开，并夹在视口里 —— 不夹取，
+      // 窄屏上的教学要点会被屏幕边裁掉（同文件 tick-tip 的老规矩）
+      const flip = x > innerWidth - 200;
+      s.lb.dataset.side = flip ? 'left' : 'right';
+      s.lb.style.left = `${flip ? x - 14 : x + 14}px`;
+      s.lb.style.top = `${Math.min(Math.max(y, 56), innerHeight - 72)}px`;
     }
   }
 
@@ -557,6 +582,7 @@ export class HUD {
 export class Arrows {
   constructor() { this.items = []; }
 
+  /** 传 dir（世界方向向量）则屏幕角度每帧按相机投影求出；只传 rot 则用固定角度 */
   set(list) {
     this.clear();
     for (const it of list) {
@@ -565,7 +591,7 @@ export class Arrows {
       el.innerHTML = icon(it.ico || 'right');
       el.style.transform = `translate(-50%,-50%) rotate(${it.rot || 0}deg)`;
       document.body.appendChild(el);
-      this.items.push({ el, pos: it.pos.clone() });
+      this.items.push({ el, pos: it.pos.clone(), dir: it.dir ? it.dir.clone().normalize() : null });
     }
   }
 
@@ -574,11 +600,18 @@ export class Arrows {
   update(camera) {
     if (!this.items.length) return;
     const v = new THREE.Vector3();
+    const v2 = new THREE.Vector3();
     for (const it of this.items) {
       v.copy(it.pos).project(camera);
       it.el.style.display = v.z > 1 ? 'none' : '';
       it.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
       it.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
+      if (it.dir) {
+        // 把 pos 与 pos+dir 两点都投到屏幕上求夹角 —— 写死的角度换个机位就是反的
+        v2.copy(it.pos).addScaledVector(it.dir, 30).project(camera);
+        const deg = (Math.atan2(-(v2.y - v.y) * innerHeight, (v2.x - v.x) * innerWidth) * 180) / Math.PI;
+        it.el.style.transform = `translate(-50%,-50%) rotate(${deg}deg)`;
+      }
     }
   }
 }

@@ -74,10 +74,12 @@ export function act3(ctx) {
           const p = c.lantern.parts.get(id);
           const z0 = p.mesh.position.z;
           p.mesh.position.z = z0 + a(2);
-          setTimeout(() => {
+          // 用 wait 而不是裸 setTimeout：快速翻页时 cancelAll 才掐得断，
+          // 否则落料声和位移会打在下一步的画面上
+          wait(i * 0.06).then(() => {
             tween(0.22, (k) => { p.mesh.position.z = z0 + a(2) * (1 - Ease.outBack(k)); });
             c.sfx.play('WOOD_DROP', { pitch: (Math.random() - 0.5) * 4 });
-          }, i * 60);
+          });
         }
         c.hud.setCue('短料 <b>9</b> 根 · 长料 <b>4</b> 根');
       },
@@ -89,8 +91,8 @@ export function act3(ctx) {
       title: '开槽，开叉',
       mood: 'craft',
       cam: { az: 62, el: 46, dist: 190, target: [0, 0, BENCH_Z], snap: true, fit: FIT_BENCH },
-      cue: { ico: 'drag', text: '<em>拖动刻刀</em>，沿着槽来回走' },
-      narration: `先从两根顺枨开始：在顶面铣两条平行的槽。
+      cue: { ico: 'drag', text: '<em>拖动凿子</em>，沿着槽来回走' },
+      narration: `先从两根顺枨开始：在顶面凿两条平行的槽。
 中间留下的这一小条不是废料，是榫舌。
 （气口）
 再做中梁：两头截短，各开一个叉口，正好卡住刚才那条榫舌。`,
@@ -124,10 +126,11 @@ export function act3(ctx) {
           const ops = [OP.SHORTEN, OP.FORK, OP.BEAR_SHOULDER];
           const names = ['截短', '开叉口', '切出承重面'];
           let stage = 0;
+          // 横切：锯与料轴垂直，走刀跨过截短线 —— 顺着料轴走会变成把料从中间剖开
           cut(c, {
             tool: 'saw',
-            from: V(0, -av(4.6), BENCH_Z + av(1.2)),
-            to: V(0, av(4.6), BENCH_Z + av(1.2)),
+            from: V(-av(2.2), a(4), BENCH_Z + av(1.2)),
+            to: V(av(2.2), a(4), BENCH_Z + av(1.2)),
             faceNormal: V(0, 0, -1),
             strokes: 3,
             sfx: 'SAW',
@@ -145,10 +148,12 @@ export function act3(ctx) {
         };
 
         // ── 第一段：两根顺枨开槽 ──
+        // 槽的长向是 Y（自内侧面向外的盲槽），凿子须顺着槽走 ——
+        // 沿 X 走会横着碾过旁白强调要保留的榫舌
         cut(c, {
           tool: 'chisel',
-          from: V(-av(1.6), 0, BENCH_Z + av(1.2)),
-          to: V(av(1.6), 0, BENCH_Z + av(1.2)),
+          from: V(-a(1 / 3), -av(1.0), BENCH_Z + av(1.2)),
+          to: V(-a(1 / 3), av(1.0), BENCH_Z + av(1.2)),
           faceNormal: V(0, 0, -1),
           strokes: 3,
           sfx: 'CHISEL',
@@ -252,10 +257,18 @@ export function act3(ctx) {
           c.lantern.parts.get('LB-B2').mesh.visible = false;
           c.stage.setRecommended({ az: 70, el: 26, dist: 210, target: V(0, 0, BENCH_Z), fit: FIT_BENCH });
 
+          // 三道工序各有各的位置与进刀方向：透眼与柱窝的开口都在侧面，
+          // 刀得横着进 —— 立在顶面剁，孔却在侧面出现，画面就说不通了
           const seq = [
-            { op: OP.MORTISE, name: '凿孔', tool: 'chisel', sfx: 'CHISEL', done: '凿穿了' },
-            { op: OP.SOCKET, name: '铣柱窝', tool: 'router', sfx: 'ROUTER', done: '柱窝好了' },
-            { op: OP.PANEL_SLOT, name: '开装板槽', tool: 'router', sfx: 'ROUTER', done: '装板槽好了' },
+            { op: OP.MORTISE, name: '凿孔', tool: 'chisel', sfx: 'CHISEL', done: '凿穿了',
+              from: V(av(2.0), -av(3.8), BENCH_Z), to: V(av(2.0), av(3.8), BENCH_Z),
+              normal: V(-1, 0, 0), chip: V(1, 0, 0) },
+            { op: OP.SOCKET, name: '铣柱窝', tool: 'router', sfx: 'ROUTER', done: '柱窝好了',
+              from: V(av(2.2), -av(4.4), BENCH_Z), to: V(av(2.2), av(4.4), BENCH_Z),
+              normal: V(-1, 0, 0), chip: V(1, 0, 0) },
+            { op: OP.PANEL_SLOT, name: '开装板槽', tool: 'router', sfx: 'ROUTER', done: '装板槽好了',
+              from: V(3, -av(3.5), BENCH_Z + av(1.4)), to: V(3, av(3.5), BENCH_Z + av(1.4)),
+              normal: V(0, 0, -1), chip: V(0, 0, 1) },
           ];
           let i = 0;
           const run = () => {
@@ -263,12 +276,12 @@ export function act3(ctx) {
             c.hud.setCue(`${s.name} · 第 <b>${i + 1}</b> 道 / 共 3 道`, 'drag');
             cut(c, {
               tool: s.tool,
-              from: V(0, -a(4), BENCH_Z + av(1.4)),
-              to: V(0, a(4), BENCH_Z + av(1.4)),
-              faceNormal: V(0, 0, -1),
+              from: s.from,
+              to: s.to,
+              faceNormal: s.normal,
               strokes: 2,
               sfx: s.sfx,
-              chipDir: V(0, 0, 1),
+              chipDir: s.chip,
               onDone: async () => {
                 c.lantern.addOp('LB-B1', s.op);
                 c.lantern.addOp('LB-B2', s.op);
@@ -276,7 +289,8 @@ export function act3(ctx) {
 
                 if (s.op === OP.SOCKET) {
                   const gh = ghostBox(c.stage.scene, {
-                    size: [J3.NECK, J3.NECK, M.SEC], pos: [a(4), a(3), BENCH_Z],
+                    size: [J3.NECK, J3.NECK, M.SEC],
+                    pos: [a(4), C.COL_AXIS - J3.SOCKET_DY / 2, BENCH_Z],
                     color: PALETTE.SOCKET, opacity: 0.5,
                   });
                   junk.add(gh);
@@ -298,10 +312,11 @@ export function act3(ctx) {
         };
 
         // ── 第一段：切四个榫头 ──
+        // 在榫肩线（x = 内口边界）横切下去，锯身与顺枨垂直
         cut(c, {
           tool: 'saw',
-          from: V(av(3.2), a(4), C.LOWER_Z1 + a(1)),
-          to: V(av(5.4), a(4), C.LOWER_Z1 + a(1)),
+          from: V(C.INNER_FACE, av(2.0), C.LOWER_Z1 + a(1)),
+          to: V(C.INNER_FACE, av(6.0), C.LOWER_Z1 + a(1)),
           faceNormal: V(0, 0, -1),
           strokes: 3,
           sfx: 'SAW',
@@ -362,9 +377,12 @@ export function act3(ctx) {
           parts: ['LB-B1', 'LB-B2'], snap: 6, seatSfx: 'SNAP_IN',
           onSeat: (id, n) => {
             c.hud.setCue(`底盘 <b>${3 + n}</b> / 5 件`);
+            // 涟漪打在**这一根**穿出来的两个榫头上 —— 装的是 −X 侧那根时，
+            // 反馈跑到对面就没人看得见了
+            const sx = id === 'LB-B1' ? 1 : -1;
             for (const sy of [1, -1]) {
               c.fx.ripples.emit(
-                V(C.EDGE, sy * C.RAIL_A_Y, (C.LOWER_Z0 + C.LOWER_Z1) / 2), V(1, 0, 0), { size: 14 },
+                V(sx * C.EDGE, sy * C.RAIL_A_Y, (C.LOWER_Z0 + C.LOWER_Z1) / 2), V(sx, 0, 0), { size: 14 },
               );
             }
           },
@@ -423,7 +441,7 @@ export function act3(ctx) {
             parts: ['UB-B1', 'UB-B2'], snap: 6, seatSfx: 'SNAP_IN',
             onSeat: (id, n) => c.hud.setCue(`上面这个框 <b>${2 + n}</b> / 4 件`),
             onAll: () => {
-              c.hud.toast('一个「井」字，八头出挑', { gold: true });
+              c.hud.toast('一个「井」字，八处出头', { gold: true });
               for (const sx of [1, -1]) for (const sy of [1, -1]) {
                 const beam = new THREE.Mesh(
                   new THREE.CylinderGeometry(3, 3, M.CLEAR, 8, 1, true),
@@ -576,7 +594,9 @@ export function act3(ctx) {
           const d = p.assembly.dir;
           return {
             pos: V(p.home.x - d[0] * a(4), p.home.y, C.LOWER_Z0 - a(1)),
-            ico: 'right', rot: d[0] > 0 ? 0 : 180,
+            // 传世界方向，屏幕角度由 Arrows 每帧按相机投影求出 ——
+            // 写死的角度换个机位就是反的
+            ico: 'right', dir: V(d[0], d[1], 0),
           };
         }));
         c.hud.setCue('柱子 <b>0</b> / 4');

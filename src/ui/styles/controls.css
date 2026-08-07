@@ -41,14 +41,16 @@
 }
 .btn-text:hover:not(:disabled) { color: var(--text); }
 
-/* 图标按钮 */
+/* 图标按钮。视觉 38px，命中区借 ::after 扩到 46px */
 .icon-btn {
   pointer-events: auto;
+  position: relative;
   display: grid; place-items: center;
   width: 38px; height: 38px; border-radius: var(--r-full);
   color: var(--text-3);
   transition: color var(--t-base) var(--ease), background var(--t-base) var(--ease);
 }
+.icon-btn::after { content: ''; position: absolute; inset: -4px; border-radius: inherit; }
 .icon-btn .ico { width: 18px; height: 18px; }
 .icon-btn:hover:not(:disabled) { color: var(--text); background: var(--shade); }
 .icon-btn:disabled { opacity: 0.24; }
@@ -174,14 +176,17 @@ input[type="range"]::-moz-range-thumb {
 .spot-label {
   position: fixed; z-index: var(--z-anchor);
   transform: translate(16px, -50%);
-  pointer-events: none; white-space: nowrap;
+  pointer-events: none;
+  max-width: min(58vw, 240px);   /* 允许换行 —— 窄屏上教学要点不能被屏幕边裁掉 */
   padding: var(--s2) var(--s3);
   border-radius: var(--r-xs);
   background: var(--slip); color: var(--slip-ink);
-  font-size: var(--fs-tiny); letter-spacing: var(--ls-tight);
+  font-size: var(--fs-tiny); letter-spacing: var(--ls-tight); line-height: var(--lh-tight);
   box-shadow: var(--lift-2);
   animation: fade var(--t-fast) var(--ease) both;
 }
+/* 贴近右缘时翻到锚点左侧展开（updateSpots 里按位置写入 data-side） */
+.spot-label[data-side="left"] { transform: translate(calc(-100% - 16px), -50%); }
 .spot-label small {
   display: block; margin-top: 2px;
   font-size: var(--fs-mini); letter-spacing: 0; color: var(--slip-mute);

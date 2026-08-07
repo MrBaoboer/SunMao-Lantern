@@ -84,7 +84,8 @@ for (const vp of VIEWPORTS) {
   page.on('pageerror', (e) => note(vp.name, `未捕获异常: ${e.message}`));
   page.on('requestfailed', (r) => {
     const t = r.failure()?.errorText || '';
-    if (/ERR_ABORTED/.test(t)) return;      // 音频清单缺文件时的正常中止
+    // 只放行音频缺文件时的中止 —— 其他资源的 ERR_ABORTED 是真问题
+    if (/ERR_ABORTED/.test(t) && /\/audio\//.test(r.url())) return;
     note(vp.name, `请求失败: ${r.url()} ${t}`);
   });
 
@@ -142,6 +143,133 @@ for (const vp of VIEWPORTS) {
       const n = String(i + 1).padStart(2, '0');
       await page.screenshot({ path: path.join(SHOT_DIR, `${vp.name}-${n}-${state.id}.png`) });
     }
+  }
+
+  // ── 交互回归（桌面画幅跑一遍就够；go(n) 只进入步骤，不代表任务能走完）──
+  if (!vp.isMobile) {
+    // 软件渲染 + 全屏 bloom 只有个位数帧率，dt 又被钳在 0.05 ——
+    // 一切按时间累计的机制都以慢镜头爬行。关掉 bloom（等价产品的低配档路径），
+    // 时间类断言按此现实放宽
+    await page.evaluate(() => { window.__ctx.stage.bloomEnabled = false; });
+    // seq 任务在 onDone 里立即接续下一个 job，「job 为空」的窗口观察不到，
+    // 给 begin 打个计数补丁，靠序号判断上一个已结束
+    await page.evaluate(() => {
+      const m = window.__ctx.mach;
+      window.__jobSeq = 0;
+      const ob = m.begin.bind(m);
+      m.begin = (o) => { window.__jobSeq++; return ob(o); };
+    });
+    const goStep = async (id, ms = 1100) => {
+      await page.evaluate((s) => window.__engine.goToStep(s), id);
+      await page.waitForTimeout(ms);
+    };
+    const runJobs = async (label, maxJobs = 8) => {
+      for (let n = 0; n < maxJobs; n++) {
+        const has = await page.waitForFunction(() => !!window.__ctx.mach.job, null, { timeout: 6000 }).catch(() => null);
+        if (!has) return;
+        const seq = await page.evaluate(() => window.__jobSeq);
+        // evaluate 会一直等页面里的 Promise —— autoRun 卡死时必须有硬超时兜底
+        await page.evaluate(() => Promise.race([
+          window.__ctx.mach.autoRun(),
+          new Promise((r) => setTimeout(r, 20000)),
+        ]));
+        await page.waitForFunction((s) => !window.__ctx.mach.job || window.__jobSeq > s, seq, { timeout: 25000 })
+          .catch(() => note(vp.name, `${label}: 加工任务没有走完`));
+        await page.waitForTimeout(1000);
+      }
+      console.log(`    ${label} 加工完成`);
+    };
+    const seatAll = async (label) => {
+      const has = await page.waitForFunction(() => !!window.__ctx.drag.session, null, { timeout: 6000 }).catch(() => null);
+      if (!has) { note(vp.name, `${label}: 没有出现装配任务`); return; }
+      await page.evaluate(() => Promise.race([
+        window.__ctx.drag.autoSeatAll(),
+        new Promise((r) => setTimeout(r, 20000)),
+      ]));
+      await page.waitForFunction(() => !window.__ctx.drag.session?.pending?.size, null, { timeout: 20000 })
+        .catch(() => note(vp.name, `${label}: 装配没有完成`));
+      await page.waitForTimeout(600);
+      console.log(`    ${label} 装配完成`);
+    };
+
+    await goStep('C2'); await runJobs('C2');
+    await goStep('C3'); await seatAll('C3');
+    await goStep('C4'); await runJobs('C4');
+    await goStep('C5'); await seatAll('C5');
+    await goStep('C7'); await runJobs('C7');
+    await goStep('C8'); await seatAll('C8');
+
+    // 快速翻页：上一步的僵尸回调不能落到下一步上
+    await page.evaluate(() => { window.__engine.go(17); window.__engine.go(2); window.__engine.go(9); });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => window.__engine.go(0));
+    await page.waitForTimeout(900);
+    const settled = await page.evaluate(() => window.__engine.current?.id);
+    if (settled !== 'A1') note(vp.name, `快速翻页后应停在 A1，实际 ${settled}`);
+
+    // M1 长按引火：低帧率下点满一圈要几十秒，只断言「按住确实在积累亮度」
+    await goStep('D5', 1600);
+    await page.evaluate(() => document.querySelector('.door[data-m="M1"]')?.click());
+    await page.waitForTimeout(1400);
+    const fireBox = await page.locator('#fire').boundingBox().catch(() => null);
+    if (fireBox) {
+      await page.mouse.move(fireBox.x + fireBox.width / 2, fireBox.y + fireBox.height / 2);
+      await page.mouse.down();
+      const litOk = await page.waitForFunction(() => window.__ctx.lantern.litLevel > 0.001 || window.__ctx.state.lit, null, { timeout: 15000 })
+        .then(() => true).catch(() => false);
+      await page.mouse.up();
+      if (!litOk) note(vp.name, 'M1 按住引火没有反应');
+    } else note(vp.name, 'M1 没有出现点灯按钮');
+    await page.evaluate(() => {
+      document.querySelectorAll('.dock button').forEach((b) => { if (b.textContent.includes('回去')) b.click(); });
+    });
+    await page.waitForTimeout(900);
+
+    // M3 海报：画面区域必须真的截到灯笼，不能是空白
+    await page.evaluate(() => document.querySelector('.door[data-m="M3"]')?.click());
+    await page.waitForTimeout(1400);
+    await page.click('.wish >> nth=0', { timeout: 5000 }).catch(() => note(vp.name, 'M3 没有出现愿望列表'));
+    await page.click('#go', { timeout: 3000 }).catch(() => {});
+    // 落笔动画点「写快一点」跳过逐字，低帧率下才等得完
+    await page.waitForTimeout(800);
+    await page.evaluate(() => {
+      document.querySelectorAll('#overlay button').forEach((b) => { if (b.textContent.includes('写快一点')) b.click(); });
+    });
+    await page.waitForSelector('img.poster', { timeout: 60000 })
+      .catch(() => note(vp.name, 'M3 海报没有生成'));
+    const posterOk = await page.evaluate(async () => {
+      const img = document.querySelector('img.poster');
+      if (!img) return false;
+      await img.decode();
+      const cv = document.createElement('canvas');
+      cv.width = 64; cv.height = 64;
+      const g = cv.getContext('2d');
+      // 采样海报中部（灯笼截图的落点）：空白只剩纯渐变，亮度方差趋近 0
+      g.drawImage(img, 0, img.naturalHeight * 0.22, img.naturalWidth, img.naturalHeight * 0.4, 0, 0, 64, 64);
+      const d = g.getImageData(0, 0, 64, 64).data;
+      let sum = 0, sq = 0;
+      const n = d.length / 4;
+      for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 3; sum += l; sq += l * l; }
+      const mean = sum / n;
+      return Math.sqrt(sq / n - mean * mean) > 6;
+    }).catch(() => false);
+    if (!posterOk) note(vp.name, 'M3 海报的画面区域是空白（截图前没有渲染）');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(900);
+
+    // M5 放一发，退出后不许再有后续（异步链守卫）
+    await page.evaluate(() => document.querySelector('.door[data-m="M5"]')?.click());
+    await page.waitForTimeout(1500);
+    await page.mouse.click(Math.round(vp.width / 2), Math.round(vp.height * 0.42));
+    const burstOk = await page.waitForFunction(() => window.__ctx.fx.fireworks.parts.length > 0, null, { timeout: 20000 })
+      .then(() => true).catch(() => false);
+    if (!burstOk) note(vp.name, 'M5 点击没有放出烟花');
+    await page.evaluate(() => {
+      document.querySelectorAll('.dock button').forEach((b) => { if (b.textContent.includes('回去')) b.click(); });
+    });
+    await page.waitForTimeout(1600);
+    const leak = await page.evaluate(() => window.__ctx.fx.fireworks.parts.length);
+    if (leak > 0) note(vp.name, `M5 退出后烟花仍在继续（${leak} 粒）`);
   }
 
   // 五个互动模块的入口
