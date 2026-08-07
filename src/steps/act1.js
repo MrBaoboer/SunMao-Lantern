@@ -80,7 +80,10 @@ export function act1(ctx) {
       id: 'B1', phase: 1,
       title: '凸的叫榫，凹的叫卯',
       mood: 'craft',
-      cam: { az: -118, el: 16, dist: 210, target: [0, 0, 96], snap: true, fit: { r: 82, h: 44 } },
+      // 左卯右榫，且要看得见卯眼。卯是自左端面向里挖的盲眼，开口朝 −X ——
+      // 相机得站到 −X 那一侧才看得进去；同时方位角要落在 (90°, 180°) 里，
+      // 屏幕右方才是 −X，凸出来的那根才在右边。
+      cam: { az: 128, el: 14, dist: 210, target: [0, 0, 96], snap: true, fit: { r: 82, h: 44 } },
       cps: 3.6,
       // 画面随时可以被拖着转，所以指代一律按「长什么样」，不按左右
       cue: { ico: 'drag', text: '<em>拖动</em>凸出来的那根，推进对面的孔里' },
@@ -132,6 +135,7 @@ export function act1(ctx) {
         const seat = async () => {
           if (done) return;
           done = true;
+          c.guides.clear();
           c.hud.setCue('');
           const x0 = A.position.x;
           await tween(0.35, (k) => { A.position.x = x0 + (SEATED - x0) * k; }, { ease: Ease.inCubic });
@@ -178,7 +182,7 @@ export function act1(ctx) {
       id: 'B2', phase: 1,
       title: '直榫：穿过去，露一截',
       mood: 'craft',
-      cam: { az: -62, el: 16, dist: 200, target: [0, 0, 96], snap: true, fit: { r: 78, h: 40 } },
+      cam: { az: 118, el: 14, dist: 200, target: [0, 0, 96], snap: true, fit: { r: 78, h: 40 } },
       cue: { ico: 'drag', text: '<em>拖动</em>带榫头的那根，把榫头推进孔里' },
       narration: `第一种，直榫 —— 最基础，也最常见。
 我们这盏灯用的是它的贯穿做法，叫「透榫」：榫头要穿过整根木条，还要在另一头露出一小截。
@@ -218,13 +222,15 @@ export function act1(ctx) {
         junk.add(A, B);
         c.stage.scene.add(A, B);
 
-        c.hud.addSpot({ pos: V(av(1.2), 0, Z + a(2)), badge: '定', label: '这一根不动', color: 'var(--jade)' });
-
+        // 「定」那枚圆点原先钉在横料上方 2a 处 —— 悬在空中，与它指的那根木条之间
+        // 没有任何视觉联系，签又是收起的，看到的只是一个不知所指的圆圈。
+        // 哪一根该动，操作提示里「带榫头的那根」已经说死了。
         let done = false;
         const SEATED = -av(1.3);   // 端面抵住横料，榫头正好露出 6 mm
         const seat = async () => {
           if (done) return;
           done = true;
+          c.guides.clear();
           c.hud.setCue('');
           const x0 = A.position.x;
           await tween(0.4, (k) => { A.position.x = x0 + (SEATED - x0) * k; }, { ease: Ease.inCubic });
@@ -232,7 +238,6 @@ export function act1(ctx) {
           c.sfx.play('SNAP_IN');
           c.fx.ripples.emit(V(av(1.8), 0, Z), V(1, 0, 0));
           c.hud.toast('看，穿出来了', { gold: true });
-          c.stage.setRecommended({ az: -74, el: 12, dist: 130, target: V(av(1.9), 0, Z), fit: { r: 30, h: 24 } });
           engine.done();
         };
         c.simpleDrag(A, V(1, 0, 0), av(3.6) + SEATED, Z, seat, null, junk);
@@ -284,18 +289,17 @@ export function act1(ctx) {
         junk.add(D1, D2);
         c.stage.scene.add(D1, D2);
 
-        c.hud.addSpot({ pos: V(-av(0.75), 0, Z + av(1.4)), ico: 'down', label: '叉口落进槽', active: true });
-        c.hud.addSpot({
-          pos: V(av(0.75), 0, Z + av(1.4)), ico: 'up', label: '榫舌卡回叉口',
-          color: 'var(--jade)', active: true,
-        });
-
+        // 这里曾经钉着两枚常开标注（「叉口落进槽」「榫舌卡回叉口」）。
+        // 两张签相距不到 20 mm，在屏幕上直接叠在一起，而且正好盖住要拖进去的那道槽 ——
+        // 说的又是旁白刚念过的同一句话。到位后的双记咬合音与「两个方向，同时锁住」
+        // 已经把这件事讲完了，签留着只剩遮挡。
         let done = false;
         // 落到底：叉口顶到槽底，同时榫舌顶到叉口的顶 —— 两个面同时贴上
         const SEATED = Z + d;
         const seat = async () => {
           if (done) return;
           done = true;
+          c.guides.clear();
           c.hud.setCue('');
           const z0 = D2.position.z;
           await tween(0.4, (k) => { D2.position.z = z0 + (SEATED - z0) * k; }, { ease: Ease.inCubic });
@@ -306,7 +310,11 @@ export function act1(ctx) {
           c.hud.toast('两声 —— 两个方向，同时锁住', { gold: true });
           engine.done();
         };
-        c.simpleDrag(D2, V(0, 0, -1), a(2.5) - d, Z, seat, null, junk);
+        // 两侧各钉一枚向下的箭头 —— 这一步要的是「往下落」，
+        // 而叉口与槽都藏在两块料之间，光看画面看不出该往哪个方向使劲
+        c.simpleDrag(D2, V(0, 0, -1), a(2.5) - d, Z, seat, null, junk, {
+          arrows: [V(-av(1.3), 0, Z + av(2.4)), V(av(1.3), 0, Z + av(2.4))],
+        });
         c.hud.setAlts([{ label: '帮我落下', ico: 'spark', onClick: seat }]);
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },

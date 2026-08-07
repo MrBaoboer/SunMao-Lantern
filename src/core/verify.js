@@ -9,7 +9,7 @@
  */
 
 import { a, M, C, J1, J2, J3, J4, J5, J6 } from './modulus.js';
-import { buildPart, WOOD_IDS, PANEL_IDS, partMeta, blankOf } from './parts.js';
+import { buildPart, WOOD_IDS, PANEL_IDS, partMeta } from './parts.js';
 import { interferenceVolume, boxesOverlap, boxIntersection, boxVolume } from './boxcsg.js';
 
 const results = [];

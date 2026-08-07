@@ -333,15 +333,86 @@ export function partMeta(id) {
 
 const cache = new Map();
 
+const LO = ['x0', 'y0', 'z0'];
+const HI = ['x1', 'y1', 'z1'];
+
+/**
+ * 正在走的这一刀，从一个切除盒里实际啃掉的那一块。
+ *
+ * 两件事：
+ *
+ * **这一刀走过哪儿。** 一道工序常常在构件上removes好几处料 —— 顺枨顶面是两条平行的槽，
+ * 横枨两头各一个榫。刀这一趟只经过其中一处，其余的不该跟着一起消失。
+ * 判据是刃尖的横截位置：进给轴由走刀方向定、进刀轴由攻角定，剩下的那一个轴上，
+ * 刃尖必须落在盒的范围内，这个盒才算「刀正压在上面」。
+ *
+ * **啃到多深。** 自入刀面向里推进 t —— 一刀一层，这正是凿和铣的实际去料方式。
+ *
+ * @param {object} b 切除盒（构件本地坐标）
+ * @param {{travel:0|1|2, axis:0|1|2, dir:-1|1, lane:number[], t:number}} k
+ * @returns {object|null} 这一刀啃掉的那一块；刀没走到这个盒上则为 null
+ */
+function onLane(b, k, lane) {
+  // 既不是进给轴、也不是进刀轴的那一个轴，就是「刀压在哪一条道上」
+  const cross = [0, 1, 2].find((i) => i !== k.travel && i !== k.axis);
+  if (cross !== undefined) {
+    const lo = b[LO[cross]], hi = b[HI[cross]];
+    // 容差 1 mm：榫肩线正好压在盒的边界上，差一丝就整条切不着
+    if (lane[cross] < lo - 1 || lane[cross] > hi + 1) return false;
+  }
+  /*
+   * 进刀轴上也得认一认。
+   *
+   * 同一道工序可能在两个**深度**上各去一块 —— 中梁两头各要切一个承重面，
+   * 刀在这一头，那一头不该跟着掉料。判据是：刃尖要么就在这个盒的深度范围里，
+   * 要么这个盒落在「入刀面到刃尖」之间（刀是穿过它才到这个深度的）。
+   */
+  const lo = b[LO[k.axis]], hi = b[HI[k.axis]];
+  const at = lane[k.axis];
+  if (at >= lo - 1 && at <= hi + 1) return true;
+  return k.dir < 0 ? lo >= at - 1 : hi <= at + 1;
+}
+
+function carveBox(b, k) {
+  if (!onLane(b, k, k.lane)) return null;
+  const lo = b[LO[k.axis]], hi = b[HI[k.axis]];
+  const depth = (hi - lo) * Math.max(0, Math.min(1, k.t));
+  if (depth <= 0) return null;
+  const out = { ...b };
+  if (k.dir < 0) out[LO[k.axis]] = hi - depth;   // 自上（或外）向里啃
+  else out[HI[k.axis]] = lo + depth;
+
+  /*
+   * 进给轴也得裁。
+   *
+   * 一根横枨上有两个透眼，隔着大半根料；刀顺着料走一趟，两个眼却同时在变深 ——
+   * 刀还在这一头，那一头的料已经没了。所以只啃**刃尖真的扫过**的那一段：
+   * 刀走到哪儿，料才少到哪儿。连续的长槽因此是一点点变长再变深，
+   * 两个分开的孔则是刀经过谁、谁才开始掉料。
+   */
+  if (k.swept) {
+    const t0 = Math.max(out[LO[k.travel]], k.swept[0]);
+    const t1 = Math.min(out[HI[k.travel]], k.swept[1]);
+    if (t1 - t0 <= 0) return null;
+    out[LO[k.travel]] = t0;
+    out[HI[k.travel]] = t1;
+  }
+  return out;
+}
+
 /**
  * 生成构件实体。
  * @param {string} id 构件编号
  * @param {Set<string>|'all'|'blank'} ops 已完成的工序集合
+ * @param {{tag:string, travel:0|1|2, axis:0|1|2, dir:-1|1, lane:number[], t:number}} [carve]
+ *   正在走的这一刀。该标签的切除盒不从 ops 里取，改由 carveBox() 现算 ——
+ *   于是料是跟着刀一点点没的，不是走完三刀之后整块跳出来。
  * @returns {Solid}
  */
-export function buildPart(id, ops = 'all') {
+export function buildPart(id, ops = 'all', carve = null) {
   const key = `${id}|${ops === 'all' ? '*' : ops === 'blank' ? '0' : [...ops].sort().join(',')}`;
-  if (cache.has(key)) return cache.get(key);
+  // 走刀中的形态每帧都不同，不进缓存，也不能污染缓存
+  if (!carve && cache.has(key)) return cache.get(key);
 
   const d = DEFS[id];
   if (!d) throw new Error(`未知构件：${id}`);
@@ -351,9 +422,20 @@ export function buildPart(id, ops = 'all') {
   else if (ops === 'blank') active = [];
   else active = cuts.filter((c) => ops.has(c.tag));
 
-  const solid = new Solid(blank, active.map((c) => c.b));
+  const boxes = active.map((c) => c.b);
+  if (carve) {
+    for (const c of cuts) {
+      if (c.tag !== carve.tag) continue;
+      // 之前几趟已经走完的道：整块留着，别让它随着这一趟重新长回去
+      if (carve.done?.some((l) => onLane(c.b, carve, l))) { boxes.push(c.b); continue; }
+      const b = carveBox(c.b, carve);
+      if (b) boxes.push(b);
+    }
+  }
+
+  const solid = new Solid(blank, boxes);
   solid.partId = id;
-  cache.set(key, solid);
+  if (!carve) cache.set(key, solid);
   return solid;
 }
 

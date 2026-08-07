@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import {
   V, a, av, C, M, J2, J3, J4, PALETTE, Junk, BENCH_Z, BENCH_TOP, ghostBox, outlineBox,
-  FIT_FRAME, FIT_RING, FIT_BENCH,
+  FIT_RING, FIT_BENCH, AIM_BENCH,
 } from './util.js';
 import { OP } from '../core/parts.js';
 import { tween, Ease, wait } from '../util/tween.js';
@@ -78,6 +78,12 @@ export function act3(ctx) {
           // 否则这一批位移会打在下一步的画面上
           wait(i * 0.06).then(() => {
             tween(0.22, (k) => { p.mesh.position.z = z0 + a(2) * (1 - Ease.outBack(k)); });
+            // 落到台面上一根一记。十三下依次响过去，「一共十三根」这句话
+            // 就不只是字幕上的一个数字。长料压低两个半音，听得出比短料沉
+            c.sfx.play('WOOD_DROP', {
+              pitch: (id.startsWith('PL') ? -2 : 1.5) + ((i * 7) % 5) * 0.6,
+              gain: 0.55,
+            });
           });
         }
         c.hud.setCue('短料 <b>9</b> 根 · 长料 <b>4</b> 根');
@@ -89,7 +95,9 @@ export function act3(ctx) {
       id: 'C2', phase: 2,
       title: '开槽，开叉',
       mood: 'craft',
-      cam: { az: 64, el: 30, dist: 190, target: [0, 0, BENCH_Z], snap: true, fit: FIT_BENCH },
+      // 槽是自 −Y 侧面向里开的盲槽 —— 相机站到 −Y 这一侧，
+      // 凿出来的缺口才朝着用户，而不是背过去
+      cam: { az: -64, el: 26, dist: 150, target: AIM_BENCH, snap: true, fit: FIT_BENCH },
       cue: { ico: 'drag', text: '<em>拖动凿子</em>，沿着槽来回走' },
       narration: `先从两根顺枨开始：在顶面凿两条平行的槽。
 中间留下的这一小条不是废料，是榫舌。
@@ -119,63 +127,109 @@ export function act3(ctx) {
           only(c, ['LB-C1']);
           c.lantern.setOps('LB-C1', 'blank');
           bench(c, 'LB-C1', [0, 0, 0]);
-          c.stage.setRecommended({ az: 40, el: 22, dist: 200, target: V(0, 0, BENCH_Z), fit: FIT_BENCH });
-          c.hud.setCue('<em>拖动锯</em>，沿线来回锯', 'drag');
-
-          const ops = [OP.SHORTEN, OP.FORK, OP.BEAR_SHOULDER];
-          const names = ['截短', '开叉口', '切出承重面'];
-          let stage = 0;
-          // 横切：锯与料轴垂直，走刀跨过截短线 —— 顺着料轴走会变成把料从中间剖开。
-          // 刃线取料厚的一半：锯板一半没在缝里、一半露在外面，才像在锯
-          cut(c, {
-            tool: 'saw',
-            from: V(-av(2.2), J2.BEAM_LEN / 2, BENCH_Z),
-            to: V(av(2.2), J2.BEAM_LEN / 2, BENCH_Z),
-            faceNormal: V(0, 0, -1),
-            strokes: 3,
-            sfx: 'SAW',
-            chipDir: V(0, 0, 1),
-            onStroke: (n) => {
-              c.lantern.addOp('LB-C1', ops[stage++]);
-              c.hud.setCue(`${names[n - 1]} · <b>${n}</b> / 3`);
+          /*
+           * 三道工序，各有各的刀、各有各的走法、各有各的机位。
+           *
+           * 三道原先共用一条「沿 X 横跨 ±26」的走刀线。对截短是对的（横切要跨过料宽），
+           * 对另外两道就完全不对：叉口只有 4 mm 宽，刀却在料外飞出两个身位；
+           * 承重面在端头的**下半段**，从顶面进刀等于要先穿过上半段还在的料。
+           * 于是动作与结果对不上 —— 手往一个方向拉，料在另一个地方少。
+           *
+           * 陈列后中梁占 x∈[−6,6]、y∈[−60,60]、z∈[90,102]，活都在 +Y 那一头：
+           *   截短    锯自顶面切下，横跨料宽（travel X，攻角 −Z）
+           *   开叉口  凿自端面顺着槽往里剔（travel Y，攻角 −Z）—— 叉口是开在端面上的
+           *   切承重面 凿自端面横着推（travel X，攻角 −Y）—— 去的是端头下半段
+           */
+          const END = J2.BEAM_LEN / 2;            // +Y 那一头的端面 y = 48
+          const seq = [
+            {
+              op: OP.SHORTEN, name: '截短', tool: 'saw', sfx: 'SAW', verb: '锯', tip: '另一头同样一锯',
+              from: V(-av(1.5), END, BENCH_Z), to: V(av(1.5), END, BENCH_Z),
+              normal: V(0, 0, -1), chip: V(0, 0, 1),
+              cam: { az: 56, el: 20, dist: 170, target: [0, 40, BENCH_Z + 8], fit: { r: 54, h: 34 } },
             },
-            onDone: () => {
-              c.hud.setCue('中梁做好了');
-              c.hud.toast('端头那个平面，等会儿要坐在槽底上', { gold: true });
-              engine.done();
+            {
+              op: OP.FORK, name: '开叉口', tool: 'chisel', sfx: 'CHISEL', verb: '凿子',
+              from: V(0, av(4.8), BENCH_TOP - J2.SLOT_D / 2),
+              to: V(0, av(3.2), BENCH_TOP - J2.SLOT_D / 2),
+              normal: V(0, 0, -1), chip: V(0, 0, 1),
+              cam: { az: 62, el: 16, dist: 118, target: [0, 44, BENCH_Z + 18], fit: { r: 26, h: 30 } },
+            },
+            {
+              op: OP.BEAR_SHOULDER, name: '切承重面', tool: 'chisel', sfx: 'CHISEL', verb: '凿子',
+              from: V(-av(1.2), END - a(1 / 4), BENCH_Z - a(1 / 4)),
+              to: V(av(1.2), END - a(1 / 4), BENCH_Z - a(1 / 4)),
+              normal: V(0, -1, 0), chip: V(0, 1, 0),
+              cam: { az: 34, el: 12, dist: 150, target: [0, 52, BENCH_Z + 4], fit: { r: 42, h: 28 } },
+            },
+          ];
+          let i = 0;
+          const run = () => {
+            const s = seq[i];
+            c.stage.setRecommended({ ...s.cam, target: V(...s.cam.target) });
+            c.hud.setCue(`<em>拖动${s.verb}</em>${s.name} · 第 <b>${i + 1}</b> 道 / 共 3 道`, 'drag');
+            cut(c, {
+              tool: s.tool,
+              from: s.from,
+              to: s.to,
+              faceNormal: s.normal,
+              strokes: 2,
+              sfx: s.sfx,
+              chipDir: s.chip,
+              carve: { parts: ['LB-C1'], tag: s.op },
+              onDone: async () => {
+                c.lantern.addOp('LB-C1', s.op);     // 两头对称，另一头随之成形
+                if (s.tip) c.hud.toast(s.tip, { dur: 1600 });
+                i++;
+                if (i < seq.length) { await wait(0.6); run(); return; }
+                c.hud.setCue('中梁做好了');
+                c.hud.toast('端头那个平面，等会儿要坐在槽底上', { gold: true });
+                engine.done();
+              },
+            });
+          };
+          run();
+        };
+
+        // ── 第一段：顺枨顶面两条槽 ──
+        // 一条槽一趟刀。以前是走一趟、出两条 —— 刀在这一条上来回，另一条却自己开好了，
+        // 这正是「动作和加工结果对不上」最扎眼的一处。
+        // 槽的长向是 Y（自内侧面向外的盲槽），凿子须顺着槽走；沿 X 走会横着碾过榫舌。
+        // 陈列后槽落在 y ∈ [−6, 0]、深至顶面下 6：走刀线取槽的半深，前后各留余量。
+        const SLOT_X = a(1 / 3);          // 两条槽的中心线 x = ∓4
+        const groove = (i) => {
+          const x = i === 0 ? -SLOT_X : SLOT_X;
+          c.hud.setCue(`<em>拖动凿子</em>凿第 <b>${i + 1}</b> 条槽 · 共 2 条`, 'drag');
+          cut(c, {
+            tool: 'chisel',
+            from: V(x, -a(5 / 6), BENCH_TOP - J2.SLOT_D / 2),
+            to: V(x, a(1 / 3), BENCH_TOP - J2.SLOT_D / 2),
+            faceNormal: V(0, 0, -1),
+            strokes: 2,
+            sfx: 'CHISEL',
+            chipDir: V(0, 0, 1),
+            carve: { parts: ['LB-A1'], tag: OP.BEAM_SLOT },
+            onStroke: (n, total) => c.hud.setCue(`第 ${i + 1} 条槽 · 第 <b>${n}</b> 刀 / 共 ${total} 刀`),
+            onDone: async () => {
+              if (i === 0) {
+                c.hud.toast('一条好了，旁边再来一条', { dur: 1600 });
+                await wait(0.7);
+                groove(1);
+                return;
+              }
+              c.lantern.addOp('LB-A1', OP.BEAM_SLOT);
+              c.lantern.addOp('LB-A2', OP.BEAM_SLOT);
+              c.hud.toast('中间留下的这一条，是榫舌', { gold: true });
+              const p2 = c.lantern.parts.get('LB-A2');
+              p2.mesh.visible = true;
+              await tween(1.0, (k) => c.lantern.setCutReveal('LB-A2', k));
+              c.hud.setCue('两根顺枨都开好了 · 接着做中梁');
+              await wait(0.9);
+              beam();
             },
           });
         };
-
-        // ── 第一段：两根顺枨开槽 ──
-        // 槽的长向是 Y（自内侧面向外的盲槽），凿子须顺着槽走 ——
-        // 沿 X 走会横着碾过旁白强调要保留的榫舌。
-        // 陈列后这条槽落在 y ∈ [−6, 0]、深至顶面下 6：走刀线取槽的半深，
-        // 前后各留一点余量，手势才拉得开。
-        cut(c, {
-          tool: 'chisel',
-          from: V(-a(1 / 3), -a(5 / 6), BENCH_TOP - J2.SLOT_D / 2),
-          to: V(-a(1 / 3), a(1 / 3), BENCH_TOP - J2.SLOT_D / 2),
-          faceNormal: V(0, 0, -1),
-          strokes: 3,
-          sfx: 'CHISEL',
-          chipDir: V(0, 0, 1),
-          onStroke: (n, total) => {
-            c.hud.setCue(`第 <b>${n}</b> 刀 / 共 ${total} 刀`);
-            c.lantern.setCutReveal('LB-A1', n / total);
-          },
-          onDone: async () => {
-            c.lantern.addOp('LB-A1', OP.BEAM_SLOT);
-            c.lantern.addOp('LB-A2', OP.BEAM_SLOT);
-            c.hud.toast('中间留下的这一条，是榫舌', { gold: true });
-            const p2 = c.lantern.parts.get('LB-A2');
-            p2.mesh.visible = true;
-            await tween(1.0, (k) => c.lantern.setCutReveal('LB-A2', k));
-            c.hud.setCue('两根顺枨都开好了 · 接着做中梁');
-            await wait(0.9);
-            beam();
-          },
-        });
+        groove(0);
       },
       exit() { junk.clear(); },
     },
@@ -228,11 +282,11 @@ export function act3(ctx) {
       title: '切榫头，凿透眼',
       mood: 'craft',
       cam: { az: 30, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: { r: 80, h: 54 } },
-      cue: { ico: 'drag', text: '<em>拖动锯</em>，切出四个榫头' },
+      cue: { ico: 'drag', text: '<em>拖动锯</em>，沿榫肩线切下去' },
       narration: `四个端头切出榫头。榫头要细而长，才穿得过整根木条。
 这里有个容易忽略的地方：榫头不居中，要往里偏一点 —— 外侧留出的那一半，是给柱子留的位置。
 （气口）
-再取两根新料做横枨。三道工序：把孔凿穿，让榫头整根穿出去；外侧铣一个方口，那是柱子的窝；顶面再开一条又长又浅的槽，格心最后就插在这儿。`,
+再取两根新料做横枨。三道工序：把孔凿穿，让榫头整根穿出去；外侧凿一个方口，那是柱子的窝；顶面再开一条又长又浅的槽，格心最后就插在这儿。`,
       note: {
         title: '榫头为什么不居中',
         body: '往里偏，外侧就空出一半的厚度。那半边不是浪费 —— 是留给<em>柱子</em>的。',
@@ -257,37 +311,69 @@ export function act3(ctx) {
           c.lantern.setOps('LB-B2', 'blank');
           bench(c, 'LB-B1', [0, 0, 0]);
           c.lantern.parts.get('LB-B2').mesh.visible = false;
-          c.stage.setRecommended({ az: 25, el: 28, dist: 210, target: V(0, 0, BENCH_Z), fit: FIT_BENCH });
-
-          // 三道工序各有各的位置与进刀方向：透眼与柱窝的开口都在侧面，
-          // 刀得横着进 —— 立在顶面剁，孔却在侧面出现，画面就说不通了。
-          // 陈列后这根横枨占 x ∈ [−6, 6]：柱窝挖掉的是 x ∈ [0, 6] 那半边，
-          // 所以刀一律从 +X 侧进，刃线落在被挖掉的那半边里。
+          /*
+           * 三道工序各有各的位置与进刀方向：透眼与柱窝的开口都在侧面，
+           * 刀得横着进 —— 立在顶面剁，孔却在侧面出现，画面就说不通了。
+           * 陈列后这根横枨占 x ∈ [−6, 6]：柱窝挖掉的是 x ∈ [0, 6] 那半边，
+           * 所以刀一律从 +X 侧进，刃线落在被挖掉的那半边里。
+           *
+           * **一处一趟刀。** 透眼与柱窝各有两个，隔着大半根料。原先一趟刀
+           * 扫完 110 mm 全长，最后只掉下两个 4 mm 的小孔 —— 手上走的距离
+           * 和少掉的料完全不成比例，看着就是「动作和结果没关系」。
+           * 现在一个孔一趟，走刀线只跨过那个孔本身。通长的装板槽仍是一刨到底，
+           * 因为它本来就是一条通长的槽。
+           */
           const seq = [
-            { op: OP.MORTISE, name: '凿孔', tool: 'chisel', sfx: 'CHISEL', done: '凿穿了',
-              from: V(a(1 / 6), -av(3.8), BENCH_Z), to: V(a(1 / 6), av(3.8), BENCH_Z),
-              normal: V(-1, 0, 0), chip: V(1, 0, 0) },
-            { op: OP.SOCKET, name: '铣柱窝', tool: 'router', sfx: 'ROUTER', done: '柱窝好了',
-              from: V(J3.SOCKET_DX / 2, -av(4.4), BENCH_Z), to: V(J3.SOCKET_DX / 2, av(4.4), BENCH_Z),
-              normal: V(-1, 0, 0), chip: V(1, 0, 0) },
-            { op: OP.PANEL_SLOT, name: '开装板槽', tool: 'router', sfx: 'ROUTER', done: '装板槽好了',
-              from: V(3, -av(3.5), BENCH_TOP - J4.SLOT_LOW_D / 2),
-              to: V(3, av(3.5), BENCH_TOP - J4.SLOT_LOW_D / 2),
-              normal: V(0, 0, -1), chip: V(0, 0, 1) },
+            { op: OP.MORTISE, name: '凿孔', unit: '个孔', tool: 'chisel', sfx: 'CHISEL',
+              verb: '凿子', done: '两个孔都凿穿了',
+              normal: V(-1, 0, 0), chip: V(1, 0, 0),
+              cam: { az: 25, el: 24, dist: 158, fit: { r: 46, h: 34 } },
+              lanes: [
+                [V(a(1 / 6), av(3.2), BENCH_Z), V(a(1 / 6), av(4.5), BENCH_Z)],
+                [V(a(1 / 6), -av(4.5), BENCH_Z), V(a(1 / 6), -av(3.2), BENCH_Z)],
+              ] },
+            { op: OP.SOCKET, name: '凿柱窝', unit: '个窝', tool: 'chisel', sfx: 'CHISEL',
+              verb: '凿子', done: '两个柱窝都好了',
+              normal: V(-1, 0, 0), chip: V(1, 0, 0),
+              cam: { az: 25, el: 24, dist: 158, fit: { r: 46, h: 34 } },
+              lanes: [
+                [V(J3.SOCKET_DX / 2, av(3.8), BENCH_Z), V(J3.SOCKET_DX / 2, av(4.9), BENCH_Z)],
+                [V(J3.SOCKET_DX / 2, -av(4.9), BENCH_Z), V(J3.SOCKET_DX / 2, -av(3.8), BENCH_Z)],
+              ] },
+            { op: OP.PANEL_SLOT, name: '刨装板槽', unit: '', tool: 'plane', sfx: 'PLANE_SHAVE',
+              verb: '刨子', done: '装板槽好了',
+              normal: V(0, 0, -1), chip: V(0, 0, 1),
+              cam: { az: 30, el: 30, dist: 200, fit: { r: 58, h: 34 } },
+              lanes: [[
+                V(3, -av(3.8), BENCH_TOP - J4.SLOT_LOW_D / 2),
+                V(3, av(3.8), BENCH_TOP - J4.SLOT_LOW_D / 2),
+              ]] },
           ];
           let i = 0;
+          let lane = 0;
           const run = () => {
             const s = seq[i];
-            c.hud.setCue(`${s.name} · 第 <b>${i + 1}</b> 道 / 共 3 道`, 'drag');
+            const [from, to] = s.lanes[lane];
+            const many = s.lanes.length > 1;
+            // 机位跟着这一趟的活走 —— 两个孔在料的两头，盯着料中心看不清任何一个
+            const mid = from.clone().add(to).multiplyScalar(0.5);
+            c.stage.setRecommended({ ...s.cam, target: V(0, mid.y, BENCH_Z + 14) });
+            c.hud.setCue(many
+              ? `<em>拖动${s.verb}</em>${s.name} · 第 <b>${lane + 1}</b> ${s.unit} / 共 ${s.lanes.length}`
+              : `<em>拖动${s.verb}</em>${s.name} · 第 <b>${i + 1}</b> 道 / 共 3 道`, 'drag');
             cut(c, {
               tool: s.tool,
-              from: s.from,
-              to: s.to,
+              from,
+              to,
               faceNormal: s.normal,
               strokes: 2,
               sfx: s.sfx,
               chipDir: s.chip,
+              carve: { parts: ['LB-B1'], tag: s.op },
               onDone: async () => {
+                lane++;
+                if (lane < s.lanes.length) { await wait(0.5); run(); return; }
+                lane = 0;
                 c.lantern.addOp('LB-B1', s.op);
                 c.lantern.addOp('LB-B2', s.op);
                 c.hud.toast(s.done, { gold: true, dur: 1400 });
@@ -328,10 +414,12 @@ export function act3(ctx) {
           strokes: 3,
           sfx: 'SAW',
           chipDir: V(0, 0, 1),
+          carve: { parts: ['LB-A1'], tag: OP.TENON },
           onStroke: (n, total) => c.hud.setCue(`第 <b>${n}</b> 刀 / 共 ${total} 刀`, 'drag'),
           onDone: async () => {
             c.lantern.addOp('LB-A1', OP.TENON);
             c.lantern.addOp('LB-A2', OP.TENON);
+            c.hud.toast('四个端头，同样四锯', { dur: 1600 });
             c.hud.setCue('四个榫头都切好了');
 
             await wait(0.4);
@@ -415,7 +503,7 @@ export function act3(ctx) {
 下面那个框中间架着中梁，所以顺枨要开槽。
 上面这个框没有中梁 —— 那两条槽，一条都不能开。开了就是四个白挖的洞。
 （气口）
-其余的照做：切榫头、凿孔、铣柱窝，再翻过来在底面开装板槽，因为格心是从下往上顶进去的。`,
+其余的照做：切榫头、凿孔、凿柱窝，再翻过来在底面刨装板槽，因为格心是从下往上顶进去的。`,
       note: {
         title: '差别只有一处',
         body: '下面那个框中间架着中梁，要开槽让它落进来。上面这个框<em>没有中梁</em>。',
@@ -430,11 +518,11 @@ export function act3(ctx) {
           junk.clear();
 
           const ops = [OP.TENON, OP.MORTISE, OP.SOCKET, OP.PANEL_SLOT, OP.CORNER_SLOT, OP.PRESS_SLOT];
-          const names = ['切榫头', '凿孔', '铣柱窝', '底面开装板槽', '底面开角牙槽', '顶面留压槽'];
+          const names = ['切榫头', '凿孔', '凿柱窝', '底面刨装板槽', '底面开角牙槽', '顶面留压槽'];
           for (const [i, op] of ops.entries()) {
             for (const id of UPPER) c.lantern.addOp(id, op);
             c.hud.setCue(`${names[i]} · <b>${i + 1}</b> / 6`);
-            c.sfx.play(i < 3 ? 'SAW' : 'ROUTER', { pitch: i * 1.2, gain: 0.6 });
+            c.sfx.play(['SAW', 'CHISEL', 'CHISEL', 'PLANE_SHAVE', 'CHISEL', 'CHISEL'][i], { pitch: i * 1.2, gain: 0.6 });
             await wait(0.5);
           }
 
@@ -499,7 +587,7 @@ export function act3(ctx) {
       title: '柱子：削掉四分之三',
       mood: 'craft',
       cam: { az: 50, el: 12, dist: 300, target: [0, 0, 96], snap: true, fit: { r: 62, h: 104 } },
-      cue: { ico: 'drag', text: '<em>拖动铣刀</em>，一次削掉一个角' },
+      cue: { ico: 'drag', text: '<em>拖动凿子</em>，一次削掉一个角' },
       narration: `最后四根长料，做柱子。
 柱子要同时扣住上下两个框，还得让框拆不下来。怎么做到？
 （气口）
@@ -545,16 +633,17 @@ export function act3(ctx) {
           // 但"三段两颈"这件事一旦裁掉柱身就说不成立了。
           c.stage.setRecommended({ az: 50, el: 10, dist: 300, target: V(0, 0, 96), fit: { r: 62, h: 104 } });
           marks.forEach((m, i) => { m.material.opacity = i === stage ? 0.5 : 0.16; });
-          c.hud.setCue(`<em>拖动铣刀</em>削第 <b>${stage + 1}</b> 处细颈 · 共 2 处`, 'drag');
+          c.hud.setCue(`<em>拖动凿子</em>削第 <b>${stage + 1}</b> 处细颈 · 共 2 处`, 'drag');
           // 刀从柱子外侧横着走。走在轴线上会让刀身穿进柱子里，
           // 既看不见刀，也看不出它在削哪一面。
           // 保留的是 −X/−Y 那个象限，要削掉的料在 +Y 一侧 ——
           // 刀必须从 +Y 进，否则它得先穿过留下来的那一段才够得着。
           cut(c, {
-            tool: 'router',
+            tool: 'chisel',
             from: V(-av(1.4), J3.NECK / 2, zw), to: V(av(1.4), J3.NECK / 2, zw),
             faceNormal: V(0, -1, 0),
-            strokes: 3, sfx: 'ROUTER', chipDir: V(0, 1, 0),
+            strokes: 3, sfx: 'CHISEL', chipDir: V(0, 1, 0),
+            carve: { parts: ['PL-01'], tag: ops[stage] },
             onStroke: (n, total) => c.hud.setCue(`第 ${stage + 1} 处细颈 · 削掉 <b>${n}</b> / ${total} 个角`, 'drag'),
             onDone: async () => {
               for (const id of COLS) c.lantern.addOp(id, ops[stage]);
@@ -569,7 +658,6 @@ export function act3(ctx) {
               for (const m of marks) { m.material.opacity = 0.14; }
               c.hud.setCue('三段柱身，两处细颈');
               c.hud.toast('推到底会咬住 —— 不用钉子也掉不了', { gold: true });
-              c.stage.setRecommended({ az: 54, el: 14, dist: 300, target: V(0, 0, 96), fit: { r: 62, h: 104 } });
               engine.done();
             },
           });
@@ -604,16 +692,6 @@ export function act3(ctx) {
         for (const id of [...LOWER, ...UPPER]) c.lantern.parts.get(id).installed = true;
         c.lantern.applyAssembly();
 
-        c.guides.set(COLS.map((id) => {
-          const p = c.lantern.parts.get(id);
-          const d = p.assembly.dir;
-          return {
-            pos: V(p.home.x - d[0] * a(4), p.home.y, C.LOWER_Z0 - a(1)),
-            // 传世界方向，屏幕角度由 Arrows 每帧按相机投影求出 ——
-            // 写死的角度换个机位就是反的
-            ico: 'right', dir: V(d[0], d[1], 0),
-          };
-        }));
         c.hud.setCue('柱子 <b>0</b> / 4');
 
         c.drag.begin({
@@ -627,7 +705,6 @@ export function act3(ctx) {
             c.fx.ring.sweep({ z0: 0, z1: M.HEIGHT, dur: 1.2 });
             c.hud.setCue('十三根木条 · <em>全部到位</em>');
             c.hud.toast('框架，合龙了', { gold: true, dur: 3000 });
-            c.stage.setRecommended({ az: 42, el: 18, dist: 520, target: V(0, 0, 96), fit: FIT_FRAME });
             engine.done();
           },
         });

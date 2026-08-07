@@ -21,8 +21,8 @@ export const PHASES = ['开场', '认识榫卯', '做骨架', '装点年味'];
 const GUIDE = [
   { k: ['back', 'forward'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用',
     touch: '点两侧箭头，翻到上一步、下一步' },
-  { k: ['drag'], t: '按住画面拖，换个角度看；滚轮缩放。松开手，镜头会自己转回来',
-    touch: '按住画面拖，换个角度看；双指开合缩放。松开手，镜头会自己转回来' },
+  { k: ['drag'], t: '按住画面拖，换个角度看；滚轮缩放。转到哪儿就停在哪儿',
+    touch: '按住画面拖，换个角度看；双指开合缩放。转到哪儿就停在哪儿' },
   { k: ['layers'], t: '顶上一格就是一步，点一下直接跳过去' },
   { k: ['more'], t: '深色、声音、字幕，都在右上角' },
   { k: ['X'], t: '随时把灯笼拆开、调透明，看看里面', full: true },
@@ -66,6 +66,7 @@ export class HUD {
       bottom: $('bottom'), cue: $('cue'), narration: $('narration'),
       alts: $('alts'), task: $('btn-task'),
       menu: $('btn-menu'), overlay: $('overlay'), cover: $('cover'),
+      back: $('btn-back'),
     };
     this.spots = [];
     this.hasVoice = false;
@@ -87,6 +88,8 @@ export class HUD {
     this.el.task.addEventListener('click', () => this.onTask?.());
     this.el.menu.addEventListener('click', (e) => { e.stopPropagation(); this.toggleMenu(); });
     this.el.noteTab.addEventListener('click', () => this.toggleNote());
+    this.el.back.innerHTML = `${icon('back')}<span>返回</span>`;
+    this.el.back.addEventListener('click', () => this._onBack?.());
 
     // Esc 一次退一层：先收菜单，再关当前的卷
     addEventListener('keydown', (e) => {
@@ -593,6 +596,18 @@ export class HUD {
   get overlayOpen() { return !this.el.overlay.hidden; }
   /** 盖住画面的那一种。此时方向键不该在背后翻页 */
   get modalOpen() { return this.overlayOpen && this.el.overlay.classList.contains('veil'); }
+
+  /**
+   * 左上角那枚返回。互动模块进来时挂上，走时传 null 摘掉。
+   *
+   * 它有意不进 #setChromeInert 的名单：卷是模态的，但「退出这个模块」
+   * 恰恰是模态里唯一还该按得动的东西。
+   * @param {Function|null} fn
+   */
+  setBack(fn) {
+    this._onBack = fn || null;
+    this.el.back.hidden = !fn;
+  }
 
   showChrome(v) {
     this.el.bottom.hidden = !v;

@@ -41,9 +41,9 @@ modules/    做完之后的四件事
 | `lantern` | 装配体中枢 | `setOps()` · `addOp()` · `showOnly()` · `setExplode()` · `setSection()` · `setLit()` |
 | `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `sheet()` · `dock()` · `addSpot()` |
 | `drag` | 单自由度装配 | `begin({parts,…})` · `autoSeatAll()` |
-| `mach` | 拖刀加工 | `begin({tool,from,to,…})` · `autoRun()` |
+| `mach` | 拖刀加工 | `begin({tool,from,to,carve,…})` · `autoRun()` |
 | `sfx` `bgm` `voice` | 声音 | `play()` · `loop()` |
-| `fx` | 粒子 | `chips` · `ripples` · `ring` · `fireworks` · `tier` |
+| `fx` | 粒子 | `chips` · `ripples` · `ring` · `tier` |
 | `guides` | 三维方向箭头 | `set()` · `clear()` |
 | `state` | 存档 | 直接读写，写入即持久化 |
 | `engine` | 引擎自身 | `done()` · `go()` · `goToStep()` |
@@ -99,6 +99,16 @@ lantern.js   持有 13 件木构件 + 4 片格心 + 装饰件，管两件事：
 改一道工序只需 `lantern.addOp(id, OP.TENON)` —— 几何当场重建，切面自动变亮。
 加工动画因此不需要美术出图，也不会与几何失同步。
 
+**走刀去料**走的是同一条管线，只是把工序拆成了连续量。给 `mach.begin()` 加一句
+`carve: { parts: ['LB-A1'], tag: OP.BEAM_SLOT }`，刀每动一下就把「刃尖在哪、走了多少」
+交给 `lantern.carve()` → `buildPart(id, ops, carve)`，现算这一刀啃掉的那一块：
+
+- 刀没压在上面的切除盒**不动它** —— 顺枨顶面两条槽，因此要走两趟，一趟一条；
+- 深度按「已完成刀数 + 本刀走过的比例」自入刀面向里推进，只增不减。
+
+刀够不着的部分（另一根枨、另一个端头）仍由 `onDone` 里的 `addOp()` 补上，
+文案会明说「另一头同样一锯」。详见 [DESIGN.md](../DESIGN.md) §4。
+
 ---
 
 ## 状态
@@ -151,3 +161,6 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 - `POST /__manifest` —— 页面把**运行时的真实步骤数据**导出，供 `tools/make-script.mjs` 排版配音稿。
 
 第二个是有意为之：让页面自己交代它念了什么，好过让脚本用正则去解析源码。
+
+`tools/shots.mjs`（`npm run shots`）从**构建产物**里重出 README 的四张图，同理：
+截图由真实运行的页面产出，改了模型或界面就重跑一次，图不会和实现各说各话。

@@ -134,21 +134,29 @@ export function buildCornerPlate({ sx, sy }) {
 export function buildKnot() {
   const g = new THREE.Group();
   const mat = makeSilkMaterial();
-  const cord = 1.2;
+  const cord = 1.0;
   // 盘长结（意象化）：两枚菱形方环**竖直**叠放 —— 结面躺平的话，
-  // 任何正常机位看到的都只是一叠红圆盘，读不出「结」的形
-  for (let k = 0; k < 2; k++) {
-    const r = 5.5 - k * 2.1;
-    const geo = new THREE.TorusGeometry(r, cord, 6, 4);
-    geo.rotateZ(Math.PI / 4);   // 方环转 45°，成菱形
-    geo.rotateX(Math.PI / 2);   // 立起来，结面竖直
-    const torus = new THREE.Mesh(geo, mat);
-    torus.position.set(0, (k ? 1 : -1) * 0.8, -7);
-    g.add(torus);
+  // 任何正常机位看到的都只是一叠红圆盘，读不出「结」的形。
+  // 整个结压在中梁下沿这 7 mm 里：再往下就吃掉穗子的地方（见 buildTassel）。
+  //
+  // 两个方向各织一层。只织一层的话，环面只在 ±Y 两侧看得见，从 ±X 望过去
+  // 整个结缩成两根细红棍 —— 而画面是可以随手转的，四面都得读得出「结」。
+  for (const turn of [0, Math.PI / 2]) {
+    for (let k = 0; k < 2; k++) {
+      const r = 2.9 - k * 1.1;
+      const geo = new THREE.TorusGeometry(r, cord, 6, 4);
+      geo.rotateZ(Math.PI / 4);   // 方环转 45°，成菱形
+      geo.rotateX(Math.PI / 2);   // 立起来，结面竖直
+      geo.rotateZ(turn);          // 第二层横过来，织成方胜
+      const torus = new THREE.Mesh(geo, mat);
+      const off = (k ? 1 : -1) * 0.6;
+      torus.position.set(turn ? off : 0, turn ? 0 : off, -3.0);
+      g.add(torus);
+    }
   }
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(cord, cord, 4, 6), mat);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(cord, cord, 2.4, 6), mat);
   stem.rotation.x = Math.PI / 2;
-  stem.position.z = -1.5;
+  stem.position.z = -0.9;
   g.add(stem);
   g.userData = { id: 'DC-KNOT-01', kind: 'knot' };
   return g;
@@ -160,18 +168,42 @@ export function buildKnot() {
 export function buildTassel() {
   const g = new THREE.Group();
   const mat = makeSilkMaterial();
-  const head = new THREE.Mesh(new THREE.SphereGeometry(3.2, 12, 8), mat);
-  g.add(head);
+  // 穗头：上大下小的一颗，底下再缠一道 —— 上小下大会读成一只倒扣的花盆
+  const head = new THREE.Mesh(new THREE.SphereGeometry(2.5, 12, 8), mat);
+  head.scale.set(1, 1, 0.78);
+  head.position.z = -1.6;
+  const wrap = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 1.6, 10), mat);
+  wrap.rotation.x = Math.PI / 2;
+  wrap.position.z = -3.4;
+  g.add(head, wrap);
+
   const strands = new THREE.Group();
-  // 穗长收在半个模数：灯脚落地时（底枨下沿到地面只有 24 mm），
-  // 长穗会整条埋进地板 —— 见 lantern.js 的挂点约束
-  const N = 22, len = a(1 / 2);
+  /*
+   * 穗长原先被一条自找的约束卡住：地面贴在灯脚下面，穗子只要超过底枨到地面
+   * 那 24 mm 就埋进地板，于是一路压到 6 mm —— 一盏 192 mm 高的灯挂着一撮
+   * 一指长的穗子，怎么看都不对。
+   *
+   * 但灯笼本来就是**挂着**的。把地面下沉（见 stage.js 的 ground），
+   * 灯脚离地一小段，穗子就有地方垂了。26 mm 约合灯身的七分之一，
+   * 与实物的比例相称。
+   */
+  const N = 48, len = a(13 / 6);
   for (let i = 0; i < N; i++) {
-    const ang = (i / N) * Math.PI * 2;
-    const rr = 1.0 + (i % 3) * 0.55;
-    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.25, len, 4), mat);
-    s.rotation.x = Math.PI / 2;
-    s.position.set(Math.cos(ang) * rr, Math.sin(ang) * rr, -len / 2 - 3);
+    const ang = (i / N) * Math.PI * 2 + (i % 2) * 0.07;
+    const ring = i % 3;
+    const rr = 0.75 + ring * 0.55;
+    const l = len - ring * 1.4;                    // 外圈略短，穗尾收成一个锥
+    const geo = new THREE.CylinderGeometry(0.32, 0.18, l, 4);
+    geo.rotateX(Math.PI / 2);                      // 轴向 +Y → +Z，几何层转，顺序明确
+    const s = new THREE.Mesh(geo, mat);
+    /*
+     * 略向外张，丝线才不是一束平行的棍。
+     * 倾斜必须绕「与半径垂直的那根水平轴」——  给 Mesh 同时写 rotation.x 与 rotation.z
+     * 会按欧拉 XYZ 合成，丝线是在一个固定平面里越倒越平，转到九十度那几根直接横过来。
+     */
+    const splay = 0.09 + ring * 0.05;
+    s.rotation.set(Math.sin(ang) * splay, -Math.cos(ang) * splay, 0);
+    s.position.set(Math.cos(ang) * rr, Math.sin(ang) * rr, -l / 2 - 4.2);
     strands.add(s);
   }
   g.add(strands);

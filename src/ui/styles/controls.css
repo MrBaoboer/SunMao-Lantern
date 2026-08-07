@@ -194,14 +194,23 @@ input[type="range"]::-moz-range-thumb {
 
 /* ═══════════════ 方向引导 ═══════════════ */
 
+/*
+ * 方向引导。它要压在木头上还看得清 —— 木色与金色本来就接近，
+ * 细线加低透明度等于没画。所以给足描边、给一圈与底色同色的外发光，
+ * 呼吸的下限也抬到六成：这一枚是「往哪儿使劲」的唯一答案，不能若隐若现。
+ *
+ * transform 由 Arrows.update() 每帧写入（位置 + 按相机投影求出的角度），
+ * 所以呼吸动画只能动 opacity，不能动 transform。
+ */
 .arrow {
   position: fixed; z-index: var(--z-anchor);
   transform: translate(-50%, -50%);
   pointer-events: none; color: var(--accent);
-  animation: breathe 2.2s ease-in-out infinite;
+  filter: drop-shadow(0 0 5px var(--bg)) drop-shadow(0 0 2px var(--bg));
+  animation: breathe 1.7s ease-in-out infinite;
 }
-.arrow .ico { width: 26px; height: 26px; }
-@keyframes breathe { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+.arrow .ico { width: 34px; height: 34px; stroke-width: 2.1; }
+@keyframes breathe { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 
 /* ═══════════════ 引火环 ═══════════════ */
 

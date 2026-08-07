@@ -30,7 +30,7 @@
 .cover[data-ready="1"] .cover-bg   { opacity: 0; }
 .cover[data-ready="1"] .cover-veil { opacity: 1; }
 
-/* 字压在灯上要读得出来：只在题字这一块下面再垫一层，四周仍是通的 */
+/* 题字压在加载底色上，四周留一圈更实的底 */
 .cover-inner {
   position: relative; text-align: center;
   padding: var(--s7) var(--s6);
@@ -106,6 +106,35 @@
 }
 
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+
+/* ═══════════════ 返回 ═══════════════ */
+
+/*
+ * 互动模块里唯一的出口，固定在左上角。
+ *
+ * 原先每个模块各自在自己的控件行里塞一枚「回去」：位置随卷或坞的排版变，
+ * 猜灯谜那一页甚至和「想不出来」「下一题」挤在一起 —— 退出这件事不该
+ * 每次都去人群里找。层级压在覆盖层之上，所以卷摊开时也按得到。
+ */
+.backbtn {
+  position: fixed; top: var(--edge); left: var(--edge);
+  z-index: calc(var(--z-overlay) + 5);
+  display: inline-flex; align-items: center; gap: var(--s2);
+  padding: 9px var(--s4) 9px var(--s3);
+  border-radius: var(--r-full);
+  font-size: var(--fs-tiny); letter-spacing: var(--ls-base);
+  color: var(--text-2);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-1);
+  animation: rise var(--t-base) var(--ease) both;
+  transition: color var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.backbtn .ico { width: 15px; height: 15px; }
+.backbtn:hover { color: var(--text); box-shadow: var(--hair-gold), var(--lift-2); }
+
+@media (max-width: 680px) {
+  .backbtn { top: var(--s3); left: var(--s3); padding: 8px var(--s3) 8px var(--s2); }
+}
 
 /* ═══════════════ 顶部 · 章节 ═══════════════ */
 

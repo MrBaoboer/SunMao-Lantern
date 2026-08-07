@@ -73,13 +73,35 @@ export class DragAssembly {
     }
     this.ctx.lantern.applyAssembly();
     this._pulseTargets();
+    this._guideTargets();
+    // 动手的步骤一开始就把机位钉死，手上对位时画面不会自己漂
+    this.ctx.stage.hold(true);
     return this.session;
   }
 
   cancel() {
     this.active = null;
     this.session = null;
-    this.ctx.stage.controls.enabled = true;
+    // 翻页可能正好落在一次拖拽中间 —— 手指还按着就交还轨道控制，
+    // 剩下半程照样会变成转镜头。留给 onUp
+    if (!this.grabbed) this.ctx.stage.controls.enabled = true;
+  }
+
+  /**
+   * 每件待装构件后面钉一枚呼吸的小箭头，指着它该去的方向。
+   * 三维拖拽不是不学就会的事 —— 没有这一枚，画面上就只是一堆木头。
+   */
+  _guideTargets() {
+    const s = this.session;
+    if (!s) return;
+    const items = [...s.pending].map((id) => {
+      const p = this.ctx.lantern.parts.get(id);
+      if (!p?.assembly) return null;
+      const d = new THREE.Vector3(...p.assembly.dir).normalize();
+      const back = (p.assembly.gap || 24) + 18;
+      return { pos: p.home.clone().addScaledVector(d, -back), dir: d };
+    }).filter(Boolean);
+    this.ctx.guides?.set(items);
   }
 
   /** 待装构件的呼吸提示 */
@@ -135,6 +157,7 @@ export class DragAssembly {
       warned: false,
       moved: false,
     };
+    this.grabbed = true;
     this.ctx.stage.controls.enabled = false;
     e.preventDefault();
   }
@@ -195,10 +218,11 @@ export class DragAssembly {
   }
 
   async onUp() {
+    // 松手才交还 —— 且必须排在提前 return 之前，拖歪那一路也要收得回来
+    if (this.grabbed) { this.grabbed = false; this.ctx.stage.controls.enabled = true; }
     const a = this.active;
     if (!a) return;
     this.active = null;
-    this.ctx.stage.controls.enabled = true;
     const s = this.session;
     if (!s) return;
 
@@ -229,7 +253,7 @@ export class DragAssembly {
   async _wrongDirection() {
     const a = this.active;
     this.active = null;
-    this.ctx.stage.controls.enabled = true;
+    // 手指还按着 —— 这里交还轨道控制，剩下半程就成了转镜头。交给 onUp
     const s = this.session;
     const u0 = a.u;
     await tween(0.3, (k) => this.ctx.lantern.setAssemblyProgress(a.partId, u0 * (1 - Ease.outQuad(k))), { ease: Ease.linear });
@@ -269,10 +293,12 @@ export class DragAssembly {
     if (!s.pending.size) {
       const done = s.onAll;
       this._pulseTargets();
+      this.ctx.guides?.clear();
       await wait(0.12);
       done?.();
     } else {
       this._pulseTargets();
+      this._guideTargets();      // 装好的那件收掉箭头，剩下的继续指
     }
   }
 

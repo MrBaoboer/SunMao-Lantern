@@ -33,10 +33,12 @@ export function openM1(c, onExit) {
     closed = true;
     c.sfx.stopLoop('FLAME_IGNITE');
     junk.clear();
+    c.hud.setBack(null);
     c.hud.hideOverlay();
     c.voice.stop();
     onExit?.();
   };
+  c.hud.setBack(close);
 
   c.hud.dock({
     body: `<p class="dock-hint" id="tip">按住不放，等这一圈走满</p>
@@ -52,7 +54,6 @@ export function openM1(c, onExit) {
     actions: [
       { id: 'fire', label: '按住点灯', kind: 'primary', ico: 'flame' },
       { id: 'again', label: '再点一次', ico: 'refresh', hidden: true },
-      { label: '回去', ico: 'back', on: () => { close(); } },
     ],
     onMount: (o) => {
       const fire = o.querySelector('#fire');
@@ -81,7 +82,7 @@ export function openM1(c, onExit) {
         c.lantern.setLit(level(c));
         await wait(1.4);
         // 模块的 wait/tween 不经过 engine 的 cancelAll —— 关掉之后
-        // 这条链还会跑到这里，旁白就响在了五门页上
+        // 这条链还会跑到这里，旁白就响在了四门页上
         if (closed) return;
         playVO(c, 'M1');
         tools.hidden = false;
@@ -191,7 +192,10 @@ export function openM2(c, onExit) {
 
   let i = 0, score = 0;
 
-  const close = () => { junk.clear(); c.hud.hideOverlay(); c.voice.stop(); onExit?.(); };
+  const close = () => {
+    junk.clear(); c.hud.setBack(null); c.hud.hideOverlay(); c.voice.stop(); onExit?.();
+  };
+  c.hud.setBack(close);
 
   const ask = () => {
     const q = RIDDLES[i];
@@ -203,7 +207,6 @@ export function openM2(c, onExit) {
           <button class="opt" type="button" data-o="${o}">${o}</button>`).join('')}</div>
         <div class="answer" id="ans"></div>`,
       actions: [
-        { label: '回去', on: close },
         { id: 'skip', label: '想不出来' },
         { id: 'next', label: last ? '看看结果' : '下一题', kind: 'primary', hidden: true },
       ],
@@ -252,8 +255,7 @@ export function openM2(c, onExit) {
       title: name,
       lede: score ? `灯笼比刚才亮了 ${score * 8}%` : '再来一轮，灯会更亮',
       actions: [
-        { label: '再来一次', ico: 'refresh', on: () => { i = 0; score = 0; ask(); } },
-        { label: '回去', kind: 'primary', on: close },
+        { label: '再来一次', kind: 'primary', ico: 'refresh', on: () => { i = 0; score = 0; ask(); } },
       ],
       onEsc: close,
     });

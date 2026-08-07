@@ -3,7 +3,7 @@
  */
 
 import * as THREE from 'three';
-import { V, a, C, M, J4, PALETTE, Junk, AIM_LANTERN, FIT_LANTERN, FIT_FRAME } from './util.js';
+import { a, C, J4, PALETTE, Junk, AIM_LANTERN, FIT_LANTERN, FIT_FRAME } from './util.js';
 import { PATTERNS, buildPatternTexture } from '../render/lattice.js';
 import { EXPLODE_LAYERS } from '../render/lantern.js';
 import { icon } from '../ui/icons.js';
@@ -226,7 +226,7 @@ export function act4(ctx) {
                 g.visible = true;
                 const m = g.children[0].material;
                 m.opacity = 0;
-                await tween(0.3, (k) => { m.opacity = 0.72 * k; });
+                await tween(0.3, (k) => { m.opacity = 0.86 * k; });
                 c.sfx.play('PAPER', { pitch: i * 1.5 });
               }
               c.hud.setCue('纸糊在<em>内侧</em> —— 它把硬光揉软');
