@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#f4efe3" />
 <title>榫卯灯笼 · 国风流光</title>
 <meta name="description" content="十三根木条，一颗钉子也不用。在浏览器里亲手做一盏能拆开的中式灯笼。" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg fill='none' stroke='%23a9782c' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M11.5 4.5v23M20.5 4.5v23M4.5 11.5h23M4.5 20.5h23'/%3E%3C/g%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg fill='%23c08a2e'%3E%3Crect x='8' y='2.4' width='3.2' height='4.4' rx='.7'/%3E%3Crect x='20.8' y='2.4' width='3.2' height='4.4' rx='.7'/%3E%3Crect x='8' y='25.2' width='3.2' height='4.4' rx='.7'/%3E%3Crect x='20.8' y='25.2' width='3.2' height='4.4' rx='.7'/%3E%3Crect x='4.4' y='6.8' width='23.2' height='3.4' rx='1.1'/%3E%3Crect x='4.4' y='21.8' width='23.2' height='3.4' rx='1.1'/%3E%3Crect x='8' y='10.2' width='3.2' height='11.6'/%3E%3Crect x='20.8' y='10.2' width='3.2' height='11.6'/%3E%3C/g%3E%3Cg stroke='%23c08a2e' stroke-width='2.1' fill='none'%3E%3Cpath d='M16 11.6v8.8M12.4 16h7.2'/%3E%3C/g%3E%3C/svg%3E" />
 <script>
   // 主题要在首帧之前定下来，否则会闪一下
   try {
@@ -35,6 +35,9 @@
       </div>
     </div>
   </div>
+
+  <!-- 互动模块里唯一的出口：左上角一枚返回。压在覆盖层之上，卷摊开时也按得到 -->
+  <button id="btn-back" class="backbtn" hidden></button>
 
   <!-- 顶部：走到哪了 -->
   <header id="topbar" hidden>

@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { a, M, C, J3, J4, QUADRANTS } from '../core/modulus.js';
+import { a, M, C, J4, QUADRANTS } from '../core/modulus.js';
 import { buildPart, partMeta, WOOD_IDS, PANEL_IDS, ALL_OPS, OP } from '../core/parts.js';
 import { solidToGeometry, grainAxisOf, homeOf } from './geometry.js';
 import { makeWoodMaterial, setHighlight, setCutReveal, setSectionMode, PALETTE } from './materials.js';
@@ -181,16 +181,16 @@ export class Lantern {
       this.decor.plates.push(p);
     });
 
-    // 中国结（挂在中梁底面中心）+ 红流苏（接在结的下方）
-    // 灯脚落地是常态（M1/M2/D5 都有地面），结与穗必须整个收在
-    // 底枨下沿到地面这 24 mm 里，否则穗子会穿进地板
+    // 中国结（挂在中梁底面中心）+ 红流苏（接在结的下方）。
+    // 结压在中梁下沿那一小段里，穗头紧跟其下 —— 地面已经沉到灯脚之下（stage.js），
+    // 穗子因此有地方垂，不必再为了不穿地板而剪短
     this.knot = buildKnot();
     this.knot.position.set(0, 0, C.LOWER_Z0 - 0.5);
     this.knot.visible = false;
     this.root.add(this.knot);
 
     this.tassel = buildTassel();
-    this.tassel.position.set(0, 0, 10.5);
+    this.tassel.position.set(0, 0, 16);
     this.tassel.visible = false;
     this.root.add(this.tassel);
 
@@ -229,9 +229,56 @@ export class Lantern {
     const p = this.parts.get(partId);
     if (!p || p.isPanel) return;
     p.ops = ops === 'all' ? new Set(ALL_OPS) : ops === 'blank' ? new Set() : new Set(ops);
+    p.carved = null;                 // 工序整套换掉了，半截的走刀记录随之作废
     const solid = buildPart(partId, p.ops.size ? p.ops : 'blank');
     p.mesh.geometry.dispose();
     p.mesh.geometry = solidToGeometry(solid);
+  }
+
+  // ══════════════════════════════════════════════
+  // 走刀去料
+  //
+  // 料要跟着刀一点点没，而不是走完几刀之后整块跳出来 —— 后者正是
+  //「动作和加工结果对不上」的根源：刀在这道槽上来回，另一道槽却同时也开好了。
+  // ══════════════════════════════════════════════
+
+  /**
+   * 刀走到 t 时的形态。
+   * @param {string} partId
+   * @param {string} tag 这一刀在做的工序
+   * @param {{lane:THREE.Vector3, travel:number, axis:number, dir:number, t:number}} k
+   *   lane 是刃尖的**世界**坐标；构件可能正被搬在工作台上，这里换回它自己的坐标系
+   */
+  carve(partId, tag, k) {
+    const p = this.parts.get(partId);
+    if (!p || p.isPanel) return;
+    const lane = k.lane.clone().sub(p.mesh.position).add(p.home);
+    // 刃尖扫过的那一段也要换算到构件坐标系。构件在工作台上只是平移，
+    // 所以进给轴上加同一个偏移量即可
+    const shift = p.home.getComponent(k.travel) - p.mesh.position.getComponent(k.travel);
+    const ops = new Set(p.ops);
+    ops.delete(tag);
+    const solid = buildPart(partId, ops, {
+      tag,
+      travel: k.travel, axis: k.axis, dir: k.dir,
+      lane: [lane.x, lane.y, lane.z],
+      swept: k.swept ? [k.swept[0] + shift, k.swept[1] + shift] : null,
+      t: k.t,
+      // 同一道工序常常要走好几趟（顺枨顶面两条槽）。走完的那几趟整块留着，
+      // 否则开第二条槽时第一条会长回去
+      done: p.carved?.tag === tag ? p.carved.lanes : null,
+    });
+    p.mesh.geometry.dispose();
+    p.mesh.geometry = solidToGeometry(solid);
+  }
+
+  /** 这一趟走完了：记下它，后面几趟不再把它当成没加工过 */
+  carveFinish(partId, tag, laneWorld) {
+    const p = this.parts.get(partId);
+    if (!p || p.isPanel) return;
+    const lane = laneWorld.clone().sub(p.mesh.position).add(p.home);
+    if (p.carved?.tag !== tag) p.carved = { tag, lanes: [] };
+    p.carved.lanes.push([lane.x, lane.y, lane.z]);
   }
 
   /** 追加一道工序（加工动画逐级调用） */
@@ -397,7 +444,7 @@ export class Lantern {
     // 穗子向下别太贪：拆到底时它是全场最低的一件，推远了就掉出画幅
     for (const [obj, vec, d] of [
       [this.knot, new THREE.Vector3(0, 0, -1), 62],
-      [this.tassel, new THREE.Vector3(0, 0, -1), 90],
+      [this.tassel, new THREE.Vector3(0, 0, -1), 58],
       [this.core, new THREE.Vector3(0, 0, 1), 60],
     ]) {
       if (!obj.userData.home) obj.userData.home = obj.position.clone();
@@ -488,7 +535,8 @@ export class Lantern {
     this.core.userData.glowMat.opacity = flameOpacity * 0.55;
     for (const g of this.decor.papers) {
       g.children[0].material.emissiveIntensity = k * 0.85;
-      g.children[0].material.opacity = 0.6 + k * 0.28;
+      // 纸本来就不该透 —— 亮起来时略再实一点，棂条的剪影因此更清楚
+      g.children[0].material.opacity = 0.86 + k * 0.1;
     }
   }
 

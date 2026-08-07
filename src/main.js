@@ -20,7 +20,7 @@ import { act1 } from './steps/act1.js';
 import { act3 } from './steps/act3.js';
 import { act4 } from './steps/act4.js';
 import { openM1, openM2 } from './modules/m1-m2.js';
-import { openM3, openM4 } from './modules/m3-m5.js';
+import { openM3, openM4 } from './modules/m3-m4.js';
 import { MODULE_VO, playVO } from './modules/vo.js';
 import { installDevShot } from './devshot.js';
 

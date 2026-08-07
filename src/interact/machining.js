@@ -2,7 +2,7 @@
  * 拖动刀具加工（§7 标注为「⚠ 需自定义」，降级为点击自动播放）
  *
  * 加工的视觉真实感来自两处，都不是画出来的：
- *   · 切面颜色 —— CSG 内核标记的 aCut 属性驱动，铣一刀新切面自动亮一档（§11.2）
+ *   · 切面颜色 —— CSG 内核标记的 aCut 属性驱动，切一刀新切面自动亮一档（§11.2）
  *   · 走刀音高 —— 随刀数递升（§S15），实时合成才做得到
  *
  * §S15 备注要求「不要用实时布尔」：这里也不做布尔 ——
@@ -14,16 +14,18 @@ import { tween, Ease, wait } from '../util/tween.js';
 import { makeGoldMaterial } from '../render/materials.js';
 
 /**
- * 一段收成薄刃的料：拿一个盒子，把 -Z 那一端的厚度收掉。
- * 盒的顶点本来就按面拆开，改完位置重算法线即可得到规整的斜刃。
+ * 把一条二维轮廓立起来做成刀身。
+ *
+ * 轮廓画在「厚度 × 高度」这个剖面上（shape 的 x = 厚，y = 高），挤出方向是刃宽。
+ * 转到世界后：X = 刀身厚（顺走刀方向）、Y = 刃宽（横在切口上）、Z = 高，刃口落在 z = 0。
  */
-function bevelled(w, t, len, tipRatio = 0.12) {
-  const g = new THREE.BoxGeometry(w, t, len);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    if (p.getZ(i) < 0) p.setY(i, p.getY(i) * tipRatio);
-  }
-  p.needsUpdate = true;
+function bladeFromProfile(pts, width) {
+  const s = new THREE.Shape();
+  pts.forEach(([x, y], i) => (i ? s.lineTo(x, y) : s.moveTo(x, y)));
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: width, bevelEnabled: false });
+  g.rotateX(Math.PI / 2);              // shape 的 +Y → 世界 +Z；挤出方向落到 −Y
+  g.translate(0, width / 2, 0);        // 刃宽居中
   g.computeVertexNormals();
   return g;
 }
@@ -31,17 +33,19 @@ function bevelled(w, t, len, tipRatio = 0.12) {
 /**
  * 锯齿：一条锯齿形轮廓挤出成一个几何，不是二十几个小锥体。
  * 齿尖落在 z = 0，齿背在 +Z —— 与刃口约定一致，直接摆在原点即可。
+ * 齿距给小、齿数给足，远看才是一排细齿而不是一圈鲨鱼牙。
  */
 function sawTeeth(len, pitch, depth, thick) {
   const s = new THREE.Shape();
   s.moveTo(-len / 2, depth);
   for (let x = -len / 2; x < len / 2 - pitch; x += pitch) {
-    s.lineTo(x + pitch * 0.5, 0);      // 齿尖朝下（shape 的 -Y，稍后转到世界 -Z）
+    // 前角陡、后角缓 —— 纵解锯齿的样子，比等腰三角更像真锯
+    s.lineTo(x + pitch * 0.72, 0);
     s.lineTo(x + pitch, depth);
   }
   s.lineTo(len / 2, depth);
-  s.lineTo(len / 2, depth + 1.4);
-  s.lineTo(-len / 2, depth + 1.4);
+  s.lineTo(len / 2, depth + 1.2);
+  s.lineTo(-len / 2, depth + 1.2);
   s.closePath();
   const g = new THREE.ExtrudeGeometry(s, { depth: thick, bevelEnabled: false });
   g.translate(0, 0, -thick / 2);
@@ -49,15 +53,19 @@ function sawTeeth(len, pitch, depth, thick) {
   return g;
 }
 
-/** 绕 Z 均布若干片薄刃，给铣刀一圈能看出来的切削刃 */
-function flutes(n, r, len, mat) {
-  const g = new THREE.Group();
-  for (let i = 0; i < n; i++) {
-    const f = new THREE.Mesh(new THREE.BoxGeometry(0.8, r * 2.05, len), mat);
-    f.rotation.z = (i / n) * Math.PI;
-    g.add(f);
-  }
-  return g;
+/**
+ * 一段轴向沿 +Z 的回转体（刀具的柄、箍、挡铁都是）。
+ *
+ * 必须在**几何**上转，不能给 Mesh 同时写 rotation.x 与 rotation.z：
+ * three.js 的欧拉角默认按 XYZ 合成，两个轴一起写下去，圆柱的轴向会被带偏 22.5°，
+ * 整个柄相对刃口歪着长出来 —— 看上去就是「零件全错位了」。
+ * 几何层的 rotateY / rotateX 是顺序明确的两步：先绕自身轴转正八棱，再把轴立起来。
+ */
+function shaft(rBot, rTop, len, mat, { facets = 8, spin = Math.PI / 8 } = {}) {
+  const g = new THREE.CylinderGeometry(rTop, rBot, len, facets);
+  if (spin) g.rotateY(spin);           // 绕自身轴转，只改棱的朝向
+  g.rotateX(Math.PI / 2);              // 轴向 +Y → +Z
+  return new THREE.Mesh(g, mat);
 }
 
 /**
@@ -80,61 +88,76 @@ export function buildTool(kind) {
   if (kind === 'saw') {
     // 手锯：齿尖压在 z=0，锯板在其上，背脊再上一档；柄在刀尾、抬到刃线以上。
     // 走刀时刃线没入木料，锯板露在外面 —— 这正是锯留在锯缝里的样子。
-    const L = 54;
-    const teeth = new THREE.Mesh(sawTeeth(L, 2.6, 2.6, 0.9), steel);
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(L, 0.9, 11), steel);
-    blade.position.set(0, 0, 7.5);          // z 2–13，齿尖因此露出 2.6
-    const spine = new THREE.Mesh(new THREE.BoxGeometry(L, 2.4, 2.2), steel);
-    spine.position.set(0, 0, 14);
-    // 柄：与锯板同轴向后接出，抬到背脊一线 —— 半没入木料时柄不会跟着埋进去
-    const neck = new THREE.Mesh(new THREE.BoxGeometry(8, 3.2, 9), steel);
-    neck.position.set(-L / 2 - 3, 0, 12);
-    const grip = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.8, 21, 12), wood);
+    const L = 58;
+    const teeth = new THREE.Mesh(sawTeeth(L, 1.5, 1.8, 0.7), steel);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(L, 0.7, 12), steel);
+    blade.position.set(0, 0, 7.8);          // z 1.8–13.8，齿尖因此露出 1.8
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(L, 2.0, 1.8), steel);
+    spine.position.set(0, 0, 14.6);
+    // 柄：不再是一根横插的圆棍。锯板向后收窄成颈，接一段前粗后细的握把，
+    // 尾端上翘出一个角 —— 这个上翘的尾巴是手锯最认得出来的一笔
+    const heel = new THREE.Mesh(bladeFromProfile(
+      [[0, 2], [10, 6], [10, 15.5], [0, 15.5]], 0.7,
+    ), steel);
+    heel.position.set(-L / 2 - 10, 0, 0);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 4.4, 20, 10), wood);
     grip.rotation.z = Math.PI / 2;
-    grip.position.set(-L / 2 - 17, 0, 13);
-    const butt = new THREE.Mesh(new THREE.CylinderGeometry(5.2, 5.2, 2.6, 12), wood);
-    butt.rotation.z = Math.PI / 2;
-    butt.position.set(-L / 2 - 28, 0, 13);
-    g.add(teeth, blade, spine, neck, grip, butt);
-  } else if (kind === 'router') {
-    // 铣刀：刃在最下，往上依次是夹头、滚花箍、机身。
-    // 机身是深色金属 —— 用灯芯那套暖金材质会读成一段黄铜管，不像刀具。
-    const bit = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 12, 14), steel);
-    bit.rotation.x = Math.PI / 2; bit.position.z = 6;
-    const edges = flutes(3, 2.8, 11.4, dark);
-    edges.position.z = 6;
-    const collet = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 5.6, 8, 14), steel);
-    collet.rotation.x = Math.PI / 2; collet.position.z = 16;
-    const knurl = new THREE.Mesh(new THREE.CylinderGeometry(6.4, 6.4, 5, 20), dark);
-    knurl.rotation.x = Math.PI / 2; knurl.position.z = 22.5;
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(9.2, 8.0, 26, 18), dark);
-    body.rotation.x = Math.PI / 2; body.position.z = 38;
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(9.2, 9.2, 3, 18), steel);
-    cap.rotation.x = Math.PI / 2; cap.position.z = 52.5;
-    g.add(bit, edges, collet, knurl, body, cap);
-    g.userData.bit = bit;
-  } else { // chisel 凿刀：斜刃 · 扁身 · 铁箍 · 木柄 · 顶箍
-    const tip = new THREE.Mesh(bevelled(7, 3.2, 12), steel);
-    tip.position.z = 6;                     // z 0–12，下半段收成斜刃
-    const shank = new THREE.Mesh(new THREE.BoxGeometry(7, 3.2, 16), steel);
-    shank.position.z = 19;
-    const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 5.0, 4, 14), steel);
-    ferrule.rotation.x = Math.PI / 2; ferrule.position.z = 29;
-    // 柄身两段：自铁箍向上先鼓起、再收向柄尾，这才是手握得住的形
-    const lower = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 4.6, 14, 14), wood);
-    lower.rotation.x = Math.PI / 2; lower.position.z = 38;
-    const upper = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 6.2, 12, 14), wood);
-    upper.rotation.x = Math.PI / 2; upper.position.z = 51;
-    const hoop = new THREE.Mesh(new THREE.CylinderGeometry(5.4, 5.4, 2.4, 14), steel);
-    hoop.rotation.x = Math.PI / 2; hoop.position.z = 58;
-    g.add(tip, shank, ferrule, lower, upper, hoop);
+    grip.position.set(-L / 2 - 20, 0, 11.5);
+    const horn = new THREE.Mesh(new THREE.SphereGeometry(4.6, 12, 10), wood);
+    horn.scale.set(0.75, 0.72, 1.15);
+    horn.position.set(-L / 2 - 30, 0, 14);
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(4.0, 4.0, 1.6, 10), steel);
+    collar.rotation.z = Math.PI / 2;
+    collar.position.set(-L / 2 - 10.6, 0, 11.5);
+    g.add(teeth, blade, spine, heel, collar, grip, horn);
+  } else if (kind === 'plane') {
+    // 槽刨：木身 + 斜插的刨刀 + 一根横穿的木柄。
+    //
+    // 这里原先摆的是一把电动铣刀。它有两处不对：一是那么大一个机身杵在
+    // 12 mm 见方的料旁边，读出来是台角磨；二是这一课讲的是不用钉子的手作木工，
+    // 电动工具在场就把这件事说岔了。锯、凿、刨 —— 这才是这套活儿的三样家伙。
+    // 中式刨最认得出来的是那根横柄：双手握着往前推。
+    const L = 34, W = 6;
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(L, W, 15), wood);
+    stock.position.z = 9;                       // 木身自 z = 1.5 起，刃口在其下
+    // 刨刀：自木身斜插下来，刃口落在 z = 0
+    const iron = new THREE.Mesh(bladeFromProfile(
+      [[-1.8, 0], [3.2, 12.5], [5.6, 12.5], [0.6, 0]], W * 0.62,
+    ), steel);
+    iron.position.set(1, 0, 0);
+    const wedge = new THREE.Mesh(new THREE.BoxGeometry(3.2, W * 0.58, 9), dark);
+    wedge.position.set(-2.6, 0, 10.5);
+    // 横柄：穿过木身，两头各露出一截
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, W + 17, 10), wood);
+    bar.position.set(-5, 0, 12.5);
+    g.add(stock, iron, wedge, bar);
+  } else {
+    // 凿：刃宽 4 —— 与它要凿的那道槽同宽，这一条决定了它像不像「能凿出这道槽的凿」。
+    // 单面斜磨：凿背是一个平面，正面自 4.5 mm 高处收向刃口。剖面立起来做，
+    // 而不是把一个盒子的顶点捏尖 —— 后者两面对称，读出来是把锥子。
+    // 全长压到 43：一根 12 见方的料旁边杵一把 62 的凿，取景只能一路后退。
+    const EW = 4.0;                          // 刃宽（横在切口上）
+    const ET = 6.0;                          // 刃厚（顺走刀方向）
+    const tip = new THREE.Mesh(bladeFromProfile([
+      [-ET / 2, 0], [-ET / 2, 11], [ET / 2, 11], [ET / 2, 4.5], [-ET / 2 + 0.4, 0],
+    ], EW), steel);
+    // 颈：自刃向上收细，接到挡铁 —— 打眼凿都有这一段
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(ET * 0.7, EW * 0.88, 9), steel);
+    neck.position.z = 15;
+    const bolster = shaft(3.2, 4.6, 3, steel); bolster.position.z = 21;
+    const ferrule = shaft(4.4, 4.2, 2.2, steel); ferrule.position.z = 23.5;
+    // 八棱柄：下段鼓起，上段收向柄尾，顶上一道敲击铁箍
+    const lower = shaft(4.0, 5.2, 9, wood); lower.position.z = 29;
+    const upper = shaft(5.2, 4.3, 8, wood); upper.position.z = 37.4;
+    const hoop = shaft(4.6, 4.6, 2, steel); hoop.position.z = 42.4;
+    g.add(tip, neck, bolster, ferrule, lower, upper, hoop);
   }
 
   // 走刀进度环：叠在刀尾上方，永远压在画面最前
   const ringMat = makeGoldMaterial();
   ringMat.transparent = true; ringMat.opacity = 0.9; ringMat.depthTest = false;
-  const ring = new THREE.Mesh(new THREE.RingGeometry(10, 12.4, 32, 1, 0, Math.PI * 2), ringMat);
-  ring.position.z = kind === 'saw' ? 30 : 68;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(7, 8.8, 32, 1, 0, Math.PI * 2), ringMat);
+  ring.position.z = kind === 'saw' ? 26 : kind === 'plane' ? 24 : 50;
   ring.renderOrder = 8;
   ring.visible = false;
   g.add(ring);
@@ -168,7 +191,7 @@ export class Machining {
 
   /**
    * @param {object} o
-   * @param {'chisel'|'saw'|'router'} o.tool
+   * @param {'chisel'|'saw'|'plane'} o.tool
    * @param {THREE.Vector3} o.from 走刀起点
    * @param {THREE.Vector3} o.to   走刀终点
    * @param {number} o.strokes     需要几刀
@@ -192,11 +215,70 @@ export class Machining {
       lastEnd: 0,      // 上一次到达的端点（0 或 1），用于判定一次往复
       sfxPitch: 0,
     };
+    // 这一刀去的是哪块料：进给轴由走刀方向定，进刀轴与方向由攻角定
+    if (o.carve) {
+      const axisOf = (v) => {
+        const a = [Math.abs(v.x), Math.abs(v.y), Math.abs(v.z)];
+        return a.indexOf(Math.max(...a));
+      };
+      const n = (o.faceNormal || new THREE.Vector3(0, 0, -1)).clone().normalize();
+      const axis = axisOf(n);
+      this.job.carveKey = {
+        parts: o.carve.parts,
+        tag: o.carve.tag,
+        travel: axisOf(dir),
+        axis,
+        dir: Math.sign(n.getComponent(axis)) || -1,
+        lane: o.from.clone(),
+      };
+      this.job.carveT = 0;
+      this.job.carveQ = -1;
+      this._carve();
+    }
     t.position.copy(o.from);
     this._orientTool(t, o);
     t.userData.ring.visible = true;
     this._setRing(0);
+    // 动手的步骤一开始就把机位钉死，手上对位时画面不会自己漂
+    this.ctx.stage.hold(true);
+    // 该往哪儿拉：一枚呼吸的小箭头钉在走刀线的另一端
+    this.ctx.guides?.set([{
+      pos: o.to.clone().addScaledVector(this.job.dir, 10),
+      dir: this.job.dir.clone(),
+    }]);
     return this.job;
+  }
+
+  /**
+   * 把料啃到当前进度。
+   *
+   * 深度按「刀数 + 本刀走过的比例」推进 —— 一刀一层，凿和铣本来就是这么去料的。
+   * 只增不减：手往回拖，木头不会长回去。
+   */
+  _carve() {
+    const j = this.job;
+    const k = j?.carveKey;
+    if (!k) return;
+    const partial = j.lastEnd === 1 ? 1 - j.u : j.u;
+    const t = Math.min(1, (j.stroke + partial) / j.strokes);
+    j.carveT = Math.max(j.carveT, t);
+
+    // 刃尖扫过的那一段（世界坐标，进给轴上的区间）。只增不减 —— 走过就是走过了
+    const tv = j.from.getComponent(k.travel) + j.dir.getComponent(k.travel) * j.u * j.len;
+    j.sweptLo = j.sweptLo === undefined ? tv : Math.min(j.sweptLo, tv);
+    j.sweptHi = j.sweptHi === undefined ? tv : Math.max(j.sweptHi, tv);
+
+    // 重建几何有代价，量化到 1/32 —— 肉眼看不出台阶，又不必每帧重算
+    const q = Math.round(j.carveT * 32) / 32;
+    const sq = Math.round(j.sweptLo) + ':' + Math.round(j.sweptHi);
+    if (q === j.carveQ && sq === j.sweptQ) return;
+    j.carveQ = q; j.sweptQ = sq;
+    for (const id of k.parts) {
+      this.ctx.lantern.carve(id, k.tag, {
+        lane: k.lane, travel: k.travel, axis: k.axis, dir: k.dir, t: q,
+        swept: [j.sweptLo, j.sweptHi],
+      });
+    }
   }
 
   /**
@@ -216,11 +298,23 @@ export class Machining {
       if (xA.lengthSq() < 1e-6) xA.set(0, 1, 0).addScaledVector(zA, -zA.y);
     }
     xA.normalize();
+
+    /*
+     * 柄朝人。刀身沿 ±X 都能走同一条线，但柄在 −X 那一头 ——
+     * 取错方向，柄就伸到工件背面去了，手要从画面深处伸进去够它。
+     * 所以看一眼相机在哪：让柄这一端落在离相机近的一侧。
+     */
+    // 用**推荐机位**而不是相机此刻的位置：分段加工里 setRecommended 刚下达、
+    // 相机还在缓过去，拿实时位置会按旧机位判边
+    const toCam = this.ctx.stage.recommend.pos.clone().sub(o.from);
+    if (xA.dot(toCam) > 0) xA.negate();
+
     const yA = new THREE.Vector3().crossVectors(zA, xA);
     t.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, yA, zA));
   }
 
   end() {
+    if (this.tool) this.ctx.guides?.clear();
     if (this.tool) {
       this.ctx.stage.scene.remove(this.tool);
       // 刀具每次开工都是新建的 —— 不释放，反复进出加工步会持续泄漏 GPU 资源
@@ -229,14 +323,15 @@ export class Machining {
     }
     this.job = null;
     this.dragging = null;
-    this.ctx.stage.controls.enabled = true;
+    // 最后一刀走完时手可能还按着 —— 那一下交还轨道控制，剩下半程就成了转镜头
+    if (!this.grabbed) this.ctx.stage.controls.enabled = true;
   }
 
   _setRing(k) {
     if (!this.tool) return;
     const ring = this.tool.userData.ring;
     ring.geometry.dispose();
-    ring.geometry = new THREE.RingGeometry(10, 12.4, 32, 1, Math.PI / 2, -Math.PI * 2 * k);
+    ring.geometry = new THREE.RingGeometry(7, 8.8, 32, 1, Math.PI / 2, -Math.PI * 2 * k);
   }
 
   onDown(e) {
@@ -260,6 +355,7 @@ export class Machining {
       u0: j.u,
       perp: 0, along: 0, warned: false,
     };
+    this.grabbed = true;
     this.ctx.stage.controls.enabled = false;
     e.preventDefault();
   }
@@ -285,8 +381,7 @@ export class Machining {
     if (!d.warned && d.perp > 18 && d.perp > d.along * 2.4) {
       d.warned = true;
       this.ctx.hud.toast(j.wrongHint || '沿着槽的方向来回拉');
-      this.dragging = null;
-      this.ctx.stage.controls.enabled = true;
+      this.dragging = null;   // 手指还按着，轨道控制留到 onUp 再交还
       return;
     }
 
@@ -300,6 +395,7 @@ export class Machining {
     if (!j || !this.tool) return;
     j.u = u;
     this.tool.position.copy(j.from).addScaledVector(j.dir, u * j.len);
+    this._carve();
     // 一次往复（走到一端再回到另一端）算一刀
     const atEnd = u > 0.94 ? 1 : u < 0.06 ? 0 : null;
     if (atEnd !== null && atEnd !== j.lastEnd) {
@@ -313,6 +409,7 @@ export class Machining {
     if (!j || j.stroke >= j.strokes) return;
     j.stroke++;
     this._setRing(j.stroke / j.strokes);
+    this._carve();
 
     // 音高随刀数升高
     this.ctx.sfx.play(j.sfx || 'CHISEL_STROKE', { pitch: (j.stroke - 1) * 1.5 });
@@ -325,6 +422,10 @@ export class Machining {
 
     if (j.stroke >= j.strokes) {
       const done = j.onDone;
+      // 这一趟走完了：记在构件上。同一道工序还要再走别的道时（顺枨顶面两条槽），
+      // 这一条才不会随着下一趟重新长回去
+      const k = j.carveKey;
+      if (k) for (const id of k.parts) this.ctx.lantern.carveFinish(id, k.tag, k.lane);
       await wait(0.24);
       this.end();
       done?.();
@@ -333,6 +434,7 @@ export class Machining {
 
   onUp() {
     this.dragging = null;
+    this.grabbed = false;
     this.ctx.stage.controls.enabled = true;
   }
 

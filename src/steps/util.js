@@ -41,8 +41,16 @@ export const FIT_LANTERN = { r: 98, h: 110 };
 export const FIT_FRAME = { r: 98, h: 100 };
 /** 一个枨框：五件或四件，摊平的一层 */
 export const FIT_RING = { r: 104, h: 52 };
-/** 工作台上的单件加工镜头 */
-export const FIT_BENCH = { r: 76, h: 48 };
+/**
+ * 工作台上的单件加工镜头。
+ *
+ * 取景必须把**刀也算进去**。凿自刃口向上还有 43 mm 刀身，
+ * 而工件本身只有 12 mm 见方 —— 只按工件取景，柄就会顶穿画面上沿，
+ * 压在顶部的章节栏上。底部界面比顶部厚，安全区的抬升又把主体再往上推一档，
+ * 于是目标点要跟着抬起来，让「刀 + 工件」整体落在画面中间。
+ */
+export const AIM_BENCH = [0, 0, BENCH_Z + 16];
+export const FIT_BENCH = { r: 52, h: 32 };
 
 /** 参数卡的标准行（一律「模数倍数（毫米）」双写，§12.5 排版纪律） */
 export const row = (k, n) => [k, dim(n)];
@@ -211,6 +219,8 @@ export function makeSimpleDrag(ctx) {
     const start = obj.position.clone();
     let drag = null;
     let seated = false;
+    // 手指还按着的时候，绝不能把轨道控制交回去（见 onUp 的注释）
+    let grabbed = false;
 
     const pointer = (e) => {
       const r = ctx.stage.canvas.getBoundingClientRect();
@@ -231,6 +241,7 @@ export function makeSimpleDrag(ctx) {
       const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, obj.position);
       if (!ray.ray.intersectPlane(plane, pt)) return;
       drag = { plane, grab: pt.clone(), u0: obj.position.clone().sub(start).dot(d) / distance, perp: 0, along: 0, warned: false };
+      grabbed = true;
       ctx.stage.controls.enabled = false;
       e.preventDefault();
     };
@@ -248,31 +259,50 @@ export function makeSimpleDrag(ctx) {
       if (!drag.warned && drag.perp > 12 && drag.perp > drag.along * 2.2) {
         drag.warned = true;
         drag = null;
-        ctx.stage.controls.enabled = true;
         obj.position.copy(start);
         onWrong?.();
         return;
       }
       const u = Math.max(0, Math.min(1, drag.u0 + along / distance));
       obj.position.copy(start).addScaledVector(d, u * distance);
-      if (u > 0.88) { drag = null; seated = true; ctx.stage.controls.enabled = true; onSeat?.(); }
+      if (u > 0.88) {
+        drag = null; seated = true;
+        ctx.guides.clear();
+        onSeat?.();
+      }
     };
 
+    /*
+     * 轨道控制只在**松手**时交还。
+     *
+     * OrbitControls 是在 Stage 里先建的，它的 pointerdown 比这里先跑 ——
+     * 那一下它已经把 pointermove/pointerup 挂上了。之后设 enabled = false
+     * 只是让那些回调空转；手指还按着就把它设回 true，回调立刻复活，
+     * 剩下的这半程就变成了转镜头 —— 「拖完之后画面顺着拖的方向歪了」正是这么来的。
+     * 所以拖歪了、装到位了，都只收手不交权。
+     */
     const onUp = () => {
       if (drag && !seated) obj.position.copy(start);
       drag = null;
-      ctx.stage.controls.enabled = true;
+      if (grabbed) { grabbed = false; ctx.stage.controls.enabled = true; }
     };
 
     ctx.stage.canvas.addEventListener('pointerdown', onDown);
     addEventListener('pointermove', onMove);
     addEventListener('pointerup', onUp);
+
+    // 该往哪儿拖：一枚呼吸的小箭头。默认钉在构件后方，
+    // 步骤可以自己给一组位置（夹榫那一步要在槽的两侧各来一枚）
+    const spots = opt.arrows || [obj.position.clone().addScaledVector(d, -14)];
+    ctx.guides.set(spots.map((p) => ({ pos: p.clone(), dir: d.clone() })));
+    // 动手的步骤一开始就把机位钉死，手上对位时画面不会自己漂
+    ctx.stage.hold(true);
+
     junk?.add({ dispose: () => {
       ctx.stage.canvas.removeEventListener('pointerdown', onDown);
       removeEventListener('pointermove', onMove);
       removeEventListener('pointerup', onUp);
     } });
-    void opt;
   };
 }
 

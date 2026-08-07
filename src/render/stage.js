@@ -1,8 +1,8 @@
 /**
  * 舞台：渲染器 / 相机 / 光照 / 轨道控制 / 后期
  *
- * §1 视角约束：全程可 360° 轨道旋转与缩放；每步有推荐机位，
- * 用户偏离后 3 秒无操作自动缓回 —— 这条在这里实现，全片共用。
+ * §1 视角约束：全程可 360° 轨道旋转与缩放；每步有推荐机位。
+ * 用户转过之后就停在他放的地方 —— 不自动缓回，见 update()。
  */
 
 import * as THREE from 'three';
@@ -160,7 +160,9 @@ export class Stage {
       color: 0x14110e, roughness: 0.92, metalness: 0.0,
     });
     this.ground = new THREE.Mesh(new THREE.CircleGeometry(900, 64), groundMat);
-    this.ground.position.z = -1;
+    // 沉在灯脚之下：灯笼是挂着的，穗子要有地方垂（见 decor.js 的 buildTassel）。
+    // 顺带让地面纹样光斑的投射距离长一点，花纹摊得开
+    this.ground.position.z = -30;
     this.ground.receiveShadow = true;
     this.ground.visible = false;
     this.scene.add(this.ground);
@@ -180,12 +182,10 @@ export class Stage {
     /** 界面遮住的上下边（像素）—— 取景按剩下的那块画面算，见 setSafeArea() */
     this.safe = { top: 0, bottom: 0 };
 
-    // §1 用户偏离后 3 秒无操作自动缓回推荐机位
+    // 每步的推荐机位。userTook 一旦为真，相机就交给用户，不再自己走
     this.recommend = { pos: this.camera.position.clone(), target: FOCUS.clone(), enabled: true };
-    this.idleSince = 0;
     this.userTook = false;
-    controls.addEventListener('start', () => { this.userTook = true; this.onUserTakeover?.(true); });
-    controls.addEventListener('end', () => { this.idleSince = performance.now(); });
+    controls.addEventListener('start', () => { this.userTook = true; });
 
     // ── 后期：仅高光溢出（灯焰、辉光），阈值调高以免木料泛白 ──
     this.composer = new EffectComposer(renderer);
@@ -218,7 +218,7 @@ export class Stage {
     this.camera.updateProjectionMatrix();
     this.backdrop.material.uniforms.uAspect.value = w / h;
     // 画幅一变，取景距离也得跟着重算，否则竖屏上主体会被裁掉
-    if (this._lastFrame) this.setRecommended(this._lastFrame);
+    if (this._lastFrame) this.setRecommended(this._lastFrame, { keepUser: true });
   }
 
   /**
@@ -229,7 +229,11 @@ export class Stage {
   setSafeArea({ top = 0, bottom = 0 }) {
     if (this.safe.top === top && this.safe.bottom === bottom) return;
     this.safe = { top, bottom };
-    if (this._lastFrame) this.setRecommended(this._lastFrame);
+    // 动手的时候不重新取景。字幕一句句换，每句行数不同，安全区跟着变 ——
+    // 于是推荐机位每隔几秒挪一点，手上正在对位的画面就一直在缓慢地飘。
+    // 记下新的安全区留给下一步用，这一步的机位保持进来时的样子。
+    if (this.held) return;
+    if (this._lastFrame) this.setRecommended(this._lastFrame, { keepUser: true });
   }
 
   /** 画面中真正可用的那一块：高度占比与中心相对整幅的偏移 */
@@ -264,7 +268,14 @@ export class Stage {
    * @param {{r:number,h?:number}} [o.fit] 这一步必须完整看到的范围。
    *   画幅装不下时把相机往后拉 —— 只会拉远，不会拉近，宽屏上的取景意图原样保留。
    */
-  setRecommended(o = {}) {
+  /**
+   * @param {{keepUser?:boolean}} [mode] keepUser：只是拿旧声明重算一遍距离
+   *   （画幅变了、界面高度变了），不是一次新的取景意图。这种重算**不能清掉
+   *   userTook** —— 否则用户刚把画面转到顺手的角度，随便哪一行提示换个字数，
+   *   ResizeObserver 就会绕到这里，把「用户接管过」这件事抹掉，镜头立刻自己溜回去。
+   *   动手的步骤里这条路径每秒都在走，锁因此形同虚设。
+   */
+  setRecommended(o = {}, { keepUser = false } = {}) {
     const { az = 45, el = 22, dist = 420, target = FOCUS, ease = 1.0, fit } = o;
     this._lastFrame = { ...o, target };
     const t = target.clone();
@@ -282,8 +293,7 @@ export class Stage {
     );
     this.recommend.pos.copy(p);
     this.recommend.target.copy(t);
-    this.userTook = false;
-    this.idleSince = 0;
+    if (!keepUser) this.userTook = false;
     this.cameraEase = ease;
     this.key.target.position.copy(t);
   }
@@ -295,19 +305,30 @@ export class Stage {
     this.controls.update();
   }
 
+  /**
+   * 动手的步骤里，连「界面高度变了重新取景」也一并冻住。
+   *
+   * 字幕一句句换，每句行数不同，安全区跟着变 —— 推荐机位于是每隔几秒挪一点，
+   * 手上正在对位的画面就一直在缓慢地飘。这一条与用户有没有转过画面无关，
+   * 所以单独一个开关。引擎每翻一步解开一次。
+   */
+  hold(on) { this.held = !!on; }
+
+  /**
+   * 相机只在**用户没碰过**的时候走向推荐机位。
+   *
+   * 原先还有一条「松手三秒自动缓回」。它的本意是别让人迷路，实际效果是
+   * 你刚把画面转到看得清的角度，三秒后它自己溜回去 —— 尤其在动手的步骤里，
+   * 手上正在对位，画面在漂。整条去掉：**转到哪儿就停在哪儿**，
+   * 画面只在翻页或步骤内换工件时才动，那是作者下达的转场。
+   *
+   * 想回到推荐机位，翻一步再翻回来即可（`setRecommended` 会清掉接管标记）。
+   */
   update(dt) {
-    // 相机缓回：用户操作后 3 秒无输入则回到推荐机位
-    if (this.recommend.enabled) {
-      const idle = this.userTook && this.idleSince && performance.now() - this.idleSince > 3000;
-      if (!this.userTook || idle) {
-        const k = 1 - Math.pow(0.001, dt * (this.cameraEase ?? 1));
-        this.camera.position.lerp(this.recommend.pos, k);
-        this.controls.target.lerp(this.recommend.target, k);
-        if (idle && this.camera.position.distanceTo(this.recommend.pos) < 1.2) {
-          this.userTook = false; this.idleSince = 0;
-          this.onUserTakeover?.(false);
-        }
-      }
+    if (this.recommend.enabled && !this.userTook) {
+      const k = 1 - Math.pow(0.001, dt * (this.cameraEase ?? 1));
+      this.camera.position.lerp(this.recommend.pos, k);
+      this.controls.target.lerp(this.recommend.target, k);
     }
     this.controls.update();
   }

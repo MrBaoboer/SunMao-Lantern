@@ -39,7 +39,7 @@
   --slip-rule: rgba(42, 35, 27, 0.14);
 
   --veil:  rgba(244, 239, 227, 0.90);
-  /* 封面用的那层薄纱：比卷淡得多 —— 背后那盏灯是要看见的 */
+  /* 封面用的那层薄纱 */
   --veil-cover: rgba(244, 239, 227, 0.66);
   --scrim: linear-gradient(to top, rgba(244, 239, 227, 0.96) 0%, rgba(244, 239, 227, 0.68) 46%, transparent 100%);
   --shade: rgba(34, 29, 22, 0.06);

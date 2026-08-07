@@ -277,7 +277,7 @@ const RECIPES = {
     S.modes(t, { f0: 700 * p, ratios: [1, 2.76], decays: [0.07, 0.04], amps: [1, 0.3], gain: 0.1 * g });
   },
 
-  /** 铣：连续的高频切削 */
+  /** 刨：一层薄花卷出来，连续的高频摩擦 */
   ROUTER: (S, t, p, g) => {
     S.bandNoise(t, { f: 3000 * p, q: 1.4, dur: 0.26, gain: 0.075 * g, attack: 0.05, decayShape: 1.15 });
   },

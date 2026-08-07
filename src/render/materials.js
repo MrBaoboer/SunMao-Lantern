@@ -146,7 +146,13 @@ export function makeWoodMaterial({ grainAxis = 0, center = new THREE.Vector3(), 
   return mat;
 }
 
-/** 绵纸 DC-PAPER —— transmission 0.45 是全片光效基准值，勿改 */
+/**
+ * 绵纸 DC-PAPER —— transmission 0.45 是全片光效基准值，勿改。
+ *
+ * 不透明度不能按「半透明」去调。绵纸在反射光下基本是不透的，透光只发生在
+ * 从里面点亮的时候。压到 0.6 一档，没点灯时能一眼看穿到对面那片格心，
+ * 整盏灯读出来是个玻璃罩子，不是灯笼 —— 而封面、开场、拆解全是不点灯的画面。
+ */
 export function makePaperMaterial() {
   const mat = new THREE.MeshStandardMaterial({
     color: PALETTE.PAPER,
@@ -154,7 +160,7 @@ export function makePaperMaterial() {
     metalness: 0.0,
     side: THREE.DoubleSide,
     transparent: true,
-    opacity: 0.55,
+    opacity: 0.86,
     emissive: new THREE.Color(0xffb765),
     emissiveIntensity: 0.0, // 点亮时由 M1 抬升 —— 光从纸里透出来
   });

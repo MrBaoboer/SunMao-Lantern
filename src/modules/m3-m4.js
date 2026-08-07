@@ -39,7 +39,10 @@ export function openM3(c, onExit) {
 
   let picked = c.state.wishText || '';
   let closed = false;
-  const close = () => { closed = true; junk.clear(); c.hud.hideOverlay(); c.voice.stop(); onExit?.(); };
+  const close = () => {
+    closed = true; junk.clear(); c.hud.setBack(null); c.hud.hideOverlay(); c.voice.stop(); onExit?.();
+  };
+  c.hud.setBack(close);
   const phrase = (s) => `愿${COMBO[0].v[s[0]]}${COMBO[1].v[s[1]]}${COMBO[2].v[s[2]]}，${COMBO[3].v[s[3]]}`;
 
   const choose = () => {
@@ -50,7 +53,6 @@ export function openM3(c, onExit) {
         <button class="wish" type="button" data-w="${w}"
                 aria-pressed="${w === picked}">${w}</button>`).join('')}</div>`,
       actions: [
-        { label: '回去', on: close },
         { label: '自己凑一句', id: 'own' },
         { label: '写上去', kind: 'primary', ico: 'brush', id: 'go', disabled: !picked },
       ],
@@ -150,7 +152,6 @@ export function openM3(c, onExit) {
     c.hud.sheet({
       body: `<img class="poster" src="${url}" alt="写着「${c.state.wishText}」的灯笼海报">`,
       actions: [
-        { label: '回去', on: close },
         { label: '换一句', ico: 'refresh', on: choose },
         {
           label: '存下来', kind: 'primary', ico: 'save',
@@ -231,9 +232,14 @@ export function openM4(c, onExit) {
   c.stage.setMood('night');
   junk.add(buildNightSky(c.stage.scene));
 
+  // 天球的极轴必须转到 +Z。SphereGeometry 的两极天生在 ±Y，而本项目是 Z 轴向上
+  // （stage.js 改了 DEFAULT_UP）—— 不转这一下，整张远景是**竖着**贴上去的：
+  // 地平线立起来，屋脊从侧面一个点呈放射状散开，读出来是几片米色的楔子。
+  const skyGeo = new THREE.SphereGeometry(2600, 40, 24);
+  skyGeo.rotateX(Math.PI / 2);
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(2600, 40, 24),
-    new THREE.MeshBasicMaterial({ map: panorama(c.state.lit), side: THREE.BackSide }),
+    skyGeo,
+    new THREE.MeshBasicMaterial({ map: panorama(), side: THREE.BackSide }),
   );
   c.stage.scene.add(sky);
   junk.add(sky);
@@ -242,7 +248,10 @@ export function openM4(c, onExit) {
   c.stage.setRecommended({ az: 60, el: 6, dist: 540, target: V(...AIM_LANTERN), fit: FIT_LANTERN });
   c.stage.snapToRecommended();
 
-  const close = () => { junk.clear(); c.hud.hideOverlay(); c.voice.stop(); onExit?.(); };
+  const close = () => {
+    junk.clear(); c.hud.setBack(null); c.hud.hideOverlay(); c.voice.stop(); onExit?.();
+  };
+  c.hud.setBack(close);
 
   const hang = () => {
     if (placed.length >= 6) { c.hud.toast('最多挂六盏 —— 想换位置，先收起来'); return; }
@@ -291,7 +300,6 @@ export function openM4(c, onExit) {
       { label: `挂一盏 ${placed.length}/6`, kind: 'primary', ico: 'plus', on: hang },
       { label: '拍下来', ico: 'camera', on: shoot },
       { label: '收起来', ico: 'refresh', on: takeDown },
-      { label: '回去', ico: 'back', on: close },
     ],
     hint: '转动画面找个位置，再挂一盏上去',
   });
@@ -310,16 +318,20 @@ export function openM4(c, onExit) {
   return close;
 }
 
-/** 程序化的远景：白天的院子 / 夜里的街 */
-function panorama(night) {
+/**
+ * 程序化的远景：夜里的一条街。
+ *
+ * 只有夜景一种 —— 这一步 `setMood('night')` 是写死的，灯没点亮时却给一张白天的天空，
+ * 于是暗调的布光配着亮蓝的天，两边对不上。挂灯笼本来也是夜里的事。
+ */
+function panorama() {
   const cv = document.createElement('canvas');
   cv.width = 2048; cv.height = 1024;
   const g = cv.getContext('2d');
   const sky = g.createLinearGradient(0, 0, 0, 1024);
-  if (night) { sky.addColorStop(0, '#05070e'); sky.addColorStop(0.55, '#121828'); sky.addColorStop(1, '#0a0906'); }
-  else { sky.addColorStop(0, '#8fa9c4'); sky.addColorStop(0.55, '#cfd6cf'); sky.addColorStop(1, '#6b5a44'); }
+  sky.addColorStop(0, '#05070e'); sky.addColorStop(0.55, '#121828'); sky.addColorStop(1, '#0a0906');
   g.fillStyle = sky; g.fillRect(0, 0, 2048, 1024);
-  g.fillStyle = night ? '#04060a' : '#4a3b2c';
+  g.fillStyle = '#04060a';
   for (let x = 0; x < 2048; x += 128) {
     const h = 120 + Math.sin(x * 0.013) * 60;
     g.beginPath();
@@ -327,16 +339,14 @@ function panorama(night) {
     g.closePath(); g.fill();
     g.fillRect(x + 10, 700, 108, 324);
   }
-  if (night) {
-    g.fillStyle = 'rgba(255,160,80,.45)';
-    for (let i = 0; i < 40; i++) {
-      g.beginPath();
-      g.arc(Math.random() * 2048, 620 + Math.random() * 200, 3 + Math.random() * 5, 0, 7);
-      g.fill();
-    }
+  // 远处别人家的窗火
+  g.fillStyle = 'rgba(255,160,80,.45)';
+  for (let i = 0; i < 40; i++) {
+    g.beginPath();
+    g.arc(Math.random() * 2048, 620 + Math.random() * 200, 3 + Math.random() * 5, 0, 7);
+    g.fill();
   }
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.mapping = THREE.EquirectangularReflectionMapping;
   return tex;
 }

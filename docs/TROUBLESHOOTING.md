@@ -57,6 +57,23 @@ getComputedStyle(document.documentElement).getPropertyValue('--dock-h')
 是 `0px` 而底部确实有一排控件，说明那段 HTML 的根节点没有 `.dock` 类 ——
 `hud.dock()` 生成的结构不要在 `onMount` 里替换掉。
 
+### 自己写脚本截图，机位怎么设都不生效
+
+封面挂着一个每帧改写推荐机位的自转 updater（`main.js` 里的 `drift`）。
+把 `#cover` 直接 `hidden` 掉，它照样在跑 —— 之后任何 `setRecommended()` 都会被它逐帧覆盖，
+拍出来永远是封面那个机位，而且每次的方位角还略有不同（它按时间累加）。
+
+**必须真的按下「开始做灯」**，`enter()` 才会把它摘掉：
+
+```js
+await page.click('#cv-go');
+await page.evaluate(() => document.querySelector('.overlay .btn-primary')?.click()); // 收掉「怎么操作」
+```
+
+`tools/shots.mjs` 就是这么做的，照抄即可。顺带一提：开场那一步在远处撒了一圈「灯河」光点精灵，
+拍产品图时记得 `scene.traverse((o) => { if (o.isSprite) o.visible = false; })`，
+否则画面边角会留下几点橙色。
+
 ### 木头是奶白色的，看不出木纹
 
 光加多了。`src/render/stage.js` 的 `MOODS` 里，四路光的总辐照相比现行预设再明显上调（三成以上），
@@ -70,6 +87,21 @@ ACES 就会把高光推平。想让画面更亮，优先调 `bg`（背景那一�
 「朝下看」正好是它的退化情形，滚转角由内部容错分支随手定。
 
 `npm run smoke` 每一步都验一次刃口与攻角的点积，反了会直接报 `dot=-1.000`。
+
+### 走刀时木头不掉料 / 刀没去过的地方也没了
+
+这一步的 `mach.begin()` 漏了 `carve`，或者 `carve.tag` 与 `onDone` 里 `addOp()` 的工序对不上。
+没有 `carve` 就退回老行为：走完几刀之后整道工序一次性开出来。
+
+刀没去过的地方也一起没了，则是「刀压在哪条道上」判错了。判据用的是
+**既不是进给轴、也不是进刀轴的那一个轴**：进给轴由 `to − from` 定，进刀轴由 `faceNormal` 定。
+两者若指同一个轴（等于顺着进刀方向走刀），判据就失效了 —— 检查这一步的
+`faceNormal` 是不是与走刀方向垂直。
+
+```js
+__ctx.mach.job.carveKey    // { parts, tag, travel, axis, dir, lane }
+__ctx.mach.job.carveT      // 当前进度 0–1，只增不减
+```
 
 ### 教学件的凹槽看起来是凸的
 
@@ -146,12 +178,6 @@ npm run smoke -- --shots
 
 输出里会写清哪一条、期望什么、实际什么。几何是整数毫米的，失败一定是真的对不上，
 不是精度问题。以 `src/core/verify.js` 的断言为准 —— 它是整个项目里唯一会自己报错的规格。
-
-### `npm audit` 有告警
-
-当前报两条：esbuild 一条中危，以及由它传导到 vite 5 的一条高危。两条都只影响
-**开发服务器**，不影响构建产物。audit 的修复建议是升级到 vite 7+（大版本跨越），
-升级后需要重跑 `npm run check` 完整验证。
 
 ---
 

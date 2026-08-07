@@ -76,6 +76,7 @@ export class Engine {
       ctx.hud.hideOverlay();
       ctx.lantern.clearHighlights();
       ctx.lantern.setSection(null, false);
+      ctx.stage.hold(false);          // 上一步锁住的机位，翻页时解开
 
       // ── 进入 ──
       this.index = i;

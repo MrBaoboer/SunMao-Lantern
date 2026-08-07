@@ -163,10 +163,17 @@ for (const vp of VIEWPORTS) {
       await page.evaluate((s) => window.__engine.goToStep(s), id);
       await page.waitForTimeout(ms);
     };
-    const runJobs = async (label, maxJobs = 8) => {
+    // 上限只是跑飞时的兜底。C4 拆成一处一趟之后已有 6 趟，留足余量 ——
+    // 撞上限会静默少跑几趟，看起来却像通过了
+    const runJobs = async (label, maxJobs = 12) => {
+      let ran = 0;
       for (let n = 0; n < maxJobs; n++) {
         const has = await page.waitForFunction(() => !!window.__ctx.mach.job, null, { timeout: 6000 }).catch(() => null);
-        if (!has) return;
+        // 第一轮就没有任务 —— 这一步根本没起加工，是真失败；
+        // 后面几轮没有 —— 工序走完了，正常收工。原先两种情况都是静默 return，
+        // 于是这条断言对「加工整个坏掉」是看不见的（装配那边的 seatAll 一直会报）
+        if (!has) break;
+        ran++;
         const seq = await page.evaluate(() => window.__jobSeq);
         // evaluate 会一直等页面里的 Promise —— autoRun 卡死时必须有硬超时兜底
         await page.evaluate(() => Promise.race([
@@ -177,7 +184,8 @@ for (const vp of VIEWPORTS) {
           .catch(() => note(vp.name, `${label}: 加工任务没有走完`));
         await page.waitForTimeout(1000);
       }
-      console.log(`    ${label} 加工完成`);
+      if (!ran) { note(vp.name, `${label}: 没有出现加工任务`); return; }
+      console.log(`    ${label} 加工完成 · ${ran} 道工序`);
     };
     const seatAll = async (label) => {
       const has = await page.waitForFunction(() => !!window.__ctx.drag.session, null, { timeout: 6000 }).catch(() => null);
@@ -220,9 +228,7 @@ for (const vp of VIEWPORTS) {
       await page.mouse.up();
       if (!litOk) note(vp.name, 'M1 按住引火没有反应');
     } else note(vp.name, 'M1 没有出现点灯按钮');
-    await page.evaluate(() => {
-      document.querySelectorAll('.dock button').forEach((b) => { if (b.textContent.includes('回去')) b.click(); });
-    });
+    await page.evaluate(() => document.getElementById('btn-back')?.click());
     await page.waitForTimeout(900);
 
     // M3 海报：画面区域必须真的截到灯笼，不能是空白
