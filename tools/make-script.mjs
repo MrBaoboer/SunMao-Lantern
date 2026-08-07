@@ -22,9 +22,9 @@ const ACTS = [
 ];
 
 const TITLES = {
-  M1: '点亮之后', M4: '把它挂起来', M5: '放烟花',
+  M1: '点亮之后', M4: '把它挂起来',
   'M2-fin': '猜灯谜 · 最后一题答对之后',
-  'M5-fu': '放出「福」字时', 'M5-outro': '片尾',
+  OUTRO: '片尾', 'OUTRO-dark': '片尾（灯未点亮）',
 };
 
 const RIDDLE = /^M2-\d$/;

@@ -1,5 +1,5 @@
 /**
- * 写心愿 · 挂起来 · 放烟花
+ * 写心愿 · 挂起来
  */
 
 import * as THREE from 'three';
@@ -7,7 +7,7 @@ import { V, Junk, buildNightSky, AIM_LANTERN, FIT_LANTERN } from '../steps/util.
 import { playVO } from './vo.js';
 import { buildPatternTexture } from '../render/lattice.js';
 import { makePosterNo } from '../core/state.js';
-import { tween, Ease, wait } from '../util/tween.js';
+import { tween, wait } from '../util/tween.js';
 
 const junk = new Junk(null);
 
@@ -339,162 +339,4 @@ function panorama(night) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.mapping = THREE.EquirectangularReflectionMapping;
   return tex;
-}
-
-// ══════════════════════════════════════════════════════════
-// 放烟花
-//   炸开之后过 0.25 秒才响 —— 声音跑得比光慢。
-//   这一条比任何粒子特效都更能让人觉得「是真的」。
-// ══════════════════════════════════════════════════════════
-const SOUND_LAG = 0.25;
-
-export function openM5(c, onExit) {
-  junk.scene = c.stage.scene;
-  junk.clear();
-  c.stage.setMood('night');
-  c.bgm.play('BGM_C_FINALE');
-  junk.add(buildNightSky(c.stage.scene));
-  // 烟花在天上，但灯笼不能因此被切掉半截 —— 目标点压低到两者都装得下的位置
-  c.stage.setRecommended({ az: 60, el: 14, dist: 900, target: V(0, 0, 300), fit: { r: 150, h: 300 } });
-  c.stage.snapToRecommended();
-
-  let count = 0;
-  let closed = false;
-  const COLORS = [0xffd166, 0xff5f6d, 0x7ee8fa, 0xffa3d1, 0xc8ffb0, 0xffe9a8];
-
-  const launch = (type, sx, sy) => {
-    if (closed) return;
-    const at = new THREE.Vector3(sx, 240 + Math.random() * 160, 380 + sy);
-    const color = new THREE.Color(COLORS[Math.floor(Math.random() * COLORS.length)]);
-    c.sfx.play('FIREWORK_LAUNCH', { pitch: (Math.random() - 0.5) * 4 });
-    tween(0.6 + Math.random() * 0.3, (k) => {
-      // 升空拖尾逐帧入池 —— 模块关掉后这条 tween 还会跑完，得在这里也收手
-      if (closed || k > 0.98) return;
-      c.fx.fireworks.parts.push({
-        x: at.x, y: at.y, z: 30 + (at.z - 30) * k,
-        vx: 0, vy: 0, vz: 0, r: 1, g: 0.75, b: 0.4, life: 0.35, age: 0, drag: 0.8,
-      });
-    }, { ease: Ease.outQuad, onDone: () => {
-      if (closed) return;
-      c.fx.fireworks.burst(type, at, color);
-      count++;
-      c.sfx.play('FIREWORK_BURST', { delay: SOUND_LAG, pitch: type === 'fu' ? -3 : 0 });
-      c.sfx.play('FIREWORK_CRACKLE', { delay: SOUND_LAG + 0.15, gain: 0.7 });
-      // 每一发都照一下灯笼，颜色取自这一发 —— 否则烟花和灯笼像两张贴在一起的图
-      const base = c.state.lit ? 1 : 0;
-      tween(0.3, (k) => {
-        const pulse = Math.sin(k * Math.PI) * 0.55;
-        c.lantern.innerLight.color.lerpColors(new THREE.Color(0xffa54f), color, pulse * 0.6);
-        c.lantern.setLit(base + pulse * (base ? 0.35 : 0.28));
-      }, { onDone: () => { c.lantern.setLit(base); c.lantern.innerLight.color.setHex(0xffa54f); } });
-      if (type === 'fu') playVO(c, 'M5-fu');
-      if (count === 12) c.hud.toast('放了十二发了 —— 压轴的那串在下面', { gold: true });
-    } });
-  };
-
-  let down = null, path = [];
-  const canvas = c.stage.canvas;
-  const onDown = (e) => {
-    if (e.target.closest('.dock, .sheet')) return;
-    down = { t: performance.now(), x: e.clientX, y: e.clientY };
-    path = [[e.clientX, e.clientY]];
-  };
-  const onMove = (e) => { if (down) path.push([e.clientX, e.clientY]); };
-  const onUp = (e) => {
-    if (!down) return;
-    const dt = (performance.now() - down.t) / 1000;
-    const dx = e.clientX - down.x, dy = e.clientY - down.y;
-    let type = 'peony';
-    if (dt > 1.0 && Math.hypot(dx, dy) < 40) type = 'fu';
-    else if (isCircle(path)) type = 'ring';
-    else if (dy < -70 && Math.abs(dx) < Math.abs(dy)) type = 'willow';
-    else if (e.shiftKey) type = 'double';
-    const x = ((down.x / innerWidth) - 0.5) * 900;
-    const y = -((down.y / innerHeight) - 0.5) * 260;
-    launch(type, x, y);
-    if (type === 'double') setTimeout(() => { if (!closed) launch('peony', x + 120, 40); }, 400);
-    down = null;
-  };
-  canvas.addEventListener('pointerdown', onDown);
-  addEventListener('pointermove', onMove);
-  addEventListener('pointerup', onUp);
-  junk.add({ dispose: () => {
-    canvas.removeEventListener('pointerdown', onDown);
-    removeEventListener('pointermove', onMove);
-    removeEventListener('pointerup', onUp);
-  } });
-
-  const close = () => {
-    // 压轴与收尾是一条长异步链 —— 不设已关闭标志，
-    // 退出后烟花还会在五门页上继续放，片尾卷九秒后又盖上来
-    if (closed) return;
-    closed = true;
-    c.fx.fireworks.clear();
-    junk.clear();
-    c.hud.hideOverlay();
-    c.voice.stop();
-    onExit?.();
-  };
-
-  const finale = async () => {
-    for (let i = 0; i < 18; i++) {
-      if (closed) return;
-      const t = ['peony', 'willow', 'ring', 'double'][i % 4];
-      launch(i === 6 || i === 14 ? 'fu' : t, (Math.random() - 0.5) * 900, (Math.random() - 0.5) * 200);
-      await wait(0.24 + Math.max(0, 0.3 - i * 0.02));
-    }
-    await wait(1.6);
-    if (closed) return;
-    outro();
-  };
-
-  const outro = async () => {
-    c.state.modulesDone = { ...c.state.modulesDone, M5: true };
-    c.stage.setRecommended({ az: 55, el: 8, dist: 360, target: V(...AIM_LANTERN), ease: 0.35, fit: FIT_LANTERN });
-    playVO(c, c.state.lit ? 'M5-outro' : 'M5-outro-dark');
-    await wait(7.5);
-    if (closed) return;
-    c.hud.sheet({
-      body: `<div class="finale">
-        <div class="ln">13 根木条</div><div class="ln">0 颗钉子</div><div class="ln">7000 年</div>
-      </div>`,
-      actions: [{ label: '回去', kind: 'primary', on: close }],
-      onEsc: close,
-      onMount: (o) => {
-        o.querySelectorAll('.ln').forEach((el, i) => {
-          el.style.opacity = 0;
-          setTimeout(() => tween(0.7, (k) => { el.style.opacity = k; }), i * 900);
-        });
-      },
-    });
-  };
-
-  c.hud.dock({
-    actions: [
-      { label: '放一串压轴', kind: 'quiet', ico: 'spark', on: finale },
-      { label: '回去', ico: 'back', on: close },
-    ],
-    hint: '点一下、往上划、画个圈、长按松手 —— 四种不一样的花',
-  });
-  playVO(c, 'M5');
-
-  return close;
-}
-
-/** 画圆判定：首尾接近，累计转角接近一整圈 */
-function isCircle(path) {
-  if (path.length < 12) return false;
-  const [x0, y0] = path[0];
-  const [x1, y1] = path[path.length - 1];
-  if (Math.hypot(x1 - x0, y1 - y0) > 90) return false;
-  let turn = 0;
-  for (let i = 2; i < path.length; i++) {
-    const a1 = Math.atan2(path[i - 1][1] - path[i - 2][1], path[i - 1][0] - path[i - 2][0]);
-    const a2 = Math.atan2(path[i][1] - path[i - 1][1], path[i][0] - path[i - 1][0]);
-    let d = a2 - a1;
-    while (d > Math.PI) d -= 2 * Math.PI;
-    while (d < -Math.PI) d += 2 * Math.PI;
-    turn += d;
-  }
-  return Math.abs(turn) > 4.2;
 }

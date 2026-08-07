@@ -187,7 +187,7 @@ export class Stage {
     controls.addEventListener('start', () => { this.userTook = true; this.onUserTakeover?.(true); });
     controls.addEventListener('end', () => { this.idleSince = performance.now(); });
 
-    // ── 后期：仅高光溢出（灯焰、辉光、烟花），阈值调高以免木料泛白 ──
+    // ── 后期：仅高光溢出（灯焰、辉光），阈值调高以免木料泛白 ──
     this.composer = new EffectComposer(renderer);
     // EffectComposer 自建的离屏目标默认单采样，构造器上的 antialias 只管默认帧缓冲。
     // 不补这一下，开着 bloom 的桌面端全程没有抗锯齿，反倒是关掉 bloom 的低配档有 ——

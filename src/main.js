@@ -3,7 +3,7 @@ import * as THREE from 'three';
 
 import { Stage } from './render/stage.js';
 import { Lantern } from './render/lantern.js';
-import { ChipBurst, Ripples, EnergyRing, Fireworks, detectTier } from './render/fx.js';
+import { ChipBurst, Ripples, EnergyRing, detectTier } from './render/fx.js';
 import { state } from './core/state.js';
 import { runVerification, formatReport } from './core/verify.js';
 import { HUD, Arrows } from './ui/hud.js';
@@ -14,23 +14,22 @@ import { VoiceTrack } from './audio/voice.js';
 import { DragAssembly } from './interact/assembly.js';
 import { Machining } from './interact/machining.js';
 import { Engine } from './app/engine.js';
-import { tick as tickTweens } from './util/tween.js';
+import { tween, tick as tickTweens } from './util/tween.js';
 import { makeSimpleDrag, AIM_LANTERN, FIT_LANTERN } from './steps/util.js';
 import { act1 } from './steps/act1.js';
 import { act3 } from './steps/act3.js';
 import { act4 } from './steps/act4.js';
 import { openM1, openM2 } from './modules/m1-m2.js';
-import { openM3, openM4, openM5 } from './modules/m3-m5.js';
-import { MODULE_VO } from './modules/vo.js';
+import { openM3, openM4 } from './modules/m3-m5.js';
+import { MODULE_VO, playVO } from './modules/vo.js';
 import { installDevShot } from './devshot.js';
 
-/** 做完灯之后的五件事 */
+/** 做完灯之后的四件事 */
 const DOORS = [
   { id: 'M1', ico: 'flame', nm: '点灯', ds: '按住引火，等它亮起来', open: openM1 },
   { id: 'M2', ico: 'slip', nm: '猜灯谜', ds: '答对一个，灯亮一分', open: openM2 },
   { id: 'M3', ico: 'brush', nm: '写心愿', ds: '写在灯上，存成一张画', open: openM3 },
   { id: 'M4', ico: 'lantern', nm: '挂起来', ds: '挂到你想挂的地方', open: openM4 },
-  { id: 'M5', ico: 'firework', nm: '放烟花', ds: '点一下，画个圈，四种花', open: openM5 },
 ];
 
 const cover = document.getElementById('cover');
@@ -100,7 +99,6 @@ async function main() {
     chips: new ChipBurst(stage.scene, tier),
     ripples: new Ripples(stage.scene),
     ring: new EnergyRing(stage.scene),
-    fireworks: new Fireworks(stage.scene, tier),
     tier,
   };
 
@@ -119,8 +117,13 @@ async function main() {
   const engine = new Engine(ctx);
   engine.setSteps([...act1(ctx), ...act3(ctx), ...act4(ctx)]);
 
-  // ── 做完灯之后的五件事 ──
+  // ── 做完灯之后的四件事 ──
+  // 四件都做完时补一段片尾 —— 全片总得有个落点，而这里是唯一能确定
+  // 「都玩过了」的时刻。四扇门是自由顺序，所以只认张数，不认顺序。
+  let outroShown = false;
+  let hubToken = 0;
   ctx.openHub = () => {
+    const myToken = ++hubToken;
     const done = state.modulesDone || {};
     const n = DOORS.filter((d) => done[d.id]).length;
     hud.dock({
@@ -147,9 +150,32 @@ async function main() {
         });
       },
     });
-    hud.setCue(n === DOORS.length ? '五件事都做完了'
-      : n ? `五件事，做完了 <b>${n}</b> 件`
+    hud.setCue(n === DOORS.length ? '四件事都做完了'
+      : n ? `四件事，做完了 <b>${n}</b> 件`
         : '想先做哪个都行');
+
+    if (n === DOORS.length && !outroShown) {
+      outroShown = true;
+      (async () => {
+        playVO(ctx, state.lit ? 'OUTRO' : 'OUTRO-dark');
+        await sleep(7500);
+        // 这几秒里用户可能又进了别的模块 —— 片尾不该盖到人家头上
+        if (hubToken !== myToken) return;
+        hud.sheet({
+          body: `<div class="finale">
+            <div class="ln">13 根木条</div><div class="ln">0 颗钉子</div><div class="ln">7000 年</div>
+          </div>`,
+          actions: [{ label: '知道了', kind: 'primary', on: () => ctx.openHub() }],
+          onEsc: () => ctx.openHub(),
+          onMount: (o) => {
+            o.querySelectorAll('.ln').forEach((el, i) => {
+              el.style.opacity = 0;
+              setTimeout(() => tween(0.7, (k) => { el.style.opacity = k; }), i * 900);
+            });
+          },
+        });
+      })();
+    }
   };
 
   // ── 尺寸对照 ──
@@ -235,7 +261,6 @@ async function main() {
     fx.chips.update(dt);
     fx.ripples.update(dt);
     fx.ring.update(dt);
-    fx.fireworks.update(dt);
     hud.updateSpots(stage.camera);
     guides.update(stage.camera);
   });
@@ -307,8 +332,7 @@ async function main() {
     <button class="btn btn-primary" id="cv-go">开始做灯</button>
     <div class="cover-alt">
       <button class="btn btn-text" id="cv-help">怎么操作</button>
-    </div>
-    <p class="cover-meta">约 8 分钟 · 随时可以停</p>`;
+    </div>`;
   coverMsg.hidden = true;
   coverAct.hidden = false;
   coverAct.querySelector('#cv-go').focus();

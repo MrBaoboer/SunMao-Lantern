@@ -80,7 +80,7 @@ export function act1(ctx) {
       id: 'B1', phase: 1,
       title: '凸的叫榫，凹的叫卯',
       mood: 'craft',
-      cam: { az: 30, el: 14, dist: 210, target: [0, 0, 96], snap: true, fit: { r: 82, h: 44 } },
+      cam: { az: -118, el: 16, dist: 210, target: [0, 0, 96], snap: true, fit: { r: 82, h: 44 } },
       cps: 3.6,
       // 画面随时可以被拖着转，所以指代一律按「长什么样」，不按左右
       cue: { ico: 'drag', text: '<em>拖动</em>凸出来的那根，推进对面的孔里' },
@@ -178,7 +178,7 @@ export function act1(ctx) {
       id: 'B2', phase: 1,
       title: '直榫：穿过去，露一截',
       mood: 'craft',
-      cam: { az: 34, el: 16, dist: 200, target: [0, 0, 96], snap: true, fit: { r: 78, h: 40 } },
+      cam: { az: -62, el: 16, dist: 200, target: [0, 0, 96], snap: true, fit: { r: 78, h: 40 } },
       cue: { ico: 'drag', text: '<em>拖动</em>带榫头的那根，把榫头推进孔里' },
       narration: `第一种，直榫 —— 最基础，也最常见。
 我们这盏灯用的是它的贯穿做法，叫「透榫」：榫头要穿过整根木条，还要在另一头露出一小截。
@@ -232,7 +232,7 @@ export function act1(ctx) {
           c.sfx.play('SNAP_IN');
           c.fx.ripples.emit(V(av(1.8), 0, Z), V(1, 0, 0));
           c.hud.toast('看，穿出来了', { gold: true });
-          c.stage.setRecommended({ az: 12, el: 10, dist: 130, target: V(av(1.9), 0, Z), fit: { r: 30, h: 24 } });
+          c.stage.setRecommended({ az: -74, el: 12, dist: 130, target: V(av(1.9), 0, Z), fit: { r: 30, h: 24 } });
           engine.done();
         };
         c.simpleDrag(A, V(1, 0, 0), av(3.6) + SEATED, Z, seat, null, junk);

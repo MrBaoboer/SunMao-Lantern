@@ -38,15 +38,14 @@ export function act3(ctx) {
       title: '十三根木条',
       mood: 'studio',
       bgm: 'BGM_B_CRAFT',
-      cam: { az: 58, el: 46, dist: 560, target: [0, 0, 96], snap: true, fit: { r: 222, h: 146 } },
+      cam: { az: -84, el: 38, dist: 560, target: [0, -48, 96], snap: true, fit: { r: 210, h: 92 } },
       narration: `一共十三根木条，截面都是方的。
 九根短的，用来做上下两个框；四根长的，是灯笼的柱子。
 （气口）
 先做下面这个框，也就是灯笼的底盘。`,
       note: {
         title: '只有一个尺寸',
-        spec: [['木条截面', '12 × 12 mm'], ['短料 / 长料', '9 / 4 根']],
-        body: '整盏灯的长度、深浅、间距，都是这 <em>12 毫米</em>的整数倍。',
+        body: '木条截面 <em>12 × 12 毫米</em>。整盏灯的长度、深浅、间距，都是这个数的整数倍。',
         foot: '一套尺寸贯穿到底，零件才可能严丝合缝。',
       },
       async enter(c) {
@@ -55,30 +54,30 @@ export function act3(ctx) {
         c.lantern.allBlank();
         only(c, [...LOWER, ...UPPER, ...COLS]);
 
-        // 十三根构件的天然轴向各不相同，陈列时统一转到沿 X 平铺
+        // 十三根构件的天然轴向各不相同，陈列时统一转到沿 X 平铺。
+        // 短料铺成三列三行，长料单独一摞排在下方 —— 九根与四根要一眼数得出来
         const flat = (id) => {
           if (id.startsWith('PL')) return [0, Math.PI / 2, 0];
           if (id.includes('-B') || id === 'LB-C1') return [0, 0, -Math.PI / 2];
           return [0, 0, 0];
         };
         const shorts = [...LOWER, ...UPPER];
+        COLS.forEach((id, i) => {
+          c.lantern.detach(id, { pos: [0, a(5) - i * a(3), BENCH_Z], rot: flat(id) });
+        });
         shorts.forEach((id, i) => {
           const col = i % 3, row = Math.floor(i / 3);
-          c.lantern.detach(id, { pos: [(col - 1) * a(11), a(3) - row * a(2), BENCH_Z], rot: flat(id) });
-        });
-        COLS.forEach((id, i) => {
-          c.lantern.detach(id, { pos: [0, -a(3) - i * a(2), BENCH_Z], rot: flat(id) });
+          c.lantern.detach(id, { pos: [(col - 1) * a(11), -a(7) - row * a(3), BENCH_Z], rot: flat(id) });
         });
 
-        for (const [i, id] of [...shorts, ...COLS].entries()) {
+        for (const [i, id] of [...COLS, ...shorts].entries()) {
           const p = c.lantern.parts.get(id);
           const z0 = p.mesh.position.z;
           p.mesh.position.z = z0 + a(2);
           // 用 wait 而不是裸 setTimeout：快速翻页时 cancelAll 才掐得断，
-          // 否则落料声和位移会打在下一步的画面上
+          // 否则这一批位移会打在下一步的画面上
           wait(i * 0.06).then(() => {
             tween(0.22, (k) => { p.mesh.position.z = z0 + a(2) * (1 - Ease.outBack(k)); });
-            c.sfx.play('WOOD_DROP', { pitch: (Math.random() - 0.5) * 4 });
           });
         }
         c.hud.setCue('短料 <b>9</b> 根 · 长料 <b>4</b> 根');
@@ -90,7 +89,7 @@ export function act3(ctx) {
       id: 'C2', phase: 2,
       title: '开槽，开叉',
       mood: 'craft',
-      cam: { az: 62, el: 46, dist: 190, target: [0, 0, BENCH_Z], snap: true, fit: FIT_BENCH },
+      cam: { az: 64, el: 30, dist: 190, target: [0, 0, BENCH_Z], snap: true, fit: FIT_BENCH },
       cue: { ico: 'drag', text: '<em>拖动凿子</em>，沿着槽来回走' },
       narration: `先从两根顺枨开始：在顶面凿两条平行的槽。
 中间留下的这一小条不是废料，是榫舌。
@@ -120,7 +119,7 @@ export function act3(ctx) {
           only(c, ['LB-C1']);
           c.lantern.setOps('LB-C1', 'blank');
           bench(c, 'LB-C1', [0, 0, 0]);
-          c.stage.setRecommended({ az: 8, el: 20, dist: 200, target: V(0, 0, BENCH_Z), fit: FIT_BENCH });
+          c.stage.setRecommended({ az: 40, el: 22, dist: 200, target: V(0, 0, BENCH_Z), fit: FIT_BENCH });
           c.hud.setCue('<em>拖动锯</em>，沿线来回锯', 'drag');
 
           const ops = [OP.SHORTEN, OP.FORK, OP.BEAR_SHOULDER];
@@ -228,7 +227,7 @@ export function act3(ctx) {
       id: 'C4', phase: 2,
       title: '切榫头，凿透眼',
       mood: 'craft',
-      cam: { az: 30, el: 40, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: { r: 80, h: 54 } },
+      cam: { az: 30, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: { r: 80, h: 54 } },
       cue: { ico: 'drag', text: '<em>拖动锯</em>，切出四个榫头' },
       narration: `四个端头切出榫头。榫头要细而长，才穿得过整根木条。
 这里有个容易忽略的地方：榫头不居中，要往里偏一点 —— 外侧留出的那一半，是给柱子留的位置。
@@ -362,7 +361,7 @@ export function act3(ctx) {
       id: 'C5', phase: 2,
       title: '底盘做好了',
       mood: 'craft',
-      cam: { az: 40, el: 36, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: FIT_RING },
+      cam: { az: 40, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: FIT_RING },
       cue: { ico: 'drag', text: '<em>拖动横枨</em>，套住两个榫头' },
       narration: `两根横枨套上去，两个榫头同时穿进两个孔，推到底。
 看四边 —— 榫头都穿出来了，各露出一小截。
@@ -499,7 +498,7 @@ export function act3(ctx) {
       id: 'C7', phase: 2,
       title: '柱子：削掉四分之三',
       mood: 'craft',
-      cam: { az: 26, el: 8, dist: 300, target: [0, 0, 96], snap: true, fit: { r: 46, h: 104 } },
+      cam: { az: 50, el: 12, dist: 300, target: [0, 0, 96], snap: true, fit: { r: 62, h: 104 } },
       cue: { ico: 'drag', text: '<em>拖动铣刀</em>，一次削掉一个角' },
       narration: `最后四根长料，做柱子。
 柱子要同时扣住上下两个框，还得让框拆不下来。怎么做到？
@@ -544,7 +543,7 @@ export function act3(ctx) {
           const zw = (seg[0] + seg[1]) / 2 - M.HEIGHT / 2 + 96;
           // 整根柱子都得在画面里。细颈只有 12 mm，凑近了看确实清楚，
           // 但"三段两颈"这件事一旦裁掉柱身就说不成立了。
-          c.stage.setRecommended({ az: 26, el: 6, dist: 300, target: V(0, 0, 96), fit: { r: 46, h: 104 } });
+          c.stage.setRecommended({ az: 50, el: 10, dist: 300, target: V(0, 0, 96), fit: { r: 62, h: 104 } });
           marks.forEach((m, i) => { m.material.opacity = i === stage ? 0.5 : 0.16; });
           c.hud.setCue(`<em>拖动铣刀</em>削第 <b>${stage + 1}</b> 处细颈 · 共 2 处`, 'drag');
           // 刀从柱子外侧横着走。走在轴线上会让刀身穿进柱子里，
@@ -570,7 +569,7 @@ export function act3(ctx) {
               for (const m of marks) { m.material.opacity = 0.14; }
               c.hud.setCue('三段柱身，两处细颈');
               c.hud.toast('推到底会咬住 —— 不用钉子也掉不了', { gold: true });
-              c.stage.setRecommended({ az: 30, el: 12, dist: 300, target: V(0, 0, 96), fit: { r: 46, h: 104 } });
+              c.stage.setRecommended({ az: 54, el: 14, dist: 300, target: V(0, 0, 96), fit: { r: 62, h: 104 } });
               engine.done();
             },
           });

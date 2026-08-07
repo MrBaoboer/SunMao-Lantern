@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#f4efe3" />
 <title>榫卯灯笼 · 国风流光</title>
 <meta name="description" content="十三根木条，一颗钉子也不用。在浏览器里亲手做一盏能拆开的中式灯笼。" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f4efe3'/%3E%3Cg fill='%239a7328'%3E%3Crect x='6' y='7' width='20' height='2.6'/%3E%3Crect x='6' y='22.4' width='20' height='2.6'/%3E%3Crect x='9' y='5' width='2.6' height='22'/%3E%3Crect x='20.4' y='5' width='2.6' height='22'/%3E%3C/g%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg fill='none' stroke='%23a9782c' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M11.5 4.5v23M20.5 4.5v23M4.5 11.5h23M4.5 20.5h23'/%3E%3C/g%3E%3C/svg%3E" />
 <script>
   // 主题要在首帧之前定下来，否则会闪一下
   try {
@@ -25,11 +25,14 @@
     <div class="cover-inner">
       <p class="cover-eyebrow">国风流光</p>
       <h1 class="cover-title">榫卯灯笼</h1>
-      <p class="cover-sub">十三根木条 · 一颗钉子也不用</p>
       <div class="cover-rule"><i id="cover-bar"></i></div>
-      <p id="cover-msg" class="cover-msg" role="status">正在为你点亮这盏灯</p>
-      <noscript><p class="cover-msg bad">这一页需要 JavaScript 才能运行 —— 请在浏览器里允许脚本后刷新。</p></noscript>
-      <div id="cover-act" class="cover-act" hidden></div>
+      <p class="cover-sub">十三根木条 · 一颗钉子也不用</p>
+      <!-- 加载文案与入口共用一个定高的槽：就绪那一刻按钮顶上来，题字不会跟着跳 -->
+      <div class="cover-foot">
+        <p id="cover-msg" class="cover-msg" role="status">正在为你点亮这盏灯</p>
+        <noscript><p class="cover-msg bad">这一页需要 JavaScript 才能运行 —— 请在浏览器里允许脚本后刷新。</p></noscript>
+        <div id="cover-act" class="cover-act" hidden></div>
+      </div>
     </div>
   </div>
 

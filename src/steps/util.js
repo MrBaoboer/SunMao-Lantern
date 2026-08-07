@@ -112,7 +112,7 @@ export function buildLanternRiver(scene) {
   };
 }
 
-/** 夜空（M1 / M5 复用） */
+/** 夜空（M1 / M3 复用） */
 export function buildNightSky(scene) {
   const g = new THREE.Group();
   const N = 420;
