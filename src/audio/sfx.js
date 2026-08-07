@@ -48,7 +48,9 @@ class SFXEngine {
     this.bus = comp;
     this.masterGain = master;
 
-    // 供 BGM 做 sidechain 让位（M5 爆炸时 BGM 短暂 −4 dB）
+    // 预留：BGM 若改走 WebAudio（MediaElementSource → GainNode），
+    // 把那个 GainNode 挂到这里，duck() 即可在 M5 爆炸时做 sidechain 让位。
+    // HTMLAudio 的 volume 不是 AudioParam，接不进来 —— 现阶段 duck() 是空转
     this.duckTarget = null;
 
     // 白噪声缓冲（2 s，循环取用）

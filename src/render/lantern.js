@@ -37,14 +37,20 @@ const ASSEMBLY = {
   'PL-04': { dir: [-1, 0, 0], gap: a(3), seq: 4 },
 };
 
-/** §S31 分层爆炸：五层 + 每层各自的分离方向 */
+/** §S31 分层爆炸：五层 + 每层各自的分离方向（层名沿用主线里的叫法） */
 export const EXPLODE_LAYERS = [
-  { id: 1, name: '下枨框', count: 5, ids: ['LB-A1', 'LB-A2', 'LB-C1', 'LB-B1', 'LB-B2'] },
-  { id: 2, name: '上枨框', count: 4, ids: ['UB-A1', 'UB-A2', 'UB-B1', 'UB-B2'] },
+  { id: 1, name: '底盘', count: 5, ids: ['LB-A1', 'LB-A2', 'LB-C1', 'LB-B1', 'LB-B2'] },
+  { id: 2, name: '上面的框', count: 4, ids: ['UB-A1', 'UB-A2', 'UB-B1', 'UB-B2'] },
   { id: 3, name: '立柱', count: 4, ids: ['PL-01', 'PL-02', 'PL-03', 'PL-04'] },
   { id: 4, name: '格心与纸', count: 12, ids: [...PANEL_IDS] },
-  { id: 5, name: '装饰件', count: 11, ids: [] },
+  { id: 5, name: '装饰与灯芯', count: 11, ids: [] },
 ];
+
+/**
+ * 内光基准强度。setLit 与每帧的火焰跳动共用同一个基准 ——
+ * 两处各写一个数，跳动那份会悄悄覆盖实测调好的这份，整盏灯就过曝了。
+ */
+const INNER_BASE = 5200;
 
 export class Lantern {
   /** @param {import('./stage.js').Stage} stage */
@@ -135,11 +141,15 @@ export class Lantern {
     // 绵纸（内）+ 窗花（外）—— ★V-12 内外顺序不可颠倒
     this.panelPlacements.forEach((pl, i) => {
       const n = new THREE.Vector3(...pl.outward);
+      // 纸与窗花的可读正面在局部 −Y（decor.js 里 rotation.x = π/2 的结果）。
+      // 摆放角必须由 outward 求出、令正面朝外 —— 沿用格心的 rotZ 会让 ±Y 两面
+      // 的正面朝内，福字从外面看就是反字。
+      const faceOut = Math.atan2(n.x, -n.y);
       const paper = buildPaper();
       const paperGrp = new THREE.Group();
       paperGrp.position.set(...pl.pos);
       paperGrp.position.addScaledVector(n, -(J4.PANEL_T / 2 + 1.2)); // 内侧
-      paperGrp.rotation.z = pl.rotZ;
+      paperGrp.rotation.z = faceOut;
       paperGrp.add(paper);
       paperGrp.visible = false;
       paperGrp.userData = { kind: 'paper', index: i, normal: n };
@@ -150,7 +160,7 @@ export class Lantern {
       const cutGrp = new THREE.Group();
       cutGrp.position.set(...pl.pos);
       cutGrp.position.addScaledVector(n, J4.PANEL_T / 2 + 0.9); // 外侧
-      cutGrp.rotation.z = pl.rotZ;
+      cutGrp.rotation.z = faceOut;
       cutGrp.add(cut);
       cutGrp.visible = false;
       cutGrp.userData = { kind: 'cutpaper', index: i, normal: n, motif: CUTOUT_MOTIFS[i % 4].id };
@@ -171,14 +181,16 @@ export class Lantern {
       this.decor.plates.push(p);
     });
 
-    // 中国结（中梁底面中心）+ 红流苏
+    // 中国结（挂在中梁底面中心）+ 红流苏（接在结的下方）
+    // 灯脚落地是常态（M1/M2/D5 都有地面），结与穗必须整个收在
+    // 底枨下沿到地面这 24 mm 里，否则穗子会穿进地板
     this.knot = buildKnot();
-    this.knot.position.set(0, 0, C.LOWER_Z0 - 2);
+    this.knot.position.set(0, 0, C.LOWER_Z0 - 0.5);
     this.knot.visible = false;
     this.root.add(this.knot);
 
     this.tassel = buildTassel();
-    this.tassel.position.set(0, 0, C.LOWER_Z0 - a(1.5));
+    this.tassel.position.set(0, 0, 10.5);
     this.tassel.visible = false;
     this.root.add(this.tassel);
 
@@ -460,7 +472,7 @@ export class Lantern {
    */
   setLit(k) {
     this.litLevel = k;
-    this.innerLight.intensity = k * 5200;
+    this.innerLight.intensity = k * INNER_BASE;
     this.patternSpot.intensity = k * 9000;   // 地面纹样光斑
     const flameOpacity = Math.min(1, k * 1.25);
     this.core.userData.flameMat.opacity = flameOpacity;
@@ -480,7 +492,7 @@ export class Lantern {
       core.flame.scale.set(1, f, 1);
       core.flame.position.z = core.wickHeight + (f - 1) * 6;
       const flick = 0.9 + Math.sin(t * 5.1) * 0.06 + Math.sin(t * 11.3) * 0.04;
-      this.innerLight.intensity = this.litLevel * 26000 * flick;
+      this.innerLight.intensity = this.litLevel * INNER_BASE * flick;
       // billboard
       core.flame.quaternion.copy(this.stage.camera.quaternion);
       core.glow.quaternion.copy(this.stage.camera.quaternion);
@@ -490,7 +502,7 @@ export class Lantern {
       s.rotation.x = Math.sin(t * 0.9) * 0.05;
       s.rotation.y = Math.cos(t * 0.72) * 0.045;
     }
-    if (this.knot.visible) this.knot.rotation.z = Math.sin(t * 0.5) * 0.12;
+    if (this.knot.visible) this.knot.rotation.y = Math.sin(t * 0.5) * 0.1;
     void dt;
   }
 

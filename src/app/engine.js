@@ -26,7 +26,9 @@ export class Engine {
     // 互动模块把主界面收起来了，盖住画面的卷也一样 —— 这时方向键不该在背后翻页
     addEventListener('keydown', (e) => {
       if (!ctx.hud.navVisible || ctx.hud.modalOpen) return;
-      if (e.target instanceof HTMLInputElement) return;
+      // 焦点落在任何控件上时不接管：空格是按钮的激活键，不是翻页键
+      if (e.target instanceof Element
+        && e.target.closest('button, a, input, select, textarea, [role="menu"]')) return;
       if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); this.next(); }
       if (e.key === 'ArrowLeft') this.back();
     });

@@ -38,7 +38,8 @@ export function openM3(c, onExit) {
   c.stage.snapToRecommended();
 
   let picked = c.state.wishText || '';
-  const close = () => { junk.clear(); c.hud.hideOverlay(); c.voice.stop(); onExit?.(); };
+  let closed = false;
+  const close = () => { closed = true; junk.clear(); c.hud.hideOverlay(); c.voice.stop(); onExit?.(); };
   const phrase = (s) => `愿${COMBO[0].v[s[0]]}${COMBO[1].v[s[1]]}${COMBO[2].v[s[2]]}，${COMBO[3].v[s[3]]}`;
 
   const choose = () => {
@@ -137,6 +138,7 @@ export function openM3(c, onExit) {
     });
     c.sfx.play('SUCCESS', { gain: 0.6 });
     await wait(0.7);
+    if (closed) return;
     poster();
   };
 
@@ -174,6 +176,11 @@ function drawPoster(c) {
   const grd = g.createLinearGradient(0, 0, 0, H);
   grd.addColorStop(0, '#171310'); grd.addColorStop(0.55, '#0b0907'); grd.addColorStop(1, '#120e0a');
   g.fillStyle = grd; g.fillRect(0, 0, W, H);
+
+  // 画布默认不保留绘制缓冲（preserveDrawingBuffer=false），
+  // 必须先同步渲染一帧再取图 —— 否则从定时器进来时截到的是空白
+  if (c.stage.bloomEnabled) c.stage.composer.render();
+  else c.stage.renderer.render(c.stage.scene, c.stage.camera);
 
   g.textAlign = 'center';
   g.fillStyle = '#f2ece0';
@@ -240,7 +247,10 @@ export function openM4(c, onExit) {
   const hang = () => {
     if (placed.length >= 6) { c.hud.toast('最多挂六盏 —— 想换位置，先收起来'); return; }
     const clone = c.lantern.root.clone(true);
-    const th = Math.random() * Math.PI * 2;
+    // 挂在镜头正对的方向附近（±30°）—— 文案承诺「转一转视角，找个位置」，
+    // 全随机方位会把灯挂到镜头背后去
+    const cam = c.stage.camera.position;
+    const th = Math.atan2(cam.y, cam.x) + Math.PI + (Math.random() - 0.5) * 1.1;
     const r = 280 + Math.random() * 440;
     clone.position.set(Math.cos(th) * r, Math.sin(th) * r, 40 + Math.random() * 280);
     clone.scale.setScalar(0.7 + Math.random() * 0.5);
@@ -341,19 +351,23 @@ export function openM5(c, onExit) {
   c.stage.snapToRecommended();
 
   let count = 0;
+  let closed = false;
   const COLORS = [0xffd166, 0xff5f6d, 0x7ee8fa, 0xffa3d1, 0xc8ffb0, 0xffe9a8];
 
   const launch = (type, sx, sy) => {
+    if (closed) return;
     const at = new THREE.Vector3(sx, 240 + Math.random() * 160, 380 + sy);
     const color = new THREE.Color(COLORS[Math.floor(Math.random() * COLORS.length)]);
     c.sfx.play('FIREWORK_LAUNCH', { pitch: (Math.random() - 0.5) * 4 });
     tween(0.6 + Math.random() * 0.3, (k) => {
-      if (k > 0.98) return;
+      // 升空拖尾逐帧入池 —— 模块关掉后这条 tween 还会跑完，得在这里也收手
+      if (closed || k > 0.98) return;
       c.fx.fireworks.parts.push({
         x: at.x, y: at.y, z: 30 + (at.z - 30) * k,
         vx: 0, vy: 0, vz: 0, r: 1, g: 0.75, b: 0.4, life: 0.35, age: 0, drag: 0.8,
       });
     }, { ease: Ease.outQuad, onDone: () => {
+      if (closed) return;
       c.fx.fireworks.burst(type, at, color);
       count++;
       c.sfx.play('FIREWORK_BURST', { delay: SOUND_LAG, pitch: type === 'fu' ? -3 : 0 });
@@ -390,7 +404,7 @@ export function openM5(c, onExit) {
     const x = ((down.x / innerWidth) - 0.5) * 900;
     const y = -((down.y / innerHeight) - 0.5) * 260;
     launch(type, x, y);
-    if (type === 'double') setTimeout(() => launch('peony', x + 120, 40), 400);
+    if (type === 'double') setTimeout(() => { if (!closed) launch('peony', x + 120, 40); }, 400);
     down = null;
   };
   canvas.addEventListener('pointerdown', onDown);
@@ -403,6 +417,10 @@ export function openM5(c, onExit) {
   } });
 
   const close = () => {
+    // 压轴与收尾是一条长异步链 —— 不设已关闭标志，
+    // 退出后烟花还会在五门页上继续放，片尾卷九秒后又盖上来
+    if (closed) return;
+    closed = true;
     c.fx.fireworks.clear();
     junk.clear();
     c.hud.hideOverlay();
@@ -412,11 +430,13 @@ export function openM5(c, onExit) {
 
   const finale = async () => {
     for (let i = 0; i < 18; i++) {
+      if (closed) return;
       const t = ['peony', 'willow', 'ring', 'double'][i % 4];
       launch(i === 6 || i === 14 ? 'fu' : t, (Math.random() - 0.5) * 900, (Math.random() - 0.5) * 200);
       await wait(0.24 + Math.max(0, 0.3 - i * 0.02));
     }
     await wait(1.6);
+    if (closed) return;
     outro();
   };
 
@@ -425,6 +445,7 @@ export function openM5(c, onExit) {
     c.stage.setRecommended({ az: 55, el: 8, dist: 360, target: V(0, 0, 96), ease: 0.35, fit: FIT_LANTERN });
     playVO(c, 'M5-outro');
     await wait(7.5);
+    if (closed) return;
     c.hud.sheet({
       body: `<div class="finale">
         <div class="ln">13 根木条</div><div class="ln">0 颗钉子</div><div class="ln">7000 年</div>

@@ -26,9 +26,11 @@ export function openM1(c, onExit) {
   c.stage.snapToRecommended();
 
   let k = 0, holding = false, held = 0, lit = c.state.lit, need = 1.2, misses = 0;
+  let closed = false;
   c.lantern.setLit(lit ? level(c) : 0);
 
   const close = () => {
+    closed = true;
     c.sfx.stopLoop('FLAME_IGNITE');
     junk.clear();
     c.hud.hideOverlay();
@@ -61,6 +63,7 @@ export function openM1(c, onExit) {
       const again = o.querySelector('#again');
 
       const done = async () => {
+        if (closed) return;
         lit = true;
         c.state.lit = true;
         c.sfx.stopLoop('FLAME_IGNITE');
@@ -77,6 +80,9 @@ export function openM1(c, onExit) {
         c.lantern.root.position.z = 0;
         c.lantern.setLit(level(c));
         await wait(1.4);
+        // 模块的 wait/tween 不经过 engine 的 cancelAll —— 关掉之后
+        // 这条链还会跑到这里，旁白就响在了五门页上
+        if (closed) return;
         playVO(c, 'M1');
         tools.hidden = false;
         again.hidden = false;
@@ -169,7 +175,7 @@ const RIDDLES = [
   {
     face: '不用一钉，不用一胶\n一凹一凸，两木咬牢', tag: '打一木作工艺',
     key: '榫卯', opts: ['榫卯', '斗拱', '雕花', '髹漆'],
-    why: '凸的叫榫，凹的叫卯 —— 你在第二幕见过它。',
+    why: '凸的叫榫，凹的叫卯 —— 你在「认识榫卯」那一章亲手推过它。',
     last: true,
   },
 ];
@@ -197,9 +203,11 @@ export function openM2(c, onExit) {
           <button class="opt" type="button" data-o="${o}">${o}</button>`).join('')}</div>
         <div class="answer" id="ans"></div>`,
       actions: [
+        { label: '回去', on: close },
         { id: 'skip', label: '想不出来' },
         { id: 'next', label: last ? '看看结果' : '下一题', kind: 'primary', hidden: true },
       ],
+      onEsc: close,
       onMount: (o) => {
         c.sfx.play('PAPER', { gain: 0.6 });
         playVO(c, `M2-${i + 1}`);

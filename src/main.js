@@ -52,6 +52,21 @@ async function main() {
   stage.setTheme(state.theme);
   stage.setMood('craft');
   if (tier === 'low') { stage.bloomEnabled = false; stage.renderer.shadowMap.enabled = false; }
+
+  // WebGL 上下文可能被系统回收（移动端切后台常见）—— 不处理就是永久黑屏
+  stage.canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    stage.stop();
+    cover.hidden = false;
+    cover.classList.remove('gone');
+    coverMsg.hidden = false;
+    coverMsg.classList.add('bad');
+    coverMsg.textContent = '画面中断了 —— 浏览器回收了图形资源';
+    coverAct.hidden = false;
+    coverAct.innerHTML = '<button class="btn btn-primary" id="cv-recover">重新加载</button>';
+    coverAct.querySelector('#cv-recover').addEventListener('click', () => location.reload());
+  });
+
   progress(0.2, '正在架设工作台');
   await frame();
 

@@ -38,7 +38,13 @@ class Tween {
     if (this.delay > 0) { this.delay -= dt; return; }
     this.t = Math.min(this.dur, this.t + dt);
     const k = this.ease(this.t / this.dur);
-    this.onUpdate(k, this.t / this.dur);
+    // 回调抛错不能拦住 finish()：否则这个 tween 永不兑现、每帧再抛，
+    // 还会把同一帧里排在后面的所有 updater 一起打断 —— 记录，然后继续走
+    try {
+      this.onUpdate(k, this.t / this.dur);
+    } catch (e) {
+      console.error('[tween]', e);
+    }
     if (this.t >= this.dur) this.finish();
   }
   finish() {

@@ -13,6 +13,9 @@ function shotPlugin() {
     configureServer(server) {
       server.middlewares.use('/__shot', (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; return res.end(); }
+        // 跨站页面能对 localhost 发 no-cors POST —— 只收本站请求
+        const site = req.headers['sec-fetch-site'];
+        if (site && site !== 'same-origin' && site !== 'none') { res.statusCode = 403; return res.end(); }
         let body = '';
         req.on('data', (c) => { body += c; });
         req.on('end', () => {
@@ -21,7 +24,9 @@ function shotPlugin() {
             const b64 = data.slice(data.indexOf(',') + 1);
             const dir = path.resolve(process.cwd(), '.shots');
             fs.mkdirSync(dir, { recursive: true });
-            const file = path.join(dir, `${name}.png`);
+            // 清洗文件名，杜绝路径穿越（name 传 ../..\x 就能写到 .shots 之外）
+            const safe = path.basename(String(name)).replace(/[^\w-]/g, '') || 'shot';
+            const file = path.join(dir, `${safe}.png`);
             fs.writeFileSync(file, Buffer.from(b64, 'base64'));
             res.setHeader('content-type', 'application/json');
             res.end(JSON.stringify({ ok: true, file }));
@@ -36,6 +41,8 @@ function shotPlugin() {
       // 好过让生成脚本用正则去解析源码。
       server.middlewares.use('/__manifest', (req, res) => {
         if (req.method !== 'POST') { res.statusCode = 405; return res.end(); }
+        const site = req.headers['sec-fetch-site'];
+        if (site && site !== 'same-origin' && site !== 'none') { res.statusCode = 403; return res.end(); }
         let body = '';
         req.on('data', (c) => { body += c; });
         req.on('end', () => {

@@ -252,6 +252,8 @@ export class Fireworks {
 
   update(dt) {
     const P = this.parts;
+    // 空闲时不动顶点缓冲：烟花只在 M5 出现，其余全程每帧上传 140KB 纯属白耗
+    if (!P.length && !this.count) return;
     let w = 0;
     for (let i = 0; i < P.length; i++) {
       const p = P[i];

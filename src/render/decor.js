@@ -12,10 +12,8 @@
  */
 
 import * as THREE from 'three';
-import { a, C, M, J3, J5, J6, QUADRANTS } from '../core/modulus.js';
-import { makeWoodMaterial, makeGoldMaterial, makeSilkMaterial, makeCoreMaterial, makeCutPaperMaterial, makePaperMaterial, PALETTE } from './materials.js';
-
-const HEAD_TOP = J3.SEG.HEAD[1];
+import { a, C, M, J5, J6, QUADRANTS } from '../core/modulus.js';
+import { makeWoodMaterial, makeGoldMaterial, makeSilkMaterial, makeCoreMaterial, makeCutPaperMaterial, makePaperMaterial } from './materials.js';
 
 // ══════════════════════════════════════════════════════════
 // 祥云牙子 DC-CLOUD ×4 —— J-5 角牙：装饰 + 角部支撑（受剪）
@@ -129,21 +127,21 @@ export function buildCornerPlate({ sx, sy }) {
 export function buildKnot() {
   const g = new THREE.Group();
   const mat = makeSilkMaterial();
-  const cord = 1.5;
-  // 盘长结：两组交错的方环
-  for (let i = 0; i < 2; i++) {
-    for (let k = 0; k < 2; k++) {
-      const r = 7 - k * 2.4;
-      const torus = new THREE.Mesh(new THREE.TorusGeometry(r, cord, 6, 4), mat);
-      torus.rotation.z = Math.PI / 4 + (i * Math.PI) / 2;
-      torus.rotation.x = i ? 0.28 : -0.28;
-      torus.position.z = -6 - k * 0.8;
-      g.add(torus);
-    }
+  const cord = 1.2;
+  // 盘长结（意象化）：两枚菱形方环**竖直**叠放 —— 结面躺平的话，
+  // 任何正常机位看到的都只是一叠红圆盘，读不出「结」的形
+  for (let k = 0; k < 2; k++) {
+    const r = 5.5 - k * 2.1;
+    const geo = new THREE.TorusGeometry(r, cord, 6, 4);
+    geo.rotateZ(Math.PI / 4);   // 方环转 45°，成菱形
+    geo.rotateX(Math.PI / 2);   // 立起来，结面竖直
+    const torus = new THREE.Mesh(geo, mat);
+    torus.position.set(0, (k ? 1 : -1) * 0.8, -7);
+    g.add(torus);
   }
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(cord, cord, 8, 6), mat);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(cord, cord, 4, 6), mat);
   stem.rotation.x = Math.PI / 2;
-  stem.position.z = -2;
+  stem.position.z = -1.5;
   g.add(stem);
   g.userData = { id: 'DC-KNOT-01', kind: 'knot' };
   return g;
@@ -155,14 +153,16 @@ export function buildKnot() {
 export function buildTassel() {
   const g = new THREE.Group();
   const mat = makeSilkMaterial();
-  const head = new THREE.Mesh(new THREE.SphereGeometry(4.2, 12, 8), mat);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(3.2, 12, 8), mat);
   g.add(head);
   const strands = new THREE.Group();
-  const N = 22, len = a(6);
+  // 穗长收在半个模数：灯脚落地时（底枨下沿到地面只有 24 mm），
+  // 长穗会整条埋进地板 —— 见 lantern.js 的挂点约束
+  const N = 22, len = a(1 / 2);
   for (let i = 0; i < N; i++) {
     const ang = (i / N) * Math.PI * 2;
-    const rr = 1.2 + (i % 3) * 0.7;
-    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.28, len, 4), mat);
+    const rr = 1.0 + (i % 3) * 0.55;
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.25, len, 4), mat);
     s.rotation.x = Math.PI / 2;
     s.position.set(Math.cos(ang) * rr, Math.sin(ang) * rr, -len / 2 - 3);
     strands.add(s);
@@ -332,23 +332,3 @@ export function buildCutPaper(motifId) {
   return mesh;
 }
 
-/** M2 ≥3 分解锁的「福」字灯挂饰（≤400 tris，挂点在流苏挂点上方 0.5a） */
-export function buildFuCharm() {
-  const g = new THREE.Group();
-  const mat = makeCutPaperMaterial(buildCutPaperTexture('fu', 256));
-  mat.alphaMap = mat.map; mat.transparent = true; mat.alphaTest = 0.4;
-  mat.emissive = new THREE.Color(PALETTE.CUTPAPER);
-  mat.emissiveIntensity = 0.25;
-  for (let i = 0; i < 2; i++) {
-    const p = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), mat);
-    p.rotation.y = (i * Math.PI) / 2;
-    g.add(p);
-  }
-  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 10, 5), makeSilkMaterial());
-  cord.position.y = 0; cord.position.z = 12; cord.rotation.x = Math.PI / 2;
-  g.add(cord);
-  g.userData = { id: 'DC-FU-01', kind: 'charm' };
-  return g;
-}
-
-export { HEAD_TOP };
