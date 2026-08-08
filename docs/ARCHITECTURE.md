@@ -155,6 +155,10 @@ export function openM6(c, onExit) {
 Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径，放子路径下不用改配置。
 `three` 单独切一个 chunk，因为它比其余全部代码加起来还大。
 
+分包写法跟着 Vite 8 走：打包器换成了 rolldown，配置键是 `build.rolldownOptions`
+（`rollupOptions` 已改名），`manualChunks` 的对象写法也没了 ——
+改用 `output.codeSplitting.groups` 按模块 id 匹配，见 `vite.config.js`。
+
 开发期两个中间件（`vite.config.js`，`apply: 'serve'`，不进生产构建）：
 
 - `POST /__shot` —— 页面把 canvas 的 dataURL 发过来，写到 `.shots/`，用于无法直接截屏的环境；
@@ -162,5 +166,5 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 
 第二个是有意为之：让页面自己交代它念了什么，好过让脚本用正则去解析源码。
 
-`tools/shots.mjs`（`npm run shots`）从**构建产物**里重出 README 的四张图，同理：
+`tools/shots.mjs`（`npm run shots`）从**构建产物**里重出 README 的五张图，同理：
 截图由真实运行的页面产出，改了模型或界面就重跑一次，图不会和实现各说各话。

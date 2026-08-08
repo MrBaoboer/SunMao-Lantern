@@ -79,6 +79,25 @@ await page.evaluate(() => document.querySelector('.overlay .btn-primary')?.click
 光加多了。`src/render/stage.js` 的 `MOODS` 里，四路光的总辐照相比现行预设再明显上调（三成以上），
 ACES 就会把高光推平。想让画面更亮，优先调 `bg`（背景那一对颜色）和 `bloom`，不要整体上调光。
 
+### 浅色模式下画面正中浮着一枚白色圆斑
+
+改过 `stage.js` 的 `MOODS` 里某一档的 `bg[0]`（背景中心色），而且改亮了。
+
+背景是一整块**径向渐变**，而 `UnrealBloomPass` 的高通是
+`smoothstep(threshold, threshold + 0.01, luma)` —— 0.01 的过渡宽度等于一刀硬切。
+背景中心一旦越过阈值，高通就沿等亮度线把渐变裁出一个圆盘，模糊之后就是
+画面正中那枚有边沿的白斑。深色各档背景亮度只有 0.01–0.02，碰不到；
+浅色的 `craft`（0.88）与 `studio`（0.92）本来就贴着 0.86 这条线。
+
+`setMood()` 已经把阈值取成「作者定的 0.86」与「本档背景最亮处 + 0.02」的高者，
+正常情况下不会再犯。会复发只有一种情况：绕过 `setMood()` 直接写
+`stage.bloom.threshold`。查一下当前这一档：
+
+```js
+__ctx.stage.bloom.threshold        // 浅色 studio 下应约 0.94，craft 约 0.90
+__ctx.stage.bloom.enabled = false  // 关掉这一道 pass，白斑随之消失即可确认
+```
+
 ### 刀具看着是反的 / 歪的
 
 三把刀都按同一个约定建模：**刃口朝 -Z，柄在 +Z，刀身沿 +X**。

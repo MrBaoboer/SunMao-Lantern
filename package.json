@@ -14,7 +14,7 @@
     "check": "npm run verify && npm run build && npm run smoke"
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": "^22.12.0 || >=24.0.0"
   },
   "dependencies": {
     "three": "^0.185.1"
