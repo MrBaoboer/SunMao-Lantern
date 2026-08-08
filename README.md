@@ -146,7 +146,8 @@ npm run shots
 纯静态产物，任何静态托管都能放。当前 Demo 在 Vercel：`npm run build && npx vercel deploy --prod`。
 `vite.config.js` 里 `base: './'`，产物用的是相对路径 —— 放在子路径下（如 GitHub Pages 的 `/repo/`）也不用改配置。
 
-**环境**：Node 20.19+ 或 22.12+（Vite 8 `engines` 的要求）。运行时只有一个依赖 [three.js](https://threejs.org)；
+**环境**：Node 22.12+ 或 24+。Vite 8 自己还收 20.19+，但 Node 20 已于 2026 年 4 月停止维护 —— 这条下限是我们自己划的。
+运行时只有一个依赖 [three.js](https://threejs.org)；
 浏览器需要 WebGL 2（three 0.185 的渲染器只申请 `webgl2` 上下文，没有降级）与 ES2022（`build.target`）。
 建议按 Chrome / Edge 111+、Safari 16.4+、Firefox 113+ 这条保守基线来 —— 它不是从构建配置反推出来的，
 而是我们自己划的线；毛玻璃、`text-wrap: balance` 这类不支持时都原样降级，不影响使用。
@@ -174,7 +175,7 @@ tools/
   make-script.mjs       旁白解说稿排版
 ```
 
-构建产物 764 kB（gzip 213 kB），其中 three.js 单独一块（520 kB），其余全部代码加起来 209 kB。
+构建产物 821 kB（gzip 225 kB），其中 three.js 单独一块 619 kB（gzip 155 kB），其余全部代码加起来 202 kB。
 没有图片、字体或音频进产物，图标是内联的 data-URI SVG。
 
 旁白与背景音乐留了挂载口，仓库里不含音频文件：旁白放 `public/audio/vo/{步骤号}.mp3`，
