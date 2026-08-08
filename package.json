@@ -8,18 +8,22 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "lint": "eslint .",
     "verify": "node tools/verify-geometry.mjs",
     "smoke": "node tools/smoke.mjs",
     "shots": "node tools/shots.mjs",
-    "check": "npm run verify && npm run build && npm run smoke"
+    "check": "npm run lint && npm run verify && npm run build && npm run smoke"
   },
   "engines": {
-    "node": "^22.12.0 || >=24.0.0"
+    "node": "^22.13.0 || >=24.0.0"
   },
   "dependencies": {
     "three": "^0.185.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "globals": "^17.9.0",
     "playwright": "^1.62.1",
     "vite": "^8.2.1"
   }

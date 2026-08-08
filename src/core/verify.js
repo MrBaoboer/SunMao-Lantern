@@ -14,7 +14,7 @@ import { interferenceVolume, boxesOverlap, boxIntersection, boxVolume } from './
 
 const results = [];
 function check(code, title, fn) {
-  let ok = false, detail = '';
+  let ok, detail = '';   // ok 三条路径各自赋值，给初值反而盖住漏赋值的情形
   try {
     const r = fn();
     if (typeof r === 'string') { ok = true; detail = r; }
