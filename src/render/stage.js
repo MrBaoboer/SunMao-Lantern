@@ -6,16 +6,41 @@
  */
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { M } from '../core/modulus.js';
 
 /** 灯笼几何中心（世界坐标）—— 全片镜头的默认目标 */
 export const FOCUS = new THREE.Vector3(0, 0, M.HEIGHT / 2);
+
+/**
+ * 高光溢出的起点（作者定的下限）。
+ *
+ * UnrealBloomPass 的高通是 `smoothstep(threshold, threshold + 0.01, luma)` ——
+ * 0.01 的过渡宽度等于一刀硬切。背景是一整块**径向渐变**而不是光源，它一旦
+ * 从中间越过这条线，高通就会沿等亮度线把渐变裁出一个圆盘，模糊之后正是
+ * 画面正中那枚白色光斑。所以真正下发给 pass 的阈值取「这条下限」与
+ * 「本档背景最亮处」两者中的高者，见 setMood()。
+ */
+const BLOOM_FLOOR = 0.86;
+
+/** 背景与阈值之间留的余量：高通自己还有 0.01 的过渡宽度，留双倍 */
+const BLOOM_MARGIN = 0.02;
+
+const _luma = new THREE.Color();
+
+/**
+ * 线性工作空间下的亮度 —— 与 LuminosityHighPassShader 里 `luminance()`
+ * 用的是同一组系数。传进来的是 sRGB 十六进制，setHex 负责转换。
+ */
+function linearLuma(hex) {
+  _luma.setHex(hex);
+  return 0.2126 * _luma.r + 0.7152 * _luma.g + 0.0722 * _luma.b;
+}
 
 /**
  * 场景基调预设。
@@ -30,21 +55,32 @@ export const FOCUS = new THREE.Vector3(0, 0, M.HEIGHT / 2);
  * 下面这组数值是照着「木头要看得出是木头」调的，不要整体上调。
  *
  * bg 是一对：[中心, 边缘]。背景不是一块平色，而是一圈落在主体背后的光晕。
+ *
+ * bloom 这一列整体减半，为的是抵掉 three r185 的一处上游修正。
+ *
+ * r185 之前 UnrealBloomPass 的可分离高斯核没有归一化：每趟权重和只有
+ * 0.60–0.66（核半径当成了 σ，于是在 1σ 处硬截断）。r185 改成 σ = r/3 并把
+ * 核放大一倍，权重和回到 0.996（PR #31528）。五级 mip 是串联的、每级还各走
+ * 横竖两趟，于是同一个 strength 在 r185 上明显更亮。
+ *
+ * 在冻住火焰的点灯画面上实测（对照 r170，同为 strength 0.45）：
+ * 整幅平均增亮 2.25 倍、峰值 1.39 倍。取两者之间，整列减半 ——
+ * 这是把观感调回这组数原本标定的样子，不是重新调味。
  */
 const MOODS = {
   dark: {
-    craft:  { env: 0.50, key: 1.85, fill: 0.45, rim: 0.85, amb: 0.30, bg: [0x231d16, 0x0d0a08], bloom: 0.30 },
-    studio: { env: 0.62, key: 2.05, fill: 0.55, rim: 0.95, amb: 0.38, bg: [0x2c251c, 0x110d0a], bloom: 0.34 },
-    dusk:   { env: 0.28, key: 0.68, fill: 0.24, rim: 0.60, amb: 0.16, bg: [0x241b13, 0x0b0807], bloom: 0.50 },
+    craft:  { env: 0.50, key: 1.85, fill: 0.45, rim: 0.85, amb: 0.30, bg: [0x231d16, 0x0d0a08], bloom: 0.15 },
+    studio: { env: 0.62, key: 2.05, fill: 0.55, rim: 0.95, amb: 0.38, bg: [0x2c251c, 0x110d0a], bloom: 0.17 },
+    dusk:   { env: 0.28, key: 0.68, fill: 0.24, rim: 0.60, amb: 0.16, bg: [0x241b13, 0x0b0807], bloom: 0.25 },
   },
   light: {
-    craft:  { env: 0.72, key: 1.30, fill: 0.40, rim: 0.50, amb: 0.34, bg: [0xf6f1e6, 0xd8cdb6], bloom: 0.08 },
-    studio: { env: 0.82, key: 1.45, fill: 0.46, rim: 0.55, amb: 0.40, bg: [0xfaf6ec, 0xdfd5bf], bloom: 0.10 },
-    dusk:   { env: 0.52, key: 0.95, fill: 0.30, rim: 0.62, amb: 0.24, bg: [0xe6d9c1, 0xb8a789], bloom: 0.18 },
+    craft:  { env: 0.72, key: 1.30, fill: 0.40, rim: 0.50, amb: 0.34, bg: [0xf6f1e6, 0xd8cdb6], bloom: 0.04 },
+    studio: { env: 0.82, key: 1.45, fill: 0.46, rim: 0.55, amb: 0.40, bg: [0xfaf6ec, 0xdfd5bf], bloom: 0.05 },
+    dusk:   { env: 0.52, key: 0.95, fill: 0.30, rim: 0.62, amb: 0.24, bg: [0xe6d9c1, 0xb8a789], bloom: 0.09 },
   },
   /** 夜色不跟主题走 —— 灯笼只有在暗处才亮得起来 */
   fixed: {
-    night: { env: 0.12, key: 0.22, fill: 0.10, rim: 0.28, amb: 0.09, bg: [0x0d1220, 0x03040a], ground: true, bloom: 0.45 },
+    night: { env: 0.12, key: 0.22, fill: 0.10, rim: 0.28, amb: 0.09, bg: [0x0d1220, 0x03040a], ground: true, bloom: 0.23 },
   },
 };
 
@@ -98,7 +134,11 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 export class Stage {
   constructor(canvas) {
     this.canvas = canvas;
-    this.clock = new THREE.Clock();
+    // Timer 而非 Clock（Clock 自 r183 起标记废弃）。connect(document) 接上页面可见性：
+    // 标签页切走再切回来时计时器自己归零，那一帧不会甩出一个几十秒的 dt ——
+    // 主循环虽然把 dt 掐在 0.05，但 elapsedTime 一样会跳，火焰与流苏会瞬移一大截。
+    this.timer = new THREE.Timer();
+    this.timer.connect(document);
 
     // ── 渲染器 ──
     const renderer = new THREE.WebGLRenderer({
@@ -109,7 +149,10 @@ export class Stage {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // §11.2 关闭强锐利阴影
+    // §11.2 关闭强锐利阴影。r185 起 PCFSoftShadowMap 被并进 PCFShadowMap 并废弃 ——
+    // 现在的 PCF 本身就是软的（硬件 sampler2DShadow + 5 抽 Vogel 盘，按 shadow.radius 缩放）。
+    // 继续写旧常量的话每次加载都会警告一句，然后被静默换成同一个值。
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer = renderer;
 
     // ── 场景 ──
@@ -195,7 +238,8 @@ export class Stage {
     this.composer.renderTarget1.samples = 4;
     this.composer.renderTarget2.samples = 4;
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.72, 0.86);
+    // 阈值只是个起点：真正下发的那一档由 setMood() 按本档背景算出来
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.72, BLOOM_FLOOR);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.bloomEnabled = true;
@@ -339,8 +383,9 @@ export class Stage {
     const loop = () => {
       if (!this.running) return;
       this._raf = requestAnimationFrame(loop);
-      const dt = Math.min(this.clock.getDelta(), 0.05);
-      const t = this.clock.elapsedTime;
+      this.timer.update();
+      const dt = Math.min(this.timer.getDelta(), 0.05);
+      const t = this.timer.getElapsed();
       this.update(dt);
       // 单个 updater 抛错不能连坐这一帧剩下的所有更新 —— 记录，继续走
       for (const u of this.updaters) {
@@ -376,12 +421,17 @@ export class Stage {
     u.uOuter.value.setHex(preset.bg[1]);
     this.ground.visible = !!preset.ground;
     this.bloom.strength = preset.bloom;
+    // 背景永远压在高通门槛以下 —— 否则渐变会被从中间切出一个圆盘，
+    // 模糊之后就是画面正中那枚白色光斑。见 BLOOM_FLOOR 的注释。
+    // 浅色的 craft(0.88) 与 studio(0.92) 正好越线，深色各档只有 0.01–0.02，不受影响。
+    this.bloom.threshold = Math.max(BLOOM_FLOOR, linearLuma(preset.bg[0]) + BLOOM_MARGIN);
     this.onMood?.(this.moodName);
   }
 
   dispose() {
     this.stop();
     removeEventListener('resize', this._onResize);
+    this.timer.dispose();   // 摘掉 visibilitychange 监听
     this.controls.dispose();
     this.envRT?.dispose();
     this.renderer.dispose();

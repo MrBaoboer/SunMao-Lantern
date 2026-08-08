@@ -23,6 +23,18 @@ const opt = (f, d) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] :
 const WANT_SHOTS = has('--shots');
 const SHOT_DIR = path.resolve('.shots/smoke');
 
+/**
+ * CI 上放宽等待。
+ *
+ * GitHub runner 走 CPU 软件渲染，冷启动还要现编着色器，比开发机慢一个量级 ——
+ * 同一个提交本机全绿，CI 上却因为几个等待超时误报，两次跑挂的还不是同一批断言，
+ * 正是「机器慢且不稳」的样子，不是代码回归。
+ *
+ * 放宽的只是耐心，断言一条没动。条件满足时等待立刻返回，所以本机不会因此变慢。
+ */
+const PATIENCE = process.env.CI ? 4 : 1;
+const tmo = (ms) => ms * PATIENCE;
+
 const VIEWPORTS = [
   { name: 'desktop', width: 1440, height: 900, isMobile: false },
   { name: 'mobile', width: 390, height: 844, isMobile: true },
@@ -92,9 +104,9 @@ for (const vp of VIEWPORTS) {
   await page.goto(base, { waitUntil: 'load' });
 
   // 封面就绪 = 三维、几何验算、界面全部初始化完毕
-  await page.waitForFunction(() => !!window.__engine, null, { timeout: 30000 })
+  await page.waitForFunction(() => !!window.__engine, null, { timeout: tmo(30000) })
     .catch(() => note(vp.name, '三十秒内没能初始化 __engine'));
-  await page.waitForSelector('#cv-go', { timeout: 15000 })
+  await page.waitForSelector('#cv-go', { timeout: tmo(15000) })
     .catch(() => note(vp.name, '封面上没有出现开始按钮'));
 
   const check = await page.evaluate(() => window.__verifyReport ?? null);
@@ -168,7 +180,7 @@ for (const vp of VIEWPORTS) {
     const runJobs = async (label, maxJobs = 12) => {
       let ran = 0;
       for (let n = 0; n < maxJobs; n++) {
-        const has = await page.waitForFunction(() => !!window.__ctx.mach.job, null, { timeout: 6000 }).catch(() => null);
+        const has = await page.waitForFunction(() => !!window.__ctx.mach.job, null, { timeout: tmo(6000) }).catch(() => null);
         // 第一轮就没有任务 —— 这一步根本没起加工，是真失败；
         // 后面几轮没有 —— 工序走完了，正常收工。原先两种情况都是静默 return，
         // 于是这条断言对「加工整个坏掉」是看不见的（装配那边的 seatAll 一直会报）
@@ -180,7 +192,7 @@ for (const vp of VIEWPORTS) {
           window.__ctx.mach.autoRun(),
           new Promise((r) => setTimeout(r, 20000)),
         ]));
-        await page.waitForFunction((s) => !window.__ctx.mach.job || window.__jobSeq > s, seq, { timeout: 25000 })
+        await page.waitForFunction((s) => !window.__ctx.mach.job || window.__jobSeq > s, seq, { timeout: tmo(25000) })
           .catch(() => note(vp.name, `${label}: 加工任务没有走完`));
         await page.waitForTimeout(1000);
       }
@@ -188,13 +200,13 @@ for (const vp of VIEWPORTS) {
       console.log(`    ${label} 加工完成 · ${ran} 道工序`);
     };
     const seatAll = async (label) => {
-      const has = await page.waitForFunction(() => !!window.__ctx.drag.session, null, { timeout: 6000 }).catch(() => null);
+      const has = await page.waitForFunction(() => !!window.__ctx.drag.session, null, { timeout: tmo(6000) }).catch(() => null);
       if (!has) { note(vp.name, `${label}: 没有出现装配任务`); return; }
       await page.evaluate(() => Promise.race([
         window.__ctx.drag.autoSeatAll(),
         new Promise((r) => setTimeout(r, 20000)),
       ]));
-      await page.waitForFunction(() => !window.__ctx.drag.session?.pending?.size, null, { timeout: 20000 })
+      await page.waitForFunction(() => !window.__ctx.drag.session?.pending?.size, null, { timeout: tmo(20000) })
         .catch(() => note(vp.name, `${label}: 装配没有完成`));
       await page.waitForTimeout(600);
       console.log(`    ${label} 装配完成`);
@@ -215,33 +227,43 @@ for (const vp of VIEWPORTS) {
     const settled = await page.evaluate(() => window.__engine.current?.id);
     if (settled !== 'A1') note(vp.name, `快速翻页后应停在 A1，实际 ${settled}`);
 
+    // 门是 openHub() 现渲染的。原先直接 `?.click()`，门还没挂上时这一下**静默落空** ——
+    // 机器一慢，M3 那串「没有愿望列表 / 海报没生成 / 海报空白」全是同一次空点击的余波，
+    // 报出来的却是三条互不相干的故障。先等门出现，再点。
+    const openDoor = async (id) => {
+      const ok = await page.waitForSelector(`.door[data-m="${id}"]`, { timeout: tmo(8000) }).catch(() => null);
+      if (!ok) { note(vp.name, `${id}: 收尾没有出现这扇门`); return false; }
+      await page.evaluate((m) => document.querySelector(`.door[data-m="${m}"]`).click(), id);
+      return true;
+    };
+
     // M1 长按引火：低帧率下点满一圈要几十秒，只断言「按住确实在积累亮度」
     await goStep('D5', 1600);
-    await page.evaluate(() => document.querySelector('.door[data-m="M1"]')?.click());
-    await page.waitForTimeout(1400);
-    const fireBox = await page.locator('#fire').boundingBox().catch(() => null);
-    if (fireBox) {
-      await page.mouse.move(fireBox.x + fireBox.width / 2, fireBox.y + fireBox.height / 2);
-      await page.mouse.down();
-      const litOk = await page.waitForFunction(() => window.__ctx.lantern.litLevel > 0.001 || window.__ctx.state.lit, null, { timeout: 15000 })
-        .then(() => true).catch(() => false);
-      await page.mouse.up();
-      if (!litOk) note(vp.name, 'M1 按住引火没有反应');
-    } else note(vp.name, 'M1 没有出现点灯按钮');
+    if (await openDoor('M1')) {
+      await page.waitForSelector('#fire', { timeout: tmo(8000) }).catch(() => null);
+      const fireBox = await page.locator('#fire').boundingBox().catch(() => null);
+      if (fireBox) {
+        await page.mouse.move(fireBox.x + fireBox.width / 2, fireBox.y + fireBox.height / 2);
+        await page.mouse.down();
+        const litOk = await page.waitForFunction(() => window.__ctx.lantern.litLevel > 0.001 || window.__ctx.state.lit, null, { timeout: tmo(15000) })
+          .then(() => true).catch(() => false);
+        await page.mouse.up();
+        if (!litOk) note(vp.name, 'M1 按住引火没有反应');
+      } else note(vp.name, 'M1 没有出现点灯按钮');
+    }
     await page.evaluate(() => document.getElementById('btn-back')?.click());
     await page.waitForTimeout(900);
 
     // M3 海报：画面区域必须真的截到灯笼，不能是空白
-    await page.evaluate(() => document.querySelector('.door[data-m="M3"]')?.click());
-    await page.waitForTimeout(1400);
-    await page.click('.wish >> nth=0', { timeout: 5000 }).catch(() => note(vp.name, 'M3 没有出现愿望列表'));
-    await page.click('#go', { timeout: 3000 }).catch(() => {});
+    await openDoor('M3');
+    await page.click('.wish >> nth=0', { timeout: tmo(5000) }).catch(() => note(vp.name, 'M3 没有出现愿望列表'));
+    await page.click('#go', { timeout: tmo(3000) }).catch(() => {});
     // 落笔动画点「写快一点」跳过逐字，低帧率下才等得完
     await page.waitForTimeout(800);
     await page.evaluate(() => {
       document.querySelectorAll('#overlay button').forEach((b) => { if (b.textContent.includes('写快一点')) b.click(); });
     });
-    await page.waitForSelector('img.poster', { timeout: 60000 })
+    await page.waitForSelector('img.poster', { timeout: tmo(60000) })
       .catch(() => note(vp.name, 'M3 海报没有生成'));
     const posterOk = await page.evaluate(async () => {
       const img = document.querySelector('img.poster');
