@@ -6,12 +6,12 @@
  */
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { M } from '../core/modulus.js';
 
 /** 灯笼几何中心（世界坐标）—— 全片镜头的默认目标 */
@@ -98,7 +98,11 @@ THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 export class Stage {
   constructor(canvas) {
     this.canvas = canvas;
-    this.clock = new THREE.Clock();
+    // Timer 而非 Clock（Clock 自 r183 起标记废弃）。connect(document) 接上页面可见性：
+    // 标签页切走再切回来时计时器自己归零，那一帧不会甩出一个几十秒的 dt ——
+    // 主循环虽然把 dt 掐在 0.05，但 elapsedTime 一样会跳，火焰与流苏会瞬移一大截。
+    this.timer = new THREE.Timer();
+    this.timer.connect(document);
 
     // ── 渲染器 ──
     const renderer = new THREE.WebGLRenderer({
@@ -109,7 +113,10 @@ export class Stage {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // §11.2 关闭强锐利阴影
+    // §11.2 关闭强锐利阴影。r185 起 PCFSoftShadowMap 被并进 PCFShadowMap 并废弃 ——
+    // 现在的 PCF 本身就是软的（硬件 sampler2DShadow + 5 抽 Vogel 盘，按 shadow.radius 缩放）。
+    // 继续写旧常量的话每次加载都会警告一句，然后被静默换成同一个值。
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer = renderer;
 
     // ── 场景 ──
@@ -339,8 +346,9 @@ export class Stage {
     const loop = () => {
       if (!this.running) return;
       this._raf = requestAnimationFrame(loop);
-      const dt = Math.min(this.clock.getDelta(), 0.05);
-      const t = this.clock.elapsedTime;
+      this.timer.update();
+      const dt = Math.min(this.timer.getDelta(), 0.05);
+      const t = this.timer.getElapsed();
       this.update(dt);
       // 单个 updater 抛错不能连坐这一帧剩下的所有更新 —— 记录，继续走
       for (const u of this.updaters) {
@@ -382,6 +390,7 @@ export class Stage {
   dispose() {
     this.stop();
     removeEventListener('resize', this._onResize);
+    this.timer.dispose();   // 摘掉 visibilitychange 监听
     this.controls.dispose();
     this.envRT?.dispose();
     this.renderer.dispose();

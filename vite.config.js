@@ -71,9 +71,14 @@ export default defineConfig({
     outDir: 'dist',
     assetsInlineLimit: 4096,
     chunkSizeWarningLimit: 1200,
-    rollupOptions: {
+    // Vite 8 起打包器换成 rolldown：build.rollupOptions 改名 rolldownOptions，
+    // 且 manualChunks 的对象写法已移除 —— 分包改用 codeSplitting.groups 按模块 id 匹配。
+    // three 单独成块：它占了全部产物的七成，业务代码改一行不该让用户重下这 500 kB。
+    rolldownOptions: {
       output: {
-        manualChunks: { three: ['three'] },
+        codeSplitting: {
+          groups: [{ name: 'three', test: /[\\/]node_modules[\\/]three[\\/]/ }],
+        },
       },
     },
   },
