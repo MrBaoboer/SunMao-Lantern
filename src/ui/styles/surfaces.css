@@ -13,6 +13,7 @@
 }
 .overlay.veil {
   background: var(--veil);
+  -webkit-backdrop-filter: blur(22px);
   backdrop-filter: blur(22px);
 }
 .overlay.bare { background: none; pointer-events: none; }

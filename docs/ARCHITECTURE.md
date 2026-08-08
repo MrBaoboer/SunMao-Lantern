@@ -166,5 +166,25 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 
 第二个是有意为之：让页面自己交代它念了什么，好过让脚本用正则去解析源码。
 
+生产构建另有一个插件（`apply: 'build'`）：`transformIndexHtml` 里扫出首页的内联脚本，
+现算 sha256，拼成一份 CSP 注入到 `<head>` 最前面。三处讲究：
+
+- **必须是 head-prepend。** meta 形式的 CSP 只管到它后面解析的内容，排在内联脚本之后等于没写；
+- **哈希要先把换行归一成 `\n`。** 按 HTML 解析规范，分词阶段 `\r\n` 与孤立的 `\r` 都被归一，
+  浏览器算的是归一之后的文本 —— 不跟着做，Windows 上产出的哈希就比浏览器多算几个 CR，脚本被当场挡下；
+- **不写死在 `vercel.json` 里。** 那段脚本以后改一个字，写死的哈希就失配，而失配特别隐蔽：
+  页面照样能用，只是主题脚本被挡，每次打开先闪一下白。
+
+`vercel.json` 只留跟产物无关的那几个头：缓存、`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`。
+
 `tools/shots.mjs`（`npm run shots`）从**构建产物**里重出 README 的五张图，同理：
 截图由真实运行的页面产出，改了模型或界面就重跑一次，图不会和实现各说各话。
+
+## 检查
+
+`npm run check` = `lint` → `verify` → `build` → `smoke`，GitHub Actions 在 Node 22.13 与 24 上各跑一遍。
+
+ESLint 用扁平配置，只开 `recommended` 一档，风格问题一概不管。两处按项目实际情况放宽：
+`caughtErrors: 'none'`（隐私模式读 `localStorage`、解码失败之类的空 `catch` 到处都是，是有意的），
+以及 `tools/make-script.mjs` 里放行全角空格 —— 那是排中文的排版字符，不是手误，
+按默认规则改反而会把生成的《旁白解说稿》排版弄坏。

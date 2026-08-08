@@ -9,7 +9,7 @@
  * 这样构件间干涉检测无需任何变换，§13.1 自检可以直接跑。
  */
 
-import { a, M, C, J1, J2, J3, J4, J5, J6, QUADRANTS } from './modulus.js';
+import { M, C, J1, J2, J3, J4, J5, J6, QUADRANTS } from './modulus.js';
 import { Solid, box } from './boxcsg.js';
 
 /** 归一化盒（允许任意顺序传入两个角点） */

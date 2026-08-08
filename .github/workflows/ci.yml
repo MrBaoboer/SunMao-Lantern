@@ -1,0 +1,51 @@
+# 每次 push 与 PR 都把 `npm run check` 跑一遍 ——
+# lint、几何闭合验算、构建，再用无头 Chromium 走完十八步。
+#
+# 两个 Node 版本都跑，是因为 package.json 的 engines 写了 `^22.13.0 || >=24.0.0`：
+# 声明支持就得有人替它证明，否则那行字迟早变成谎话。跑的正是下限与当前 LTS 两头。
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# 同一分支上新的提交把旧的跑挤掉，不必为过时的提交排队
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.13', '24']
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      # 冒烟测试只用 chromium；--with-deps 装的是无头运行缺的那批系统库
+      - run: npx playwright install --with-deps chromium
+
+      # 走的是 CPU 软件渲染（SwiftShader），慢，但整条主线确实跑得完
+      - run: npm run check
+
+      # 跑挂了才有价值：把失败那一刻的构建产物留下来
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-node${{ matrix.node }}
+          path: dist/
+          retention-days: 7
