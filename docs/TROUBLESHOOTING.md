@@ -22,7 +22,7 @@ Chrome 可以用 `--enable-unsafe-swiftshader` 强制走软件渲染，慢但能
 某一段初始化卡住了。控制台通常会有一条未捕获异常，
 `main()` 的 `catch` 只在同步链路上生效，异步里抛出的会直接落到控制台。
 
-先确认 `npm install` 是完整的：`node_modules/three` 存在，且版本是 0.170.x。
+先确认 `npm install` 是完整的：`node_modules/three` 存在，且版本是 0.185.x。
 
 ### 一片黑 / 一片空白，控制台却没有报错
 
