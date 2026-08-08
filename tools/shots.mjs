@@ -1,5 +1,5 @@
 /**
- * 重出 README 的四张图 —— 全部从**构建产物**里拍，图和实现不会各说各话。
+ * 重出 README 的五张图 —— 全部从**构建产物**里拍，图和实现不会各说各话。
  *
  *   npm run build && node tools/shots.mjs
  *   node tools/shots.mjs hero          只重出其中一张
@@ -75,18 +75,23 @@ const shot = async (page, name) => {
 
 const want = (n) => !only.length || only.includes(n);
 
-// ── hero：不点灯的完整灯笼，界面全部退场 ──────────────────
-if (want('hero')) {
-  const { ctx, page } = await open({ width: 1400, height: 880 });
-  await page.evaluate(() => {
+/**
+ * 两张成品图共用的摆盘：整盏灯做完、装齐、界面全部退场，再按给定基调与机位站好。
+ *
+ * az 一律取 58 而不是贴着 45° 的角：正对 45° 时近处那根角柱正好立在画面中轴上，
+ * 把垂在灯笼正中的穗子挡掉九成。偏开 13°，「福」这一面接近正对、圆圈是圆的，
+ * 鱼那一面还看得清，穗子也整条露出来。
+ */
+async function finished(page, o) {
+  await page.evaluate((o) => {
     const c = window.__ctx;
     c.hud.showChrome(false);
     c.hud.quiet(true);
     c.hud.hideOverlay();
     // 开场那一步在远处撒了一圈「灯河」光点精灵，会在画面边角留下橙色斑
-    c.stage.scene.traverse((o) => { if (o.isSprite) o.visible = false; });
+    c.stage.scene.traverse((s) => { if (s.isSprite) s.visible = false; });
     c.hud.setTheme('dark');
-    c.stage.setMood('studio');
+    c.stage.setMood(o.mood);
 
     c.lantern.attachAll();
     c.lantern.showOnly(null);
@@ -96,20 +101,39 @@ if (want('hero')) {
     c.lantern.showPanels(true);
     c.lantern.showDecor(true);
     c.lantern.core.visible = true;
-    c.lantern.setLit(0);                     // 首图不点灯
+    c.lantern.setLit(o.lit);
 
-    // az 取 58 而不是贴着 45° 的角：正对 45° 时近处那根角柱正好立在画面中轴上，
-    // 把垂在灯笼正中的穗子挡掉九成（实测两张 A/B 只差一条红边）。偏开 13°，
-    // 「福」这一面接近正对、圆圈是圆的，鱼那一面还看得清，穗子也整条露出来。
     c.stage.setRecommended({
-      az: 58, el: 10, dist: 470,
-      target: new (c.stage.camera.position.constructor)(0, 0, 96),
-      fit: { r: 98, h: 112 },
+      az: 58, el: o.el, dist: o.dist,
+      target: new (c.stage.camera.position.constructor)(0, 0, o.tz),
+      fit: o.fit,
     });
     c.stage.snapToRecommended();
-  });
+  }, o);
   await page.waitForTimeout(2600);
+}
+
+// ── hero：点亮之后的夜景（首图）────────────────────────────
+// night 是唯一开地面的一档基调（stage.js 的 MOODS.fixed），格心纹样作为
+// 聚光灯 cookie 落在地上 —— 灯上的棂条和地上的光斑是同一份线段数据。
+if (want('hero')) {
+  const { ctx, page } = await open({ width: 1400, height: 880 });
+  // 目标点压到 80、机位抬到 18°，为的是把地上那片光斑收进画面；
+  // 再高就会从顶口直视灯芯，亮斑抢戏。
+  await finished(page, { lit: 1, mood: 'night', el: 18, dist: 470, tz: 80, fit: { r: 110, h: 130 } });
   await shot(page, 'hero');
+  await ctx.close();
+}
+
+// ── unlit：不点灯的完整灯笼 ───────────────────────────────
+// 点亮之后木作被光晕吃掉大半，所以另留一张不点灯的：榫头、格心、绵纸都看得清。
+if (want('unlit')) {
+  const { ctx, page } = await open({ width: 1400, height: 880 });
+  // dusk 而不是 studio：studio 的键光把木料打到发白，红「福」也跟着掉色。
+  // dusk 压暗环境、留住暖调，木头是琥珀色的，糊上的绵纸反而更白。
+  // el 12 / dist 430 是「四根出头的榫和穗子都不出画」的前提下能站到的最近处。
+  await finished(page, { lit: 0, mood: 'dusk', el: 12, dist: 430, tz: 96, fit: { r: 98, h: 112 } });
+  await shot(page, 'unlit');
   await ctx.close();
 }
 
