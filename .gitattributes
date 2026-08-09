@@ -1,0 +1,9 @@
+# 仓库里一律存 LF。工作区的换行交给各自的 core.autocrlf。
+# 这条不只是整洁：首页 CSP 的内联脚本哈希按归一后的 \n 算，
+# 混进 CRLF 会让 Windows 上产出的产物与浏览器算的对不上。
+* text=auto
+
+*.png binary
+*.jpg binary
+*.mp3 binary
+*.woff2 binary

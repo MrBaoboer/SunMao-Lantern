@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 跑不起来 / 画面不对 / 测试挂了
+    url: https://github.com/MrBaoboer/SunMao-Lantern/blob/main/docs/TROUBLESHOOTING.md
+    about: 常见情况这里都有对应的查法，多半不用开 Issue。
+  - name: 安全问题
+    url: https://github.com/MrBaoboer/SunMao-Lantern/security/advisories/new
+    about: 请走私密报告，不要开公开 Issue。
+  - name: 商业授权
+    url: https://github.com/MrBaoboer/SunMao-Lantern/blob/main/COMMERCIAL.md
+    about: 想闭源、去掉署名，或拿课程内容做收费产品，先看这里。

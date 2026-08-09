@@ -1,0 +1,54 @@
+name: 报一个问题
+description: 页面打不开、画面不对、某一步走不下去、测试挂了
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先翻一眼 [故障排查](https://github.com/MrBaoboer/SunMao-Lantern/blob/main/docs/TROUBLESHOOTING.md) ——
+        打不开、画面裁边、没声音、测试挂了这几类常见情况在那里都有对应的查法。
+        没对上再往下填。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 你看到了什么
+      description: 一两句话说清现象。哪一步、屏幕上是什么样子。
+      placeholder: 走到 C7「柱子开细颈」时，柱子上下都出了画面，只剩中间一段木头。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 怎么复现
+      description: 从打开页面开始，一步一步写。
+      placeholder: |
+        1. 打开 https://sunmao.vercel.app
+        2. 点「开始做灯」
+        3. 连按右箭头到第 12 步
+        4. 画面就成了这样
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 设备与浏览器
+      description: 系统、浏览器与版本；手机的话写上机型和横屏还是竖屏。
+      placeholder: iPhone 13 · iOS 18.2 · Safari · 竖屏
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: 控制台报错
+      description: 有红字就整段贴过来，没有就留空。
+      render: text
+
+  - type: textarea
+    id: shot
+    attributes:
+      label: 截图
+      description: 画面不对的话，一张图比一百个字管用。直接拖进来即可。

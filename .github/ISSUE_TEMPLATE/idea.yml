@@ -1,0 +1,42 @@
+name: 提一个想法
+description: 文案、交互、无障碍、教学内容上的建议
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        动手写代码之前先开这个，省得白做。
+        引入新依赖、换框架、加新模块这类改动，[贡献指南](https://github.com/MrBaoboer/SunMao-Lantern/blob/main/CONTRIBUTING.md)里说了基本不会并 ——
+        但想法本身仍然欢迎聊。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 现在哪里不好
+      description: 先说问题，不是方案。你或者你身边的人卡在哪儿了？
+      placeholder: 陪孩子玩到「装板」那一步，他问「为什么板比洞还大」，画面上看不出来。
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你觉得可以怎么办
+      description: 有具体方案就写，只有方向也行。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 大概属于哪一类
+      options:
+        - 文案（旁白、提示、笔记）
+        - 交互与手感
+        - 无障碍（键盘、对比度、减少动效、语速）
+        - 画面与三维
+        - 教学内容（步骤编排、知识点）
+        - 兼容性与性能
+        - 其他
+    validations:
+      required: true
