@@ -26,7 +26,8 @@ export function act1(ctx) {
       narration: `每到岁末，中国人会用一盏灯，为一年收尾。
 红灯笼一挂上去，年就算是来了。
 （气口）
-可你想过没有：这样一盏灯，不用一根钉子、一滴胶水，能立得起来吗？`,
+可你想过没有：
+这样一盏灯，不用一根钉子、一滴胶水，能立得起来吗？`,
       async enter(c) {
         c.lantern.attachAll();
         c.lantern.showOnly(null);
@@ -86,13 +87,13 @@ export function act1(ctx) {
       cam: { az: 128, el: 14, dist: 210, target: [0, 0, 96], snap: true, fit: { r: 82, h: 44 } },
       cps: 3.6,
       // 画面随时可以被拖着转，所以指代一律按「长什么样」，不按左右
-      cue: { ico: 'drag', text: '<em>拖动</em>凸出来的那根，推进对面的孔里' },
+      cue: { ico: 'drag', text: '<em>拖动</em>凸出来的那一块，推进对面的孔里' },
       narration: `榫卯，sǔn mǎo。
 中国人用它把木头连起来，已经连了七千年 —— 比文字还早。
 （气口）
 看这两块木头：凸出来的这一块叫榫，凹进去的这一块叫卯。
 把它们推到一起，一咬合，连接就完成了。
-不用钉子，也不用胶。`,
+全靠形状互相咬住。`,
       note: {
         title: '卯分三种',
         body: '凿穿两面的孔叫<em>透眼</em>，榫头能整根穿出去；'
@@ -145,8 +146,10 @@ export function act1(ctx) {
           c.hud.toast('咬住了', { gold: true });
           anatomy();
         };
-        c.simpleDrag(A, V(1, 0, 0), a(4) + SEATED, Z, seat, null, junk);
-        c.hud.setAlts([{ label: '帮我推', ico: 'spark', onClick: seat }]);
+        // 拖歪了要说一句 —— 原先是静默弹回原位，读出来像「按不动」
+        c.simpleDrag(A, V(1, 0, 0), a(4) + SEATED, Z, seat,
+          () => c.hud.toast('对着孔平推过去'), junk);
+        c.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: seat }]);
 
         // 咬合之后再讲解剖 —— 先有手感，再有名词。
         // 榫头这会儿已经整根进去了，所以把卯件调透，让它在里面看得见。
@@ -185,7 +188,8 @@ export function act1(ctx) {
       cam: { az: 118, el: 14, dist: 200, target: [0, 0, 96], snap: true, fit: { r: 78, h: 40 } },
       cue: { ico: 'drag', text: '<em>拖动</em>带榫头的那根，把榫头推进孔里' },
       narration: `第一种，直榫 —— 最基础，也最常见。
-我们这盏灯用的是它的贯穿做法，叫「透榫」：榫头要穿过整根木条，还要在另一头露出一小截。
+这盏灯用的是它的贯穿做法，叫「透榫」。
+榫头要穿过整根木条，还要在另一头露出一小截。
 这一小截既是加强，也是中式木作特有的样子。
 （气口）
 你来试试。`,
@@ -240,8 +244,9 @@ export function act1(ctx) {
           c.hud.toast('看，穿出来了', { gold: true });
           engine.done();
         };
-        c.simpleDrag(A, V(1, 0, 0), av(3.6) + SEATED, Z, seat, null, junk);
-        c.hud.setAlts([{ label: '帮我推', ico: 'spark', onClick: seat }]);
+        c.simpleDrag(A, V(1, 0, 0), av(3.6) + SEATED, Z, seat,
+          () => c.hud.toast('对着孔平推过去，让榫头穿出另一头'), junk);
+        c.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: seat }]);
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },
     },
@@ -255,10 +260,12 @@ export function act1(ctx) {
       cue: { ico: 'pull', text: '<em>向下拖动</em>，把叉口落进两条槽' },
       narration: `第二种，夹榫。
 它有两个平行的榫头，中间夹着一道口子。
-不是一个插进另一个，而是互相嵌夹 —— 叉口落进槽，槽中间的榫舌又卡回叉口里。
+不是一个插进另一个，而是互相嵌夹。
+叉口落进槽，槽中间的榫舌又卡回叉口里。
 你夹住我，我也夹住你。
 （气口）
-还有一点很重要：它只能从上往下落。这样重力会帮你压住它。`,
+还有一点很重要：它只能从上往下落。
+这样重力会帮你压住它。`,
       async enter(c, engine) {
         junk.clear();
         c.lantern.showOnly([]);
@@ -268,7 +275,7 @@ export function act1(ctx) {
         // 看起来是贴上去的，不是掏出来的。
         const half = a(1 / 2), t = J2.TONGUE / 2, d = J2.SLOT_D;
 
-        // 下面这根：顶面铣两条槽，中间留下的一条就是榫舌
+        // 下面这根：顶面凿两条槽，中间留下的一条就是榫舌
         const D1 = demoSolid({
           at: [0, 0, Z],
           edge: PALETTE.MORTISE,
@@ -312,10 +319,11 @@ export function act1(ctx) {
         };
         // 两侧各钉一枚向下的箭头 —— 这一步要的是「往下落」，
         // 而叉口与槽都藏在两块料之间，光看画面看不出该往哪个方向使劲
-        c.simpleDrag(D2, V(0, 0, -1), a(2.5) - d, Z, seat, null, junk, {
-          arrows: [V(-av(1.3), 0, Z + av(2.4)), V(av(1.3), 0, Z + av(2.4))],
-        });
-        c.hud.setAlts([{ label: '帮我落下', ico: 'spark', onClick: seat }]);
+        c.simpleDrag(D2, V(0, 0, -1), a(2.5) - d, Z, seat,
+          () => c.hud.toast('夹榫只能从上往下落 —— 竖着往下拖'), junk, {
+            arrows: [V(-av(1.3), 0, Z + av(2.4)), V(av(1.3), 0, Z + av(2.4))],
+          });
+        c.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: seat }]);
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },
     },

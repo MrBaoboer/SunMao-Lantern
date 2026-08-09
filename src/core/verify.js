@@ -9,7 +9,7 @@
  */
 
 import { a, M, C, J1, J2, J3, J4, J5, J6 } from './modulus.js';
-import { buildPart, WOOD_IDS, PANEL_IDS, partMeta } from './parts.js';
+import { buildPart, partCuts, partOps, WOOD_IDS, PANEL_IDS, partMeta, OP } from './parts.js';
 import { interferenceVolume, boxesOverlap, boxIntersection, boxVolume } from './boxcsg.js';
 
 const results = [];
@@ -96,7 +96,7 @@ export function runVerification() {
       z0: C.LOWER_Z0 + J1.SHOULDER_Z, z1: C.LOWER_Z1 - J1.SHOULDER_Z,
     };
     if (!isSolidAt(rail, tenon)) throw new Error('榫头区域不是实心');
-    // 外侧 a/2 必须完全空出（否则柱窝一铣就破榫）
+    // 外侧 a/2 必须完全空出（否则挖柱窝就会破进榫头）
     const relief = {
       x0: C.INNER_FACE, x1: C.EDGE,
       y0: C.RAIL_A_Y, y1: C.RAIL_A_Y + M.SEC / 2,
@@ -114,7 +114,7 @@ export function runVerification() {
       y0: C.COL_AXIS - J3.SOCKET_DY, y1: C.COL_AXIS,       // [4a, 4.5a]
       z0: C.LOWER_Z0, z1: C.LOWER_Z1,                       // 全高 a
     };
-    if (!isEmptyAt(railB, socket)) throw new Error('柱窝未铣通');
+    if (!isEmptyAt(railB, socket)) throw new Error('柱窝没挖通');
     eq(socket.x1, C.RAIL_B_X + M.SEC / 2, '柱窝开口面 = 横枨外侧面');
     // 柱窝内端面必须留料（三面约束之一）
     const innerWall = { ...socket, x0: C.RAIL_B_X - 1, x1: C.RAIL_B_X };
@@ -135,12 +135,12 @@ export function runVerification() {
       y0: C.INNER_FACE, y1: C.INNER_FACE + J2.SLOT_L,
       z0: zTop - J2.SLOT_D, z1: zTop,
     };
-    if (!isEmptyAt(rail, slot)) throw new Error('开口槽未铣通');
+    if (!isEmptyAt(rail, slot)) throw new Error('开口槽没凿通');
     const floor = { ...slot, z0: C.LOWER_Z0, z1: zTop - J2.SLOT_D };
     if (!isSolidAt(rail, floor)) throw new Error('槽底无余料 —— 中梁将失去承重面');
     // 中央榫舌保留
     const tongue = { x0: -J2.TONGUE / 2, x1: J2.TONGUE / 2, y0: slot.y0, y1: slot.y1, z0: slot.z0, z1: slot.z1 };
-    if (!isSolidAt(rail, tongue)) throw new Error('中央榫舌被铣掉');
+    if (!isSolidAt(rail, tongue)) throw new Error('中央榫舌被削掉了');
     // 中梁端部下半段应已横切让出（★V-26）
     const beam = buildPart('LB-C1');
     const lowerHalf = {
@@ -248,7 +248,7 @@ export function runVerification() {
       y0: keep.y0, y1: C.COL_AXIS + M.SEC / 2,
       z0: S.NECK2[0], z1: S.NECK2[1],
     };
-    if (!isEmptyAt(col, gone)) throw new Error('颈部外侧象限未铣除');
+    if (!isEmptyAt(col, gone)) throw new Error('颈部外侧象限没削掉');
     return `两颈严格对齐上下枨框 · 颈截面 ${J3.NECK}×${J3.NECK}mm（1/4 截面）`;
   });
 
@@ -364,8 +364,84 @@ export function runVerification() {
     return notes.join(' · ');
   });
 
-  // ── §11.1 面数预算 ──
-  check('BUDGET', '面数在 §11.1 预算内', () => {
+  /*
+   * ── 走刀去料的局部性 ──
+   *
+   * 一道工序常常要在同一根料上去掉好几处：横枨两头各一个透眼、各一个柱窝。
+   * 它们沿走刀方向排开，隔着大半根料，刀一趟只经过其中一处。
+   * 「刀还在这一头，那一头已经成形」是这套加工表现最容易复发的失真，
+   * 所以按刀数与刃尖扫过的区间逐处断言一遍。
+   */
+  check('CARVE', '分趟走刀只去掉刃尖扫过的那一处（同一工序的另一处不提前成形）', () => {
+    const notes = [];
+    const midZ = (C.LOWER_Z0 + C.LOWER_Z1) / 2;
+    const x = C.RAIL_B_X + 2;                 // 刃尖落在被挖掉的那半边里
+    for (const [tag, label] of [[OP.MORTISE, '透眼'], [OP.SOCKET, '柱窝']]) {
+      const boxes = partCuts('LB-B1').filter((c) => c.tag === tag).map((c) => c.b);
+      if (boxes.length !== 2) throw new Error(`${label} 应为 2 处，实得 ${boxes.length}`);
+      const [near, far] = boxes[0].y0 > boxes[1].y0 ? boxes : [boxes[1], boxes[0]];
+      const base = { tag, travel: 1, axis: 0, dir: -1 };
+      const laneOf = (b) => [x, b.y0, midZ];
+      const doneNear = { lane: laneOf(near), swept: [near.y0, near.y1] };
+
+      // 第一趟走完：刀下这一处穿了，另一处必须一点没动
+      const first = buildPart('LB-B1', new Set(),
+        { ...base, lane: laneOf(near), swept: [near.y0, near.y1], t: 1 });
+      if (!isEmptyAt(first, near)) throw new Error(`${label}：第一趟走完，刀下这一处没成形`);
+      if (!isSolidAt(first, far)) throw new Error(`${label}：第一趟走完，另一处也跟着掉料了`);
+
+      // 第二趟刚下刀：第一处不许长回去，第二处不许提前成形
+      const second = buildPart('LB-B1', new Set(),
+        { ...base, lane: laneOf(far), swept: [far.y0, far.y0], t: 0, done: [doneNear] });
+      if (!isEmptyAt(second, near)) throw new Error(`${label}：第二趟一下刀，第一处又长回去了`);
+      if (!isSolidAt(second, far)) throw new Error(`${label}：第二趟还没走，第二处就已经成形了`);
+
+      // 第二趟走完：两处都成形
+      const done = buildPart('LB-B1', new Set(),
+        { ...base, lane: laneOf(far), swept: [far.y0, far.y1], t: 1, done: [doneNear] });
+      if (!isEmptyAt(done, near) || !isEmptyAt(done, far)) {
+        throw new Error(`${label}：两趟走完，仍有一处没成形`);
+      }
+      notes.push(`${label} y∈[${far.y0},${far.y1}] / [${near.y0},${near.y1}] 各自独立成形`);
+    }
+    return notes.join(' · ');
+  });
+
+  /*
+   * ── 每道工序都得真的去掉料 ──
+   *
+   * 切除盒先与毛坯求交、零体积的直接丢掉（boxcsg.js 的构造函数）。这一条很好用，
+   * 但也意味着一个算错了、整块落在料外的切除盒会被**静默吞掉** ——
+   * 工序照样登记在案，几何却一点没变。改尺寸时这是最容易踩的一脚。
+   */
+  check('OPS', '每件构件的每一道工序都确实去掉了料', () => {
+    const rows = [];
+    for (const id of [...WOOD_IDS, ...PANEL_IDS]) {
+      const ops = partOps(id);
+      const blankV = buildPart(id, 'blank').volume();
+      for (const tag of ops) {
+        const v = buildPart(id, new Set([tag])).volume();
+        if (v >= blankV) throw new Error(`${id} 的 ${tag} 一点料都没去掉（切除盒可能整块落在毛坯之外）`);
+      }
+      // 逐级累加必须正好落在完工态上 —— 工序之间若有遗漏或重叠登记，这里对不上
+      const acc = new Set();
+      for (const tag of ops) acc.add(tag);
+      const step = buildPart(id, acc).volume();
+      const all = buildPart(id, 'all').volume();
+      if (step !== all) throw new Error(`${id} 逐级累加 ${step} ≠ 完工态 ${all}`);
+      rows.push(`${id}:${ops.length}`);
+    }
+    return `${rows.length} 件构件，共 ${rows.reduce((n, r) => n + Number(r.split(':')[1]), 0)} 道工序，逐道有效、累加闭合`;
+  });
+
+  /*
+   * ── 面数预算 ──
+   *
+   * 原来这组预算是照原策划的 §11.1 抄的，实测只用到 1.2%–9.6% —— 等于没有门槛。
+   * 现在按实测值加约四成余量重标，成为真的回归护栏：贪心合并一旦失效
+   * （比如切除盒被拆碎、栅格多切了几刀），面数会成倍上去，这一条当场报。
+   */
+  check('BUDGET', '面数在预算内（实测值 + 约四成余量）', () => {
     const rows = [];
     let total = 0;
     for (const id of [...WOOD_IDS, ...PANEL_IDS]) {
@@ -377,7 +453,8 @@ export function runVerification() {
       }
       rows.push(`${id}:${m.faceCount}`);
     }
-    return `木构件 + 格心包络合计 ${total} tris（${rows.slice(0, 4).join(' ')} …）`;
+    if (total > 1400) throw new Error(`合计 ${total} tris 超过总预算 1400`);
+    return `木构件 + 格心包络合计 ${total} tris / 上限 1400（${rows.slice(0, 4).join(' ')} …）`;
   });
 
   return results;

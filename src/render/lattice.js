@@ -12,9 +12,15 @@
 import * as THREE from 'three';
 import { a, C, M, J4 } from '../core/modulus.js';
 
+/**
+ * 两种纹样。
+ *
+ * `note` 是选纹样那一步显示在缩略图旁边的一行 —— 只说棂条怎么搭，
+ * 寓意由旁白讲。两处说同一句话，缩略图旁边那行就白占了位置。
+ */
 export const PATTERNS = [
-  { id: 'wanzi', name: '万字纹', sub: '吉祥连续纹 · 回环无尽', meaning: '回环相连，谓「万福不断头」' },
-  { id: 'mayo', name: '麻叶纹', sub: '明清窗棂常见 · 放射对称', meaning: '六出放射，寓意生生不息' },
+  { id: 'wanzi', name: '万字纹', note: '卍字连绵铺陈，接口自然' },
+  { id: 'mayo', name: '麻叶纹', note: '六边棂格，每格六出放射' },
 ];
 
 const W = J4.PANEL_W;            // 96

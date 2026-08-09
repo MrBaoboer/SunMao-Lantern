@@ -56,15 +56,18 @@
   <button id="nav-next" class="nav nav-next" aria-label="下一步" hidden></button>
 
   <!-- 工艺笔记：按需出现，一次只有一张 -->
-  <aside id="note" class="note" aria-label="工艺笔记" hidden></aside>
-  <button id="note-tab" class="note-tab" aria-label="展开工艺笔记" hidden>笔记</button>
+  <aside id="note" class="note scroll" aria-label="工艺笔记" hidden></aside>
+  <button id="note-tab" class="note-tab" aria-expanded="false" aria-controls="note" hidden>笔记</button>
 
   <!-- 短提示 -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <!-- 底部：在说什么、这一步要做什么 -->
+  <!-- 走到哪一步，只报给读屏。关掉字幕之后，翻页对它就完全无声了 -->
+  <p id="sr-step" class="sr-only" role="status" aria-live="polite"></p>
+
   <footer id="bottom" hidden>
-    <div id="cue" class="cue"></div>
+    <div id="cue" class="cue" role="status" aria-live="polite"></div>
     <p id="narration" class="narration" aria-live="polite"></p>
     <div class="actions">
       <div id="alts" class="alts"></div>

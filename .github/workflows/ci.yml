@@ -1,14 +1,21 @@
-# 每次 push 与 PR 都把 `npm run check` 跑一遍 ——
-# lint、几何闭合验算、构建，再用无头 Chromium 走完十八步。
+# 两条作业，挂在不同的时机上。
 #
-# 两个 Node 版本都跑，是因为 package.json 的 engines 写了 `^22.13.0 || >=24.0.0`：
-# 声明支持就得有人替它证明，否则那行字迟早变成谎话。跑的正是下限与当前 LTS 两头。
+# `toolchain` —— lint、单元断言、几何验算、构建、体积门槛。全部是纯 Node 的活，
+#   Node 版本换一档确实会换一套行为（ESLint 10、rolldown、node:test），
+#   所以按 engines 声明的两头各跑一遍：`^22.13.0 || >=24.0.0`。
+#   **每个 PR 都跑**，二三十秒就完 —— 提交后的反馈应该是即时的。
+#
+# `e2e` —— 无头浏览器走完主线与四个模块。软件渲染，十几分钟，**只在合并进 main
+#   之后跑**（也可以手动触发）。它是「页面到底能不能开、十八步能不能走完」的
+#   唯一保障，不能没有；但让每一个 PR 都为它等一刻钟，代价与收益不成比例。
+#   main 上红了，几分钟内就知道，而 main 本来就是部署源。
 name: check
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,8 +26,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  toolchain:
+    name: 工具链 · Node ${{ matrix.node }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -28,24 +37,56 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
+      # 这一条不进浏览器，playwright 的内核就不必下（省下约 170 MB 与一两分钟）。
+      # 只掐这一项，不用 --ignore-scripts —— 那会把别的包的安装脚本一并跳掉
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run check:code
 
+  e2e:
+    name: 冒烟 · 真实浏览器
+    # PR 上不跑。合并进 main 之后跑一遍，或者在 Actions 页面手动触发
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.13'
+          cache: npm
       - run: npm ci
 
-      # 冒烟测试只用 chromium；--with-deps 装的是无头运行缺的那批系统库
-      - run: npx playwright install --with-deps chromium
+      # 浏览器内核单独缓存：一次下载约 170 MB，命中时这一步几秒就过
+      - name: 取 Playwright 内核缓存
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
-      # 走的是 CPU 软件渲染（SwiftShader），慢，但整条主线确实跑得完
-      - run: npm run check
+      # 缓存命中也要跑 install-deps：系统库装在镜像里，不在缓存里
+      - run: npx playwright install-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
 
-      # 跑挂了才有价值：把失败那一刻的构建产物留下来
+      - run: npm run build
+      # 走的是 CPU 软件渲染（SwiftShader）。慢，但整条主线确实跑得完 ——
+      # 冒烟脚本自己会把高光溢出关掉、两种画幅并行走，理由见 tools/smoke.mjs。
+      # 这里**不加 --shots**：三十六张软件渲染的截图能吃掉好几分钟，
+      # 而绿的跑次里没人会去看。出问题的那一步脚本自己会截。
+      - run: npm run smoke
+
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: dist-node${{ matrix.node }}
-          path: dist/
+          name: smoke-shots
+          path: .shots/smoke/
           retention-days: 7
+          if-no-files-found: ignore

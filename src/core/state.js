@@ -53,14 +53,28 @@ function load() {
 }
 
 const listeners = new Set();
+const PREF_KEYS = new Set(Object.keys(PREFS));
 
+/**
+ * 只有偏好落盘。
+ *
+ * 进度本来就「下次打开一律不再读取」，写它没有任何用处，却让愿望这类内容
+ * 无谓地留在本机上 —— 隐私上收得越紧越好。顺带解决一个实际问题：亮度滑杆
+ * 每动一格都要 JSON.stringify 整个状态再写一次盘。
+ */
+let queued = false;
 export const state = new Proxy(load(), {
   set(t, k, v) {
     if (t[k] === v) return true;
     t[k] = v;
+    for (const fn of listeners) fn(k, v, t);
+    if (!PREF_KEYS.has(k) || queued) return true;
+    queued = true;                     // 合并同一批里的多次写入
     queueMicrotask(() => {
-      try { localStorage.setItem(KEY, JSON.stringify(t)); } catch { /* 隐私模式下静默 */ }
-      for (const fn of listeners) fn(k, v, t);
+      queued = false;
+      const prefs = {};
+      for (const key of PREF_KEYS) prefs[key] = t[key];
+      try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* 隐私模式下静默 */ }
     });
     return true;
   },
@@ -71,8 +85,11 @@ export function onStateChange(fn) {
   return () => listeners.delete(fn);
 }
 
-export function resetState() {
-  for (const k of Object.keys(DEFAULTS)) state[k] = DEFAULTS[k];
+/** 从头再来：这一遍的进度归零，偏好一概不动 */
+export function resetRun() {
+  for (const [k, v] of Object.entries(RUN)) {
+    state[k] = (v && typeof v === 'object') ? { ...v } : v;
+  }
 }
 
 /**

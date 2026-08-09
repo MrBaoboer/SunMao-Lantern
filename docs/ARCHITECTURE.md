@@ -39,13 +39,13 @@ modules/    做完之后的四件事
 |---|---|---|
 | `stage` | 舞台 | `setRecommended({az,el,dist,fit})` · `setMood()` · `updaters` |
 | `lantern` | 装配体中枢 | `setOps()` · `addOp()` · `showOnly()` · `setExplode()` · `setSection()` · `setLit()` |
-| `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `sheet()` · `dock()` · `addSpot()` |
+| `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `sheet()` · `dock()` · `addSpot()` · `hideOverlay()` / `closeOverlays()` |
 | `drag` | 单自由度装配 | `begin({parts,…})` · `autoSeatAll()` |
 | `mach` | 拖刀加工 | `begin({tool,from,to,carve,…})` · `autoRun()` |
 | `sfx` `bgm` `voice` | 声音 | `play()` · `loop()` |
 | `fx` | 粒子 | `chips` · `ripples` · `ring` · `tier` |
 | `guides` | 三维方向箭头 | `set()` · `clear()` |
-| `state` | 存档 | 直接读写，写入即持久化 |
+| `state` | 状态 | 直接读写；只有偏好会落盘，进度纯内存 |
 | `engine` | 引擎自身 | `done()` · `go()` · `goToStep()` |
 
 ---
@@ -74,7 +74,10 @@ modules/    做完之后的四件事
 相机据此在窄画幅上自动后退。省掉它，手机上就会裁边。取值见 `steps/util.js` 的 `FIT_*`。
 
 引擎在 `go()` 里做的事，按顺序：停旁白 → `prev.exit()` → 取消拖拽与加工 → 清标注、笔记、任务、提示 →
-关覆盖层 → 清高亮与剖切 → 铺开新一步 → `enter()`。
+`closeOverlays()`（两层一起收）→ `ctx.exitInspect?.()` → 清高亮与剖切 → 铺开新一步 → `enter()`。
+
+`exitInspect` 是「拆开看看」注册在 `ctx` 上的复位钩子。它开着时翻页，坞会被收掉，
+而爆炸与半透的状态留在模型上 —— 灯笼就此永久停在拆开的样子，且没有任何入口能收回去。
 
 **翻页永远不被拦住。** 旁白没念完、任务没做完，都可以往前走。需要动手的步骤把动作放在底部那一个任务按钮上，与导航互不相干。
 
@@ -104,7 +107,10 @@ lantern.js   持有 13 件木构件 + 4 片格心 + 装饰件，管两件事：
 交给 `lantern.carve()` → `buildPart(id, ops, carve)`，现算这一刀啃掉的那一块：
 
 - 刀没压在上面的切除盒**不动它** —— 顺枨顶面两条槽，因此要走两趟，一趟一条；
-- 深度按「已完成刀数 + 本刀走过的比例」自入刀面向里推进，只增不减。
+- 深度按「已完成刀数 + 本刀走过的比例」自入刀面向里推进，只增不减；
+- 进给轴上只啃刃尖真正扫过的那一段，走完的那几趟连区间一起记进 `carveFinish()`。
+  最后这一条是横枨两个透眼、两个柱窝的要害：它们横截位置一样，只沿走刀方向分开，
+  只认横截位置就会让第二个孔在刀落下之前就成形。`verify.js` 的 `[CARVE]` 钉住这条。
 
 刀够不着的部分（另一根枨、另一个端头）仍由 `onDone` 里的 `addOp()` 补上，
 文案会明说「另一头同样一锯」。详见 [DESIGN.md](../DESIGN.md) §4。
@@ -113,7 +119,8 @@ lantern.js   持有 13 件木构件 + 4 片格心 + 装饰件，管两件事：
 
 ## 状态
 
-`core/state.js` 是一个写入即落 `localStorage` 的 Proxy。隐私模式下静默降级为内存态。
+`core/state.js` 是一个 Proxy：**只有 `PREFS` 的键会落 `localStorage`**，进度那一半纯内存。
+隐私模式下静默降级为全内存。
 
 字段分两类，界线在文件顶部就划好了：
 
@@ -121,7 +128,10 @@ lantern.js   持有 13 件木构件 + 4 片格心 + 装饰件，管两件事：
 - **`RUN` 进度** —— 纹样、点亮与亮度、灯谜得分、愿望与海报编号、模块完成情况。**每次打开都从头开始。**
 
 `load()` 只从存档里取 `PREFS` 的键，进度一律用默认值 —— 旧版本存档里多出来的字段自然被忽略。
+写入侧也只挑 `PREFS`：进度反正下次不读，存它没有任何用处，却会让愿望这类内容无谓地留在本机上。
 加字段时先想清楚它属于哪一类：放错地方的后果是用户刷新之后回到一个他不记得的状态。
+
+「从头再来」调 `resetRun()`，只把 `RUN` 那一半拨回默认值，偏好一概不动。
 
 ---
 
@@ -130,7 +140,8 @@ lantern.js   持有 13 件木构件 + 4 片格心 + 装饰件，管两件事：
 1. 在 `steps/act1.js` / `act3.js` / `act4.js` 里加一个步骤对象，`phase` 填对；
 2. 给 `cam.fit` 一个值，`steps/util.js` 里有现成的四个，不合适就写 `{ r, h }`；
 3. 只在这一步存在的场景挂件，用 `Junk` 收着，在 `exit()` 里 `clear()`；
-4. 旁白写在 `narration`，不要另开文案文件 —— 配音稿由运行时数据导出；
+4. 旁白写在 `narration`，不要另开文案文件 —— 配音稿由 `npm run script` 从源码导出；
+   单行别超过约三十字（字幕是按行推进的，一行有多长它就在屏幕上停多久）；
 5. 跑 `npm run smoke`，它会检查这一步可达、有标题、相机正常。
 
 顶部章节是按 `phase` 自动铺的，不用改导航。
@@ -164,7 +175,8 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 - `POST /__shot` —— 页面把 canvas 的 dataURL 发过来，写到 `.shots/`，用于无法直接截屏的环境；
 - `POST /__manifest` —— 页面把**运行时的真实步骤数据**导出，供 `tools/make-script.mjs` 排版配音稿。
 
-第二个是有意为之：让页面自己交代它念了什么，好过让脚本用正则去解析源码。
+第二个的意义是让页面自己交代它念了什么。日常重跑不必守着浏览器：`npm run script`
+（`tools/vo-manifest.mjs`）用一个占位 `ctx` 在 Node 里取到同一张步骤表 —— 步骤脚本本身是纯数据。
 
 生产构建另有一个插件（`apply: 'build'`）：`transformIndexHtml` 里扫出首页的内联脚本，
 现算 sha256，拼成一份 CSP 注入到 `<head>` 最前面。三处讲究：
@@ -175,14 +187,27 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 - **不写死在 `vercel.json` 里。** 那段脚本以后改一个字，写死的哈希就失配，而失配特别隐蔽：
   页面照样能用，只是主题脚本被挡，每次打开先闪一下白。
 
-`vercel.json` 只留跟产物无关的那几个头：缓存、`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy`。
+`vercel.json` 只留跟产物无关的那几个头：缓存、`X-Content-Type-Options`、`Referrer-Policy`、`Cross-Origin-Opener-Policy` 与 `Permissions-Policy`。
 
 `tools/shots.mjs`（`npm run shots`）从**构建产物**里重出 README 的五张图，同理：
 截图由真实运行的页面产出，改了模型或界面就重跑一次，图不会和实现各说各话。
 
 ## 检查
 
-`npm run check` = `lint` → `verify` → `build` → `smoke`，GitHub Actions 在 Node 22.13 与 24 上各跑一遍。
+`npm run check` = `check:code`（`lint` → `test` → `verify` → `build` → `size`）→ `smoke`。
+
+CI 把这两半拆开，挂在不同的时机：
+
+- `check:code` 全是纯 Node 的活，对版本敏感，**每个 PR** 在 22.13 与 24 上各跑一遍，二三十秒。
+- `smoke` 是软件渲染的浏览器走查，十几分钟，**只在合并进 `main` 之后跑**（或手动触发）。
+  它验的是同一个 Chromium 里的行为，按 Node 版本再跑一遍多验到的约等于零，所以也不进矩阵。
+
+原先是两条作业各把全套跑一遍，两个二十二分钟，其中二十分钟是同一件事做两遍。
+
+- `test` 是 `node --test tools/unit.test.mjs`：模数守卫、CSG 内核的退化输入、补间的取消语义。零依赖。
+- `size` 是 `tools/size-budget.mjs`：three 一块、其余全部、gzip 总量各有上限，翻上去当场报。
+- 冒烟本身带 `--shots`，跑挂时把每一步的截图作为 artifact 留下 —— 那是唯一能一眼看出
+  「挂在哪一步、错在画面还是控制台」的材料。
 
 ESLint 用扁平配置，只开 `recommended` 一档，风格问题一概不管。两处按项目实际情况放宽：
 `caughtErrors: 'none'`（隐私模式读 `localStorage`、解码失败之类的空 `catch` 到处都是，是有意的），

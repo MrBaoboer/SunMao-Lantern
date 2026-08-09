@@ -6,7 +6,7 @@
 
 ## 页面打不开
 
-### 封面停在「这盏灯没能点亮」
+### 封面停在「三维画面没能启动」
 
 三维初始化失败了。九成是 WebGL 不可用：
 
@@ -19,8 +19,12 @@ Chrome 可以用 `--enable-unsafe-swiftshader` 强制走软件渲染，慢但能
 
 ### 封面一直停在「正在……」，进度条不走
 
-某一段初始化卡住了。控制台通常会有一条未捕获异常，
-`main()` 的 `catch` 只在同步链路上生效，异步里抛出的会直接落到控制台。
+某一段初始化卡住了。控制台通常会有一条未捕获异常。
+`main()` 外面那个 `.catch()` 接的是它返回的 Promise —— `main()` 里 `await` 到的拒绝
+都会走到那里，封面会换成「三维画面没能启动」。真正接不住的只有两类：
+没被 `await` 的浮动 Promise（比如某个 `wait(...).then(...)` 链），以及主循环 updater
+里抛出的错（`stage.start()` 每个 updater 各有一层 try-catch，只打日志不中断这一帧）。
+所以「进度条不走、控制台有红字、封面文案却没变」基本可以断定是这两类之一。
 
 先确认 `npm install` 是完整的：`node_modules/three` 存在，且版本是 0.185.x。
 
@@ -112,14 +116,26 @@ __ctx.stage.bloom.enabled = false  // 关掉这一道 pass，白斑随之消失�
 这一步的 `mach.begin()` 漏了 `carve`，或者 `carve.tag` 与 `onDone` 里 `addOp()` 的工序对不上。
 没有 `carve` 就退回老行为：走完几刀之后整道工序一次性开出来。
 
-刀没去过的地方也一起没了，则是「刀压在哪条道上」判错了。判据用的是
+刀没去过的地方也一起没了，分两种：
+
+**同一趟刀里，别处的料也掉了。** 是「刀压在哪条道上」判错了。判据用的是
 **既不是进给轴、也不是进刀轴的那一个轴**：进给轴由 `to − from` 定，进刀轴由 `faceNormal` 定。
 两者若指同一个轴（等于顺着进刀方向走刀），判据就失效了 —— 检查这一步的
 `faceNormal` 是不是与走刀方向垂直。
 
+**下一趟刀刚下去，那一处就已经成形了。** 这是走完的那几趟被记宽了。
+横截位置相同、只沿**进给方向**分开的两处料（横枨两头各一个透眼、各一个柱窝）
+在横截判据上是一模一样的，所以 `carveFinish()` 除了刃尖位置，还要记下
+**这一趟刃尖扫过的区间**；`buildPart()` 里 `laneCovers()` 用它做交集判断。
+少了那一段，第一个孔一凿完，第二个孔会立刻跟着成形。
+`verify.js` 的 `[CARVE]` 一条就是钉住这件事的，改动这条路径后先跑 `npm run verify`。
+
 ```js
 __ctx.mach.job.carveKey    // { parts, tag, travel, axis, dir, lane }
 __ctx.mach.job.carveT      // 当前进度 0–1，只增不减
+__ctx.mach.job.sweptLo     // 这一趟刃尖扫过的区间（进给轴，世界坐标）
+__ctx.mach.job.sweptHi
+__ctx.lantern.parts.get('LB-B1').carved   // { tag, lanes: [{ lane, swept }] } 走完的那几趟
 ```
 
 ### 教学件的凹槽看起来是凸的
@@ -136,7 +152,10 @@ __ctx.mach.job.carveT      // 当前进度 0–1，只增不减
 
 ### 帧率低 / 风扇狂转
 
-`src/render/fx.js` 的 `detectTier()` 按内存与核心数分档，低端机会关掉辉光与阴影。
+`src/render/fx.js` 的 `detectTier()` 分三档，**移动设备一律判成 low**（这是主要分支，
+内存与核心数只管桌面端）。low 档关掉高光溢出与阴影、像素比压到 1.5、离屏目标不开 MSAA、
+M4 的天球贴图减半；mid 档像素比 1.75、MSAA 2×、阴影贴图 1024。三档的参数表在
+`src/render/stage.js` 顶部的 `TIERS`。
 想手动确认：
 
 ```js

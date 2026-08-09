@@ -52,12 +52,17 @@ export class BGM {
     const fade = o.fade ?? 1.2;
     const old = this.el;
     if (old) {
+      // 正在淡出的那一条也要拿在手上：它才是切后台时「两条一起响」的那一条 ——
+      // 它的 pause() 排在 rAF 链的末尾，而 rAF 在后台是停摆的
+      this._fading = old;
       const t0 = performance.now();
       const v0 = old.volume;
       const f = () => {
         const k = Math.min(1, (performance.now() - t0) / (fade * 1000));
         old.volume = v0 * (1 - k);
-        if (k < 1) requestAnimationFrame(f); else { old.pause(); old.src = ''; }
+        if (k < 1) { requestAnimationFrame(f); return; }
+        old.pause(); old.src = '';
+        if (this._fading === old) this._fading = null;
       };
       f();
     }
@@ -112,5 +117,21 @@ export class BGM {
   setEnabled(v) {
     this.state.sound = v;
     if (this.el) this.el.volume = this.targetVolume();
+  }
+
+  /**
+   * 切到后台就停住。
+   *
+   * 交叉淡出是靠 rAF 推的，切走之后 rAF 停摆、淡出卡在中间 ——
+   * 旧曲的 pause() 排在淡出结束那一步，于是新旧两条音轨一起在后台响着。
+   */
+  suspend() {
+    this._held = [this.el, this._fading].filter((a) => a && !a.paused);
+    for (const a of this._held) a.pause();
+  }
+
+  resume() {
+    for (const a of this._held || []) a.play().catch(() => { /* 自动播放被拦 */ });
+    this._held = null;
   }
 }
