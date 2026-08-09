@@ -305,12 +305,17 @@ eslint.config.js        ESLint 扁平配置
 双轨授权。**能跑的东西归 AGPL，念出来、写出来、画出来的东西归 CC。**
 
 - **代码**（`src/`、`tools/`、`index.html`、构建与 CI 配置）—— [AGPL-3.0](LICENSE)
-- **内容与素材**（课程编排、全部旁白与文案、`docs/img/` 的截图、纹样与装饰件设计）—— [CC BY-NC-SA 4.0](LICENSE-CONTENT)
+- **内容与素材**（课程编排、全部旁白与文案、`docs/img/` 的截图、纹样与装饰件设计）—— [CC BY-NC-SA 4.0](legal/CC-BY-NC-SA-4.0.txt)
 
 这是一个纯客户端应用，代码每次访问都完整送到浏览器里 —— 所以 AGPL 在这里是实打实生效的：
 **部署出去就得让访问者拿得到完整源码**，你的修改也要同样以 AGPL 发布。压缩后的 `dist/` 不算源码。
 
 素材那一层是 NC，本身禁止商业使用。想闭源、想去掉署名、或想原样拿课程内容做收费产品，
 都需要一份单独的商业授权 —— 见 [COMMERCIAL.md](COMMERCIAL.md)。
+
+> 仓库顶部的徽章只会显示 **AGPL-3.0**。那不是漏了另一半 —— GitHub 的许可证探测器
+> （licensee）总共只认十三份许可证，CC 系里只收了 CC0，NonCommercial 变体不在其列，
+> 所以它认不出来也标不出来。内容那一层的效力不取决于徽章，取决于这一节与
+> [COMMERCIAL.md](COMMERCIAL.md)。
 
 Copyright © 2026 MrBaoboer
