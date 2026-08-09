@@ -194,12 +194,16 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 
 ## 检查
 
-`npm run check` = `lint` → `test` → `verify` → `build` → `size` → `smoke`，
-GitHub Actions 在 Node 22.13 与 24 上各跑一遍（推到 main 的提交与每个 PR）。
+`npm run check` = `check:code`（`lint` → `test` → `verify` → `build` → `size`）→ `smoke`。
+
+CI 把这两半拆成两条**并行**的作业，理由是它们对 Node 版本的敏感度完全不同：
+`check:code` 全是纯 Node 的活，在 22.13 与 24 上各跑一遍；`smoke` 验的是同一个 Chromium
+里的行为，只跑一次。原先两条作业各把全套跑一遍，两个二十二分钟，其中二十分钟是同一件事做两遍。
 
 - `test` 是 `node --test tools/unit.test.mjs`：模数守卫、CSG 内核的退化输入、补间的取消语义。零依赖。
 - `size` 是 `tools/size-budget.mjs`：three 一块、其余全部、gzip 总量各有上限，翻上去当场报。
-- 跑挂时 CI 会补跑一次 `npm run smoke -- --shots`，把每一步的截图与产物一起作为 artifact 留下。
+- 冒烟本身带 `--shots`，跑挂时把每一步的截图作为 artifact 留下 —— 那是唯一能一眼看出
+  「挂在哪一步、错在画面还是控制台」的材料。
 
 ESLint 用扁平配置，只开 `recommended` 一档，风格问题一概不管。两处按项目实际情况放宽：
 `caughtErrors: 'none'`（隐私模式读 `localStorage`、解码失败之类的空 `catch` 到处都是，是有意的），

@@ -15,7 +15,8 @@
     "shots": "node tools/shots.mjs",
     "script": "node tools/vo-manifest.mjs && node tools/make-script.mjs",
     "size": "node tools/size-budget.mjs",
-    "check": "npm run lint && npm test && npm run verify && npm run build && npm run size && npm run smoke"
+    "check:code": "npm run lint && npm test && npm run verify && npm run build && npm run size",
+    "check": "npm run check:code && npm run smoke"
   },
   "engines": {
     "node": "^22.13.0 || >=24.0.0"

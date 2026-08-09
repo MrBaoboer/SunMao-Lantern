@@ -164,13 +164,14 @@ npm run dev
 打开 <http://localhost:5173>。
 
 ```bash
-npm run build     # 静态产物 → dist/
-npm run lint      # ESLint
-npm test          # 单元断言：模数守卫、CSG 内核、补间取消语义（node:test，无依赖）
-npm run verify    # 几何闭合验算（Node 端，无需浏览器）
-npm run size      # 产物体积门槛
-npm run smoke     # 冒烟测试：真实浏览器走完十八步 + 四个模块
-npm run check     # 上面六样按顺序跑
+npm run build      # 静态产物 → dist/
+npm run lint       # ESLint
+npm test           # 单元断言：模数守卫、CSG 内核、补间取消语义（node:test，无依赖）
+npm run verify     # 几何闭合验算（Node 端，无需浏览器）
+npm run size       # 产物体积门槛
+npm run smoke      # 冒烟测试：真实浏览器走完十八步 + 四个模块
+npm run check:code # 上面除冒烟外的五样（不进浏览器，一分钟以内）
+npm run check      # check:code + smoke
 ```
 
 `npm run smoke` 与 `npm run shots` 需要一次性装好浏览器内核，之后不必再装：
@@ -190,8 +191,15 @@ npx playwright install chromium
 npm run smoke -- --shots
 ```
 
-推到 `main` 的每一次提交与每一个 PR，GitHub Actions 会在 Node 22.13 与 24 两个版本上各把 `npm run check`
-跑一遍 —— 声明支持两个版本，就得有人替这句话作证。跑挂时会把每一步的截图与产物一起作为 artifact 留下。
+推到 `main` 的每一次提交与每一个 PR，GitHub Actions 跑两条**并行**的作业：
+
+- **工具链** —— `npm run check:code`，在 Node 22.13 与 24 上各一遍。这一半确实吃 Node 版本
+  （ESLint 10、rolldown、`node:test`），`engines` 声明支持两头，就得有人替这句话作证。一两分钟。
+- **冒烟** —— 无头浏览器走完主线与四个模块，**只跑一次**，跑在声明的下限 22.13 上。
+  它验的是页面在浏览器里的行为，而浏览器是同一个 Chromium；按 Node 版本再跑一遍多验到的约等于零。
+  跑挂时把每一步的截图作为 artifact 留下。
+
+总耗时取两者中长的那一个。
 
 本文档里的五张图也是从构建产物里拍的，模型或界面改动之后重出一遍即可，图与实现不会各说各话：
 
@@ -249,7 +257,7 @@ tools/
   make-script.mjs       旁白解说稿排版
 vite.config.js          构建配置、开发期两个中间件、生产 CSP 注入
 eslint.config.js        ESLint 扁平配置
-.github/workflows/      push 到 main 与 PR 上跑 npm run check
+.github/workflows/      工具链（两个 Node 版本）与冒烟（一次）两条并行作业
 ```
 
 构建产物 833 kB（gzip 229 kB），其中 three.js 单独一块 619 kB（gzip 155 kB），其余全部代码加起来 214 kB。

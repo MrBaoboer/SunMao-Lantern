@@ -127,6 +127,22 @@ for (const vp of VIEWPORTS) {
   await page.evaluate(() => document.querySelector('.overlay .btn-primary')?.click());
   await page.waitForTimeout(tmo(600));
 
+  /*
+   * 走主线时关掉高光溢出。
+   *
+   * 这不是为了省时间而放弃断言，而是因为**时间本身就是断言的一部分**：
+   * 补间按 rAF 推进，且 dt 被钳在 0.05 s，所以一段 3 秒的动画至少要 60 帧。
+   * 软件渲染 + 全屏五级 bloom 在 CI 上只有个位数帧率 —— 那一段 3 秒的动画
+   * 于是要走二十秒，而这二十秒里什么也没多验到。关掉之后帧率回到几十，
+   * 同样的断言一条不少，只是不必陪着它慢慢烧 CPU。
+   *
+   * 后处理这条管线另有专门的一条断言（见下面的 composerPainted），
+   * 只渲染几帧，不必让整条主线都陪着。
+   * 顺带一提：手机画幅本来就走低配档（detectTier 把移动设备判成 low），
+   * 产品上就是不开 bloom 的 —— 那一遍这样跑反而更贴近真实。
+   */
+  await page.evaluate(() => { window.__ctx.stage.bloomEnabled = false; });
+
   const total = await page.evaluate(() => window.__engine.steps.length);
   if (total !== 18) note(vp.name, `主线应有 18 步，实际 ${total} 步`);
 
@@ -137,8 +153,10 @@ for (const vp of VIEWPORTS) {
    * 这些都会让 canvas 变成一块纯色，而整套断言一条都不会响。
    * 取 canvas 缩略图的亮度标准差：一块纯色趋近 0，有木头有背景则明显大于 0。
    */
-  const framePainted = async () => page.evaluate(() => {
+  const framePainted = async (bloom = null) => page.evaluate((withBloom) => {
     const s = window.__ctx.stage;
+    const was = s.bloomEnabled;
+    if (withBloom !== null) s.bloomEnabled = withBloom;
     if (s.bloomEnabled) s.composer.render();
     else s.renderer.render(s.scene, s.camera);
     const src = s.renderer.domElement;
@@ -154,14 +172,30 @@ for (const vp of VIEWPORTS) {
       sum += l; sq += l * l;
     }
     const mean = sum / n;
+    s.bloomEnabled = was;
     return { sd: Math.sqrt(Math.max(0, sq / n - mean * mean)), mean };
-  });
+  }, bloom);
 
   if (WANT_SHOTS) fs.mkdirSync(SHOT_DIR, { recursive: true });
 
+  /*
+   * 翻到某一步并等它铺开。
+   *
+   * 原先是固定睡 900 ms（CI 上 ×4 = 3.6 s）。十八步两种画幅就是两分钟纯睡眠，
+   * 而这段时间里页面的 rAF 一直在软件渲染 —— 睡得越久，CI 越慢。
+   * 引擎自己有 `busy`：`go()` 进去置真，`enter()` 返回后置假。等它就够了，
+   * 剩下一小口是留给 enter 里那些不 await 的收尾（补间起步、音效）。
+   */
+  const settle = async (ms = 160) => {
+    await page.waitForFunction(() => window.__engine && !window.__engine.busy,
+      null, { timeout: tmo(25000) })
+      .catch(() => note(vp.name, '这一步二十五秒内没有铺开'));
+    await page.waitForTimeout(tmo(ms));
+  };
+
   for (let i = 0; i < total; i++) {
     await page.evaluate((n) => window.__engine.go(n), i);
-    await page.waitForTimeout(tmo(900));
+    await settle();
 
     const state = await page.evaluate(() => {
       const e = window.__engine;
@@ -198,6 +232,27 @@ for (const vp of VIEWPORTS) {
     }
   }
 
+  /*
+   * 后处理这条管线单独验一次。
+   *
+   * 主线是关着 bloom 走的（见上面的注释），所以 composer 那条路要有人替它作证：
+   * 走一帧、量一次，同一画面下它应当比直出更亮 —— 高光溢出本来就是加法。
+   * 只渲染两帧，代价可以忽略；这一条同时也盖住了「OutputPass 掉了、
+   * 或者离屏目标尺寸不对导致整幅发黑」这类只在后处理路径上出现的故障。
+   */
+  {
+    await page.evaluate(() => window.__engine.goToStep('D5'));
+    await settle();
+    await page.evaluate(() => { window.__ctx.lantern.setLit(1); });
+    const off = await framePainted(false);
+    const on = await framePainted(true);
+    if (!(on.sd > 3)) note(vp.name, `后处理路径画面是一块纯色（标准差 ${on.sd.toFixed(2)}）`);
+    if (!(on.mean >= off.mean)) {
+      note(vp.name, `开了高光溢出反而更暗：composer ${on.mean.toFixed(1)} < 直出 ${off.mean.toFixed(1)}`);
+    }
+    await page.evaluate(() => { window.__ctx.lantern.setLit(window.__ctx.state.lit ? 1 : 0); });
+  }
+
   // ── 交互回归（桌面画幅跑一遍就够；go(n) 只进入步骤，不代表任务能走完）──
   if (!vp.isMobile) {
     // 软件渲染 + 全屏 bloom 只有个位数帧率，dt 又被钳在 0.05 ——
@@ -212,9 +267,9 @@ for (const vp of VIEWPORTS) {
       const ob = m.begin.bind(m);
       m.begin = (o) => { window.__jobSeq++; return ob(o); };
     });
-    const goStep = async (id, ms = 1100) => {
+    const goStep = async (id, ms = 220) => {
       await page.evaluate((s) => window.__engine.goToStep(s), id);
-      await page.waitForTimeout(ms);
+      await settle(ms);
     };
     // 上限只是跑飞时的兜底。C4 拆成一处一趟之后已有 6 趟，留足余量 ——
     // 撞上限会静默少跑几趟，看起来却像通过了
@@ -235,7 +290,7 @@ for (const vp of VIEWPORTS) {
         ]));
         await page.waitForFunction((s) => !window.__ctx.mach.job || window.__jobSeq > s, seq, { timeout: tmo(25000) })
           .catch(() => note(vp.name, `${label}: 加工任务没有走完`));
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(tmo(220));
       }
       if (!ran) { note(vp.name, `${label}: 没有出现加工任务`); return; }
       console.log(`    ${label} 加工完成 · ${ran} 道工序`);
@@ -249,7 +304,7 @@ for (const vp of VIEWPORTS) {
       ]));
       await page.waitForFunction(() => !window.__ctx.drag.session?.pending?.size, null, { timeout: tmo(20000) })
         .catch(() => note(vp.name, `${label}: 装配没有完成`));
-      await page.waitForTimeout(600);
+      await page.waitForTimeout(tmo(220));
       console.log(`    ${label} 装配完成`);
     };
 
@@ -262,7 +317,9 @@ for (const vp of VIEWPORTS) {
     // 那一串是主线上唯一「一个按钮带出一整段」的结构，最值得盯
     await goStep('C6');
     await page.evaluate(() => document.getElementById('btn-task')?.click());
-    await page.waitForTimeout(tmo(4200));
+    // 六道工序各 0.5 s 串着走，走完才起装配任务 —— 等它，别按秒数猜
+    await page.waitForFunction(() => !!window.__ctx.drag.session, null, { timeout: tmo(20000) })
+      .catch(() => note(vp.name, 'C6: 一键六道工序之后没有起装配任务'));
     await seatAll('C6');
 
     await goStep('C7'); await runJobs('C7');
@@ -275,9 +332,9 @@ for (const vp of VIEWPORTS) {
 
     // 快速翻页：上一步的僵尸回调不能落到下一步上
     await page.evaluate(() => { window.__engine.go(17); window.__engine.go(2); window.__engine.go(9); });
-    await page.waitForTimeout(1500);
+    await settle(400);
     await page.evaluate(() => window.__engine.go(0));
-    await page.waitForTimeout(900);
+    await settle(400);
     const settled = await page.evaluate(() => window.__engine.current?.id);
     if (settled !== 'A1') note(vp.name, `快速翻页后应停在 A1，实际 ${settled}`);
 
@@ -292,7 +349,7 @@ for (const vp of VIEWPORTS) {
     };
 
     // M1 长按引火：低帧率下点满一圈要几十秒，只断言「按住确实在积累亮度」
-    await goStep('D5', 1600);
+    await goStep('D5', 400);
     if (await openDoor('M1')) {
       await page.waitForSelector('#fire', { timeout: tmo(8000) }).catch(() => null);
       const fireBox = await page.locator('#fire').boundingBox().catch(() => null);
