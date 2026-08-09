@@ -73,7 +73,8 @@ export class Engine {
       ctx.hud.setCue('');
       ctx.hud.setNarration('');
       ctx.hud.quiet(false);
-      ctx.hud.hideOverlay();
+      ctx.hud.closeOverlays();        // 两层一起收 —— 上一步的坞不留给下一步
+      ctx.exitInspect?.();            // 「拆开看看」开着就翻页，灯笼会永久停在半透的爆炸态
       ctx.lantern.clearHighlights();
       ctx.lantern.setSection(null, false);
       ctx.stage.hold(false);          // 上一步锁住的机位，翻页时解开

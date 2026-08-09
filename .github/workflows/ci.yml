@@ -1,5 +1,5 @@
 # 每次 push 与 PR 都把 `npm run check` 跑一遍 ——
-# lint、几何闭合验算、构建，再用无头 Chromium 走完十八步。
+# lint、单元断言、几何闭合验算、构建，再用无头 Chromium 走完十八步。
 #
 # 两个 Node 版本都跑，是因为 package.json 的 engines 写了 `^22.13.0 || >=24.0.0`：
 # 声明支持就得有人替它证明，否则那行字迟早变成谎话。跑的正是下限与当前 LTS 两头。
@@ -36,16 +36,37 @@ jobs:
 
       - run: npm ci
 
-      # 冒烟测试只用 chromium；--with-deps 装的是无头运行缺的那批系统库
-      - run: npx playwright install --with-deps chromium
+      # 浏览器内核单独缓存：一次下载约 170 MB，命中时这一步几秒就过
+      - name: 取 Playwright 内核缓存
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # 缓存命中也要跑一次 install-deps：系统库装在镜像里，不在缓存里
+      - run: npx playwright install-deps chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
 
       # 走的是 CPU 软件渲染（SwiftShader），慢，但整条主线确实跑得完
       - run: npm run check
 
-      # 跑挂了才有价值：把失败那一刻的构建产物留下来
+      # 产物体积门槛：three 之外的代码一旦翻倍，多半是误打包了什么
+      - name: 产物体积门槛
+        run: node tools/size-budget.mjs
+
+      # 跑挂了才有价值：把失败那一刻的截图与产物一起留下。
+      # 冒烟测试的每步截图是唯一能一眼看出「挂在哪一步、错在画面还是控制台」的材料
+      - if: failure()
+        run: npm run smoke -- --shots || true
+
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: dist-node${{ matrix.node }}
-          path: dist/
+          name: check-node${{ matrix.node }}
+          path: |
+            dist/
+            .shots/smoke/
           retention-days: 7
+          if-no-files-found: ignore

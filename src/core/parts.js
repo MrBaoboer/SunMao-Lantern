@@ -22,11 +22,11 @@ function bx(xa, ya, za, xb, yb, zb) {
 
 /** 工序标签 —— 与主线加工步骤一一对应 */
 export const OP = {
-  BEAM_SLOT: 'beam-slot',        // 顺枨中部铣双开口槽（★V-19 自顶面向下）
+  BEAM_SLOT: 'beam-slot',        // 顺枨中部开双开口槽（★V-19 自顶面向下）
   TENON: 'tenon',                // 切偏内侧透榫（★V-17）
   PANEL_SLOT: 'panel-slot',      // 开装板槽（★V-21）
   MORTISE: 'mortise',            // 凿透眼（★V-05）
-  SOCKET: 'socket',              // 铣柱窝（★V-08 / V-18）
+  SOCKET: 'socket',              // 凿柱窝（★V-08 / V-18）
   CORNER_SLOT: 'corner-slot',    // 上枨框底面角牙槽（J-5）
   PRESS_SLOT: 'press-slot',      // 上枨框顶面角花压槽（J-6 / ★V-27）
   SHORTEN: 'shorten',            // 中梁截短至 8a（★V-23）
@@ -278,29 +278,29 @@ function def(id, meta, factory) {
 }
 
 // —— 下枨框（5 件）——
-def('LB-A1', { name: '下枨框·顺枨', group: 'lower', blankId: 'BLK-S01', budget: 900 },
+def('LB-A1', { name: '下枨框·顺枨', group: 'lower', blankId: 'BLK-S01', budget: 130 },
   () => railA({ sy: +1, z0: C.LOWER_Z0, z1: C.LOWER_Z1, upper: false }));
-def('LB-A2', { name: '下枨框·顺枨', group: 'lower', blankId: 'BLK-S02', budget: 900 },
+def('LB-A2', { name: '下枨框·顺枨', group: 'lower', blankId: 'BLK-S02', budget: 130 },
   () => railA({ sy: -1, z0: C.LOWER_Z0, z1: C.LOWER_Z1, upper: false }));
-def('LB-C1', { name: '下枨框·中梁', group: 'lower', blankId: 'BLK-S03', budget: 800 }, beamC);
-def('LB-B1', { name: '下枨框·横枨', group: 'lower', blankId: 'BLK-S04', budget: 1200 },
+def('LB-C1', { name: '下枨框·中梁', group: 'lower', blankId: 'BLK-S03', budget: 80 }, beamC);
+def('LB-B1', { name: '下枨框·横枨', group: 'lower', blankId: 'BLK-S04', budget: 140 },
   () => railB({ sx: +1, z0: C.LOWER_Z0, z1: C.LOWER_Z1, upper: false }));
-def('LB-B2', { name: '下枨框·横枨', group: 'lower', blankId: 'BLK-S05', budget: 1200 },
+def('LB-B2', { name: '下枨框·横枨', group: 'lower', blankId: 'BLK-S05', budget: 140 },
   () => railB({ sx: -1, z0: C.LOWER_Z0, z1: C.LOWER_Z1, upper: false }));
 
 // —— 上枨框（4 件）——
-def('UB-A1', { name: '上枨框·顺枨', group: 'upper', blankId: 'BLK-S06', budget: 900 },
+def('UB-A1', { name: '上枨框·顺枨', group: 'upper', blankId: 'BLK-S06', budget: 120 },
   () => railA({ sy: +1, z0: C.UPPER_Z0, z1: C.UPPER_Z1, upper: true }));
-def('UB-A2', { name: '上枨框·顺枨', group: 'upper', blankId: 'BLK-S07', budget: 900 },
+def('UB-A2', { name: '上枨框·顺枨', group: 'upper', blankId: 'BLK-S07', budget: 120 },
   () => railA({ sy: -1, z0: C.UPPER_Z0, z1: C.UPPER_Z1, upper: true }));
-def('UB-B1', { name: '上枨框·横枨', group: 'upper', blankId: 'BLK-S08', budget: 1200 },
+def('UB-B1', { name: '上枨框·横枨', group: 'upper', blankId: 'BLK-S08', budget: 160 },
   () => railB({ sx: +1, z0: C.UPPER_Z0, z1: C.UPPER_Z1, upper: true }));
-def('UB-B2', { name: '上枨框·横枨', group: 'upper', blankId: 'BLK-S09', budget: 1200 },
+def('UB-B2', { name: '上枨框·横枨', group: 'upper', blankId: 'BLK-S09', budget: 160 },
   () => railB({ sx: -1, z0: C.UPPER_Z0, z1: C.UPPER_Z1, upper: true }));
 
 // —— 立柱（4 件，互为镜像）——
 QUADRANTS.forEach((q, i) => {
-  def(`PL-0${i + 1}`, { name: '立柱', group: 'column', blankId: `BLK-L0${i + 1}`, budget: 1000, quadrant: q },
+  def(`PL-0${i + 1}`, { name: '立柱', group: 'column', blankId: `BLK-L0${i + 1}`, budget: 90, quadrant: q },
     () => column(q));
 });
 
@@ -312,7 +312,7 @@ const PANEL_AXES = [
   { id: 'LT-04', axis: 'x', s: -1 },
 ];
 PANEL_AXES.forEach((p) => {
-  def(p.id, { name: '装饰格心', group: 'panel', budget: 3000, axis: p.axis, side: p.s },
+  def(p.id, { name: '装饰格心（包络）', group: 'panel', budget: 60, axis: p.axis, side: p.s },
     () => panelEnvelope(p));
 });
 
@@ -346,7 +346,7 @@ const HI = ['x1', 'y1', 'z1'];
  * 判据是刃尖的横截位置：进给轴由走刀方向定、进刀轴由攻角定，剩下的那一个轴上，
  * 刃尖必须落在盒的范围内，这个盒才算「刀正压在上面」。
  *
- * **啃到多深。** 自入刀面向里推进 t —— 一刀一层，这正是凿和铣的实际去料方式。
+ * **啃到多深。** 自入刀面向里推进 t —— 一刀一层，这正是凿和刨的实际去料方式。
  *
  * @param {object} b 切除盒（构件本地坐标）
  * @param {{travel:0|1|2, axis:0|1|2, dir:-1|1, lane:number[], t:number}} k
@@ -371,6 +371,22 @@ function onLane(b, k, lane) {
   const at = lane[k.axis];
   if (at >= lo - 1 && at <= hi + 1) return true;
   return k.dir < 0 ? lo >= at - 1 : hi <= at + 1;
+}
+
+/**
+ * 之前某一趟走完的道，是不是就压在这个盒上。
+ *
+ * 只问横截位置是不够的：`onLane` 刻意不看进给轴 —— 刀本来就要沿它走一整趟。
+ * 可同一道工序的两处料常常正是**沿进给轴**分开的（横枨两头各一个透眼、
+ * 各一个柱窝，隔着大半根料）。少了进给轴这一问，第一个孔一凿完，
+ * 第二个孔会被当成「上一趟已经凿好了」，于是第二趟刀还没落下，孔就在那儿了。
+ * 所以还要看那一趟刃尖真正扫过的区间，是否与这个盒有交集。
+ */
+function laneCovers(b, k, d) {
+  const lane = d.lane ?? d;                 // 兼容只记了刃尖位置的旧格式
+  if (!onLane(b, k, lane)) return false;
+  if (!d.swept) return true;
+  return Math.min(b[HI[k.travel]], d.swept[1]) > Math.max(b[LO[k.travel]], d.swept[0]);
 }
 
 function carveBox(b, k) {
@@ -404,9 +420,11 @@ function carveBox(b, k) {
  * 生成构件实体。
  * @param {string} id 构件编号
  * @param {Set<string>|'all'|'blank'} ops 已完成的工序集合
- * @param {{tag:string, travel:0|1|2, axis:0|1|2, dir:-1|1, lane:number[], t:number}} [carve]
+ * @param {{tag:string, travel:0|1|2, axis:0|1|2, dir:-1|1, lane:number[], t:number,
+ *          swept?:number[], done?:{lane:number[], swept:number[]}[]}} [carve]
  *   正在走的这一刀。该标签的切除盒不从 ops 里取，改由 carveBox() 现算 ——
  *   于是料是跟着刀一点点没的，不是走完三刀之后整块跳出来。
+ *   `done` 是同一道工序里之前走完的几趟（刃尖位置 + 扫过的区间）。
  * @returns {Solid}
  */
 export function buildPart(id, ops = 'all', carve = null) {
@@ -427,7 +445,7 @@ export function buildPart(id, ops = 'all', carve = null) {
     for (const c of cuts) {
       if (c.tag !== carve.tag) continue;
       // 之前几趟已经走完的道：整块留着，别让它随着这一趟重新长回去
-      if (carve.done?.some((l) => onLane(c.b, carve, l))) { boxes.push(c.b); continue; }
+      if (carve.done?.some((d) => laneCovers(c.b, carve, d))) { boxes.push(c.b); continue; }
       const b = carveBox(c.b, carve);
       if (b) boxes.push(b);
     }
@@ -437,6 +455,11 @@ export function buildPart(id, ops = 'all', carve = null) {
   solid.partId = id;
   if (!carve) cache.set(key, solid);
   return solid;
+}
+
+/** 该构件的全部切除盒（带工序标签）—— 几何验算要按工序逐处核对 */
+export function partCuts(id) {
+  return DEFS[id].factory().cuts;
 }
 
 /** 该构件涉及的全部工序（按定义顺序去重） */

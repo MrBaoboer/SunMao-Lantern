@@ -52,9 +52,10 @@
 /* ═══════════════ 坞 ═══════════════ */
 
 .dock {
-  position: fixed; left: 0; right: 0; bottom: var(--edge);
+  position: fixed; left: 0; right: 0; bottom: var(--pad-bottom);
   display: flex; flex-direction: column; align-items: center; gap: var(--s4);
-  padding: 0 calc(var(--edge) + 56px);
+  padding-left: calc(var(--pad-left) + 56px);
+  padding-right: calc(var(--pad-right) + 56px);
   animation: dock-in var(--t-base) var(--ease) both;
 }
 @keyframes dock-in { from { opacity: 0; transform: translateY(12px); } }
@@ -104,7 +105,7 @@
   position: absolute; top: var(--s2); right: var(--s2);
   width: 20px; height: 20px; border-radius: 2px;
   display: grid; place-items: center;
-  background: var(--seal); color: #fffaee;
+  background: var(--seal); color: var(--slip);
   font-family: var(--serif); font-size: var(--fs-mini); line-height: 1;
   animation: stamp var(--t-slow) var(--ease-spring) both;
 }
@@ -121,7 +122,7 @@
 .pick {
   position: relative;
   display: flex; align-items: center; gap: var(--s4);
-  width: 268px; padding: var(--s3) var(--s5) var(--s3) var(--s3);
+  width: 268px; padding: var(--s3) var(--s6) var(--s3) var(--s3);
   border-radius: var(--r-sm); text-align: left;
   background: var(--surface);
   box-shadow: var(--hair), var(--lift-1);
@@ -269,11 +270,21 @@
 
 /* ═══════════════ 书写与海报 ═══════════════ */
 
+/*
+ * 落笔用的那张纸。
+ *
+ * 底色必须走 --slip 这一族（与工艺笔记、标注同一块纸），不能用 --surface：
+ * 「写心愿」是写死的夜色场景，界面被压成深色，--surface 于是变成近黑，
+ * 墨色压在上面等于没写 —— 一笔一笔落墨这个镜头会整段看不见。
+ * 墨色与描金由 JS 读 --slip-ink / --slip-mark，两处必须成对改。
+ */
 .ink-pad {
   width: 100%; max-width: 680px; margin: 0 auto;
   border-radius: var(--r-sm);
-  background: var(--surface);
-  box-shadow: var(--hair);
+  background: var(--slip);
+  background-image: var(--grain);
+  background-blend-mode: multiply;
+  box-shadow: var(--hair), var(--lift-1);
 }
 .poster {
   max-height: 60vh; max-width: 100%;
@@ -291,9 +302,54 @@
 
 /* ═══════════════ 窄屏 ═══════════════ */
 
+/*
+ * 触屏没有真正的悬停：点一下之后 :hover 会一直粘着，卡片就停在抬起的位置、
+ * 像是被选中了。所有「抬一下」的反馈在这里一律取消，按下的反馈由 :active 给。
+ */
+@media (hover: none) {
+  .door:hover, .pick:hover, .wish:hover, .layer:hover,
+  .opt:hover:not(:disabled) { transform: none; }
+  /* 选中态不能被这一条抹掉：`:hover` 与 `[aria-pressed]` 权重相同，
+     而这一段在后面 —— 触屏上刚点中的那张卡会当场失去它的金框 */
+  .door:hover { box-shadow: var(--hair), var(--lift-1); }
+  .pick:hover:not([aria-pressed="true"]) { box-shadow: var(--hair), var(--lift-1); }
+  .wish:hover:not([aria-pressed="true"]) { box-shadow: var(--hair); }
+  .opt:hover:not(:disabled) { box-shadow: var(--hair); }
+  .door:active, .pick:active, .wish:active, .opt:active:not(:disabled) { opacity: 0.72; }
+}
+
+/* ═══════════════ 横过来的手机 ═══════════════ */
+
+/*
+ * 竖向只剩三四百像素时，界面这一摞会把画面挤成一条 —— 而这一课的主体是画面。
+ * 排字整体压一档，间距收紧，笔记改成可滚。断点按高度判，不按宽度：
+ * 844×390 的横屏手机在宽度上跟平板一样宽，但竖向只有它的一半。
+ */
+@media (max-height: 540px) and (orientation: landscape) {
+  .sheet { max-height: 92vh; }
+  .sheet-body { margin-top: var(--s5); }
+  .sheet-act { margin-top: var(--s5); }
+  .riddle { margin-bottom: var(--s5); font-size: var(--fs-mid); }
+  .opts { max-width: 560px; }
+  .opt { padding: var(--s3) var(--s2); }
+  .wishes { max-width: 560px; }
+  .wish { padding: var(--s3) var(--s2); }
+  .doors { grid-template-columns: repeat(4, minmax(0, 148px)); }
+  .door { padding: var(--s3) var(--s2); }
+  .door-ic { margin-bottom: var(--s2); width: 24px; height: 24px; }
+  .door-ic .ico { width: 22px; height: 22px; }
+  .door-ds { min-height: 0; }
+  .finale { font-size: var(--fs-head); line-height: 1.9; }
+  .poster { max-height: 74vh; }
+}
+
 @media (max-width: 680px) {
   /* 与底部一样抬到翻页之上 */
-  .dock { bottom: calc(var(--edge) + 52px); padding: 0 var(--s4); }
+  .dock {
+    bottom: calc(var(--pad-bottom) + 52px);
+    padding-left: calc(var(--s4) + var(--sa-left));
+    padding-right: calc(var(--s4) + var(--sa-right));
+  }
   /* 2×2：四张卡正好铺满，不留空格 */
   .doors { grid-template-columns: repeat(2, 1fr); gap: var(--s2); }
   .door { padding: var(--s4) var(--s2) var(--s3); }

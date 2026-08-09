@@ -79,11 +79,22 @@ function shaft(rBot, rTop, len, mat, { facets = 8, spin = Math.PI / 8 } = {}) {
  * 「刃口在 z = 0」这一条是要害：走刀路径上给的坐标就是**刃尖真正走过的线**，
  * 于是步骤脚本里写工件表面的坐标即可，不必再反推一个抵消刀长的偏移量。
  */
+/*
+ * 三把刀共用这三种材质，全片只建一次。
+ *
+ * 原先每次开工都新建、收工就 dispose：MeshStandard 的 GL program 于是在整个
+ * act3 里被反复编译与删除 —— 七段加工、十几趟走刀，每一次卡顿都正好落在
+ * 「该开始拖了」的那一刻。几何仍然每次重建（它便宜），材质留着。
+ */
+const TOOL_MATS = {
+  steel: new THREE.MeshStandardMaterial({ color: 0xb9bfc4, roughness: 0.3, metalness: 0.9 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x3f4247, roughness: 0.5, metalness: 0.6 }),
+  wood: new THREE.MeshStandardMaterial({ color: 0x7a4d28, roughness: 0.66 }),
+};
+
 export function buildTool(kind) {
   const g = new THREE.Group();
-  const steel = new THREE.MeshStandardMaterial({ color: 0xb9bfc4, roughness: 0.3, metalness: 0.9 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x3f4247, roughness: 0.5, metalness: 0.6 });
-  const wood = new THREE.MeshStandardMaterial({ color: 0x7a4d28, roughness: 0.66 });
+  const { steel, dark, wood } = TOOL_MATS;
 
   if (kind === 'saw') {
     // 手锯：齿尖压在 z=0，锯板在其上，背脊再上一档；柄在刀尾、抬到刃线以上。
@@ -153,7 +164,8 @@ export function buildTool(kind) {
     g.add(tip, neck, bolster, ferrule, lower, upper, hoop);
   }
 
-  // 走刀进度环：叠在刀尾上方，永远压在画面最前
+  // 走刀进度环：叠在刀尾上方，永远压在画面最前。
+  // 这一个是每次新建的，因为 end() 里要连着几何一起换掉
   const ringMat = makeGoldMaterial();
   ringMat.transparent = true; ringMat.opacity = 0.9; ringMat.depthTest = false;
   const ring = new THREE.Mesh(new THREE.RingGeometry(7, 8.8, 32, 1, 0, Math.PI * 2), ringMat);
@@ -252,7 +264,7 @@ export class Machining {
   /**
    * 把料啃到当前进度。
    *
-   * 深度按「刀数 + 本刀走过的比例」推进 —— 一刀一层，凿和铣本来就是这么去料的。
+   * 深度按「刀数 + 本刀走过的比例」推进 —— 一刀一层，凿和刨本来就是这么去料的。
    * 只增不减：手往回拖，木头不会长回去。
    */
   _carve() {
@@ -317,8 +329,11 @@ export class Machining {
     if (this.tool) this.ctx.guides?.clear();
     if (this.tool) {
       this.ctx.stage.scene.remove(this.tool);
-      // 刀具每次开工都是新建的 —— 不释放，反复进出加工步会持续泄漏 GPU 资源
-      this.tool.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+      // 几何每次新建，必须释放；材质是全片共用的 TOOL_MATS，绝不能连带 dispose，
+      // 否则下一趟走刀的刀身会变成一片纯黑。进度环那份材质是自己的，跟着走
+      const ring = this.tool.userData.ring;
+      this.tool.traverse((o) => { o.geometry?.dispose?.(); });
+      ring?.material?.dispose?.();
       this.tool = null;
     }
     this.job = null;
@@ -425,7 +440,12 @@ export class Machining {
       // 这一趟走完了：记在构件上。同一道工序还要再走别的道时（顺枨顶面两条槽），
       // 这一条才不会随着下一趟重新长回去
       const k = j.carveKey;
-      if (k) for (const id of k.parts) this.ctx.lantern.carveFinish(id, k.tag, k.lane);
+      if (k) {
+        const swept = j.sweptLo === undefined ? null : [j.sweptLo, j.sweptHi];
+        for (const id of k.parts) {
+          this.ctx.lantern.carveFinish(id, k.tag, k.lane, k.travel, swept);
+        }
+      }
       await wait(0.24);
       this.end();
       done?.();

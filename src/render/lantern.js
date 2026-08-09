@@ -15,6 +15,7 @@ import { buildPart, partMeta, WOOD_IDS, PANEL_IDS, ALL_OPS, OP } from '../core/p
 import { solidToGeometry, grainAxisOf, homeOf } from './geometry.js';
 import { makeWoodMaterial, setHighlight, setCutReveal, setSectionMode, PALETTE } from './materials.js';
 import { buildLatticeGeometry, panelPlacements, buildPatternTexture } from './lattice.js';
+import { reducedMotion } from '../util/tween.js';
 import {
   buildCornerBracket, buildCornerPlate, buildKnot, buildTassel,
   buildLampCore, buildPaper, buildCutPaper, CUTOUT_MOTIFS,
@@ -272,13 +273,27 @@ export class Lantern {
     p.mesh.geometry = solidToGeometry(solid);
   }
 
-  /** 这一趟走完了：记下它，后面几趟不再把它当成没加工过 */
-  carveFinish(partId, tag, laneWorld) {
+  /**
+   * 这一趟走完了：记下它，后面几趟不再把它当成没加工过。
+   *
+   * 光记刃尖的横截位置不够 —— 一道工序的两处料可能正是沿走刀方向分开的
+   * （横枨两头各一个透眼）。连**这一趟扫过哪一段**一起记下，
+   * 下一趟才不会把另一头也当成「已经凿好了」。
+   *
+   * @param {number} travel 进给轴（0/1/2）
+   * @param {number[]} [sweptWorld] 这一趟刃尖扫过的区间（世界坐标，进给轴上）
+   */
+  carveFinish(partId, tag, laneWorld, travel, sweptWorld) {
     const p = this.parts.get(partId);
     if (!p || p.isPanel) return;
     const lane = laneWorld.clone().sub(p.mesh.position).add(p.home);
     if (p.carved?.tag !== tag) p.carved = { tag, lanes: [] };
-    p.carved.lanes.push([lane.x, lane.y, lane.z]);
+    const shift = travel === undefined ? 0
+      : p.home.getComponent(travel) - p.mesh.position.getComponent(travel);
+    p.carved.lanes.push({
+      lane: [lane.x, lane.y, lane.z],
+      swept: sweptWorld ? [sweptWorld[0] + shift, sweptWorld[1] + shift] : null,
+    });
   }
 
   /** 追加一道工序（加工动画逐级调用） */
@@ -543,12 +558,15 @@ export class Lantern {
   /** 每帧：火焰跳动、流苏与中国结摆动 */
   update(dt, t) {
     const core = this.core.userData;
+    // 要求减少动效时，这些一直不停的晃动整体压到两成 —— 完全不动会让点亮
+    // 那一刻失去「活着」的读数，所以是压幅度，不是关掉
+    const amp = reducedMotion() ? 0.2 : 1;
     if (this.core.visible && this.litLevel > 0) {
       // 不规则扰动，周期 1.8 s
-      const f = 1 + Math.sin(t * 3.4) * 0.06 + Math.sin(t * 8.9) * 0.03 + Math.sin(t * 1.7) * 0.04;
+      const f = 1 + (Math.sin(t * 3.4) * 0.06 + Math.sin(t * 8.9) * 0.03 + Math.sin(t * 1.7) * 0.04) * amp;
       core.flame.scale.set(1, f, 1);
       core.flame.position.z = core.wickHeight + (f - 1) * 6;
-      const flick = 0.9 + Math.sin(t * 5.1) * 0.06 + Math.sin(t * 11.3) * 0.04;
+      const flick = 0.9 + (Math.sin(t * 5.1) * 0.06 + Math.sin(t * 11.3) * 0.04) * amp;
       this.innerLight.intensity = this.litLevel * INNER_BASE * flick;
       // billboard
       core.flame.quaternion.copy(this.stage.camera.quaternion);
@@ -556,10 +574,10 @@ export class Lantern {
     }
     if (this.tassel.visible) {
       const s = this.tassel.userData.strands;
-      s.rotation.x = Math.sin(t * 0.9) * 0.05;
-      s.rotation.y = Math.cos(t * 0.72) * 0.045;
+      s.rotation.x = Math.sin(t * 0.9) * 0.05 * amp;
+      s.rotation.y = Math.cos(t * 0.72) * 0.045 * amp;
     }
-    if (this.knot.visible) this.knot.rotation.y = Math.sin(t * 0.5) * 0.1;
+    if (this.knot.visible) this.knot.rotation.y = Math.sin(t * 0.5) * 0.1 * amp;
     void dt;
   }
 

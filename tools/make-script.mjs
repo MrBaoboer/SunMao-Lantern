@@ -1,7 +1,11 @@
 /**
- * 把运行时导出的旁白清单排成一份可直接交给配音的稿子。
+ * 把旁白清单排成一份可直接交给配音的稿子。
  *
- *   npm run dev  →  控制台执行 __exportVO()  →  node tools/make-script.mjs
+ *   node tools/vo-manifest.mjs   →  node tools/make-script.mjs
+ *   （或 npm run script，两步一起跑）
+ *
+ * 清单也可以由页面导出（dev 期控制台 `__exportVO()`），那条路证明的是
+ * 「线上念的就是这一份」；日常重跑走上面那条，不必守着浏览器。
  *
  * 输出 旁白解说稿.md：分段、断句、标好停顿与语速。
  */

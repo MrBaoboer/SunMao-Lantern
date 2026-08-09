@@ -119,7 +119,7 @@
  * 每次都去人群里找。层级压在覆盖层之上，所以卷摊开时也按得到。
  */
 .backbtn {
-  position: fixed; top: var(--edge); left: var(--edge);
+  position: fixed; top: var(--pad-top); left: var(--pad-left);
   z-index: calc(var(--z-overlay) + 5);
   display: inline-flex; align-items: center; gap: var(--s2);
   padding: 9px var(--s4) 9px var(--s3);
@@ -135,14 +135,17 @@
 .backbtn:hover { color: var(--text); box-shadow: var(--hair-gold), var(--lift-2); }
 
 @media (max-width: 680px) {
-  .backbtn { top: var(--s3); left: var(--s3); padding: 8px var(--s3) 8px var(--s2); }
+  .backbtn {
+    top: calc(var(--s3) + var(--sa-top)); left: calc(var(--s3) + var(--sa-left));
+    padding: 8px var(--s3) 8px var(--s2);
+  }
 }
 
 /* ═══════════════ 顶部 · 章节 ═══════════════ */
 
 #topbar {
   position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-chrome);
-  padding: var(--edge) var(--edge) 0;
+  padding: var(--pad-top) var(--pad-right) 0 var(--pad-left);
   pointer-events: none;
   transition: opacity var(--t-slow) var(--ease);
 }
@@ -150,6 +153,7 @@
 
 /* 四章，每章底下是这一章的几步。哪一步都点得到 */
 .chapters { display: flex; gap: var(--s4); pointer-events: auto; }
+/* flex-grow 由界面层按这一章有几步写入 —— 见 hud.setChapters() */
 .ch { flex: 1 1 0; min-width: 0; }
 .ch-ticks { display: flex; gap: 3px; }
 
@@ -160,15 +164,22 @@
   position: relative;
 }
 @media (pointer: coarse) { .tick { height: 32px; } }
+/* 三种状态各自要能看清：未到达是一道墨线，走过的是减一档的金，当下是满金加高
+   一格。原先未到达用 --text-4（2.9:1）、走过的用 --accent-soft（1.5:1），
+   两种都低于非文本 3:1 的下限 —— 进度条读起来只有「当下」一个状态 */
 .tick::before {
   content: ''; display: block; width: 100%; height: 2px;
-  background: var(--text-4);
+  background: var(--text-3);
   border-radius: 1px;
   transition: background var(--t-base) var(--ease), height var(--t-fast) var(--ease);
 }
-.tick[data-state="done"]::before { background: var(--accent-soft); }
-.tick[data-state="now"]::before  { background: var(--accent); height: 3px; }
-.tick:hover::before { background: var(--accent); height: 3px; }
+.tick[data-state="done"]::before { background: var(--accent-mid); }
+.tick[data-state="now"]::before  { background: var(--accent); height: 4px; }
+@media (hover: hover) {
+  .tick:hover::before { background: var(--accent); height: 4px; }
+}
+/* 键盘走到这一格时也要看得见（焦点圈画在按钮上，格子本身也亮一档） */
+.tick:focus-visible::before { background: var(--accent); height: 4px; }
 
 .ch-nm {
   display: block; margin-top: -2px;
@@ -215,7 +226,7 @@
 
 .nav {
   --nav-y: -50%;
-  position: fixed; top: 50%; z-index: var(--z-chrome);
+  position: fixed; top: 50%; z-index: var(--z-nav);
   transform: translateY(var(--nav-y));
   display: grid; place-items: center;
   width: 52px; height: 52px; border-radius: 50%;
@@ -228,17 +239,22 @@
   width: 26px; height: 26px; stroke-width: 1.1;
   transition: transform var(--t-fast) var(--ease);
 }
-.nav-prev { left: max(var(--s2), calc(var(--edge) - 14px)); }
-.nav-next { right: max(var(--s2), calc(var(--edge) - 14px)); }
+.nav-prev { left: max(var(--s2), calc(var(--pad-left) - 14px)); }
+.nav-next { right: max(var(--s2), calc(var(--pad-right) - 14px)); }
 
-.nav:hover:not(:disabled) { color: var(--accent); background: var(--shade); }
-.nav-prev:hover:not(:disabled) .ico { transform: translateX(-3px); }
-.nav-next:hover:not(:disabled) .ico { transform: translateX(3px); }
+@media (hover: hover) {
+  .nav:hover:not(:disabled) { color: var(--accent); background: var(--shade); }
+  .nav-prev:hover:not(:disabled) .ico { transform: translateX(-3px); }
+  .nav-next:hover:not(:disabled) .ico { transform: translateX(3px); }
+}
+/* 手机上这两枚是唯一的翻页入口，颜色不能只在悬停时才起来 */
 .nav:disabled { opacity: 0.18; }
 #topbar[data-quiet="1"] ~ .nav { opacity: 0; pointer-events: none; }
 
-/* 任务做完了，箭头亮一下 */
-.nav.ready { color: var(--accent); }
+/* 任务做完了，箭头亮一下。
+   除了变金，还多描一圈 —— 减少动效时那段位移被关掉，只剩颜色就成了
+   「唯一靠颜色传达的信息」，一圈描边是形状上的差别，不依赖辨色 */
+.nav.ready { color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .nav.ready .ico { animation: nav-ready 1.5s var(--ease) 2; }
 @keyframes nav-ready {
   0%, 100% { transform: translateX(0); }
@@ -248,7 +264,7 @@
 /* ═══════════════ 工艺笔记 ═══════════════ */
 
 .note {
-  position: fixed; right: var(--edge); top: calc(var(--edge) + 86px);
+  position: fixed; right: var(--pad-right); top: calc(var(--pad-top) + 86px);
   z-index: var(--z-note);
   width: min(272px, 34vw);
   padding: var(--s5);
@@ -287,7 +303,7 @@
 }
 .note-spec .sp b {
   font-family: var(--mono); font-weight: 400;
-  font-size: var(--fs-tiny); color: #6d5324; white-space: nowrap;
+  font-size: var(--fs-tiny); color: var(--slip-mark); white-space: nowrap;
 }
 
 .note-foot {
@@ -299,7 +315,7 @@
 
 /* 窄屏：折成右缘一枚纸角，点开才展开 —— 内容一句不少 */
 .note-tab {
-  position: fixed; right: 0; top: 40vh; z-index: var(--z-note);
+  position: fixed; right: var(--sa-right); top: 40vh; z-index: var(--z-note);
   display: none; align-items: center;
   padding: var(--s3) var(--s2);
   border-radius: var(--r-xs) 0 0 var(--r-xs);
@@ -337,8 +353,9 @@
 #bottom {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-chrome);
   padding-top: 96px;
-  padding-inline: calc(var(--edge) + 56px);
-  padding-bottom: max(var(--edge), calc(var(--dock-h, 0px) + var(--s4)));
+  padding-left: calc(var(--pad-left) + 56px);
+  padding-right: calc(var(--pad-right) + 56px);
+  padding-bottom: max(var(--pad-bottom), calc(var(--dock-h, 0px) + var(--s4)));
   display: flex; flex-direction: column; align-items: center;
   gap: var(--s3);
   pointer-events: none;
@@ -403,20 +420,64 @@
   .note { width: min(248px, 44vw); padding: var(--s4); }
 }
 
+/*
+ * 横过来的手机 —— 按高度判，不按宽度。
+ *
+ * 844×390 在宽度上跟平板一样宽，走的是桌面那一套；可它竖向只有 390，
+ * 底部这一摞（96px 上留白 + 提示 + 两行半旁白 + 一行按钮）能吃掉整屏的六成，
+ * 取景那条 0.62 的保底于是把灯笼直接画进字里。
+ */
+@media (max-height: 540px) and (orientation: landscape) {
+  .ch-nm { display: none; }
+  #topbar { padding-top: max(var(--s2), var(--sa-top)); }
+  .toprow { margin-top: var(--s2); }
+  /* 命中区收到 24 —— 竖向本来就不够，翻页另有两侧的箭头顶着 */
+  .tick { height: 24px; }
+  #bottom {
+    padding-top: 36px;
+    gap: var(--s1);
+    padding-bottom: max(calc(var(--s3) + var(--sa-bottom)), calc(var(--dock-h, 0px) + var(--s2)));
+  }
+  .actions { min-height: 34px; }
+  .narration {
+    max-width: min(46em, 76vw); min-height: 2.1em;
+    font-size: var(--fs-mid); line-height: 1.75;
+  }
+  .narration[data-lyric="1"] { font-size: var(--fs-read); line-height: 1.9; }
+  .cue { min-height: 14px; }
+  .btn { padding: 9px var(--s5); }
+  .btn-text { padding: 9px var(--s3); }
+  .nav { width: 44px; height: 44px; }
+  .nav .ico { width: 22px; height: 22px; }
+  /*
+   * 笔记这里要能滚（定高的纸装不下），而一旦 pointer-events 收回来，
+   * 它就会挡住「下一步」—— 两者在竖向正好都落在画面中线上。
+   * 所以整张纸往里让出一个箭头的宽度。
+   */
+  .note {
+    top: calc(var(--pad-top) + 46px);
+    right: calc(var(--pad-right) + 52px);
+    width: min(232px, 34vw); max-height: 62vh;
+    overflow-y: auto; pointer-events: auto; padding: var(--s4);
+  }
+  .toast { top: 11%; font-size: var(--fs-mid); }
+}
+
 @media (max-width: 680px) {
   /* 翻页挪到底部两角 —— 屏幕两侧整片让给手指转动画面 */
   .nav {
     --nav-y: 0;
-    top: auto; bottom: var(--edge);
+    top: auto; bottom: var(--pad-bottom);
     width: 46px; height: 46px;
     background: var(--surface); box-shadow: var(--hair);
   }
   .nav .ico { width: 21px; height: 21px; }
-  .nav-prev { left: var(--s3); }
-  .nav-next { right: var(--s3); }
+  .nav-prev { left: calc(var(--s3) + var(--sa-left)); }
+  .nav-next { right: calc(var(--s3) + var(--sa-right)); }
 
   .note {
-    left: var(--s3); right: var(--s3); top: calc(var(--edge) + 62px);
+    left: calc(var(--s3) + var(--sa-left)); right: calc(var(--s3) + var(--sa-right));
+    top: calc(var(--pad-top) + 62px);
     width: auto; max-height: 44vh; overflow-y: auto;
     padding: var(--s5) var(--s4);
     transform-origin: 50% 0;
@@ -427,8 +488,9 @@
   /* 底部内容整体抬到翻页之上，两者不再抢同一条横线 */
   #bottom {
     padding-top: 72px;
-    padding-inline: var(--s4);
-    padding-bottom: max(calc(var(--edge) + 52px), calc(var(--dock-h, 0px) + var(--s3)));
+    padding-left: calc(var(--s4) + var(--sa-left));
+    padding-right: calc(var(--s4) + var(--sa-right));
+    padding-bottom: max(calc(var(--pad-bottom) + 52px), calc(var(--dock-h, 0px) + var(--s3)));
     gap: var(--s2);
   }
   .narration { min-height: 3.4em; }

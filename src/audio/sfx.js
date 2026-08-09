@@ -5,7 +5,7 @@
  * 十三次落料要能随机浮动，四根立柱到位要依次上行。固定采样做不到。
  *
  * 合成方法是物理导向的：敲击 = 一个宽带瞬态 + 一组指数衰减的共振模态；
- * 锯、凿、铣是带通噪声加包络。这不是「像」，这就是这些声音的产生方式。
+ * 锯、凿、刨是带通噪声加包络。这不是「像」，这就是这些声音的产生方式。
  *
  * 声音只有三类来源：木头、纸、火。界面本身几乎不出声 ——
  * 一屏一记提示音已经足够，多了就成了噪音。
@@ -13,6 +13,9 @@
 
 /** 半音 → 频率倍率（基频由每个音自己给，这里只出倍率） */
 export const semi = (n) => Math.pow(2, n / 12);
+
+/** 切后台停掉、回来要接着放的环境音。其余循环都跟着手势走，停了就算 */
+const AMBIENT_LOOPS = new Set(['FLAME_LOOP']);
 
 class SFXEngine {
   constructor() {
@@ -87,7 +90,7 @@ class SFXEngine {
     return { src, out: g };
   }
 
-  /** 带通滤过的噪声（凿、锯、铣、摩擦都用它） */
+  /** 带通滤过的噪声（凿、锯、刨、摩擦都用它） */
   bandNoise(t, {
     f = 1200, q = 2.4, dur = 0.12, gain = 0.3,
     attack = 0.004, sweepTo = null, type = 'bandpass', decayShape = 2.2,
@@ -173,21 +176,39 @@ class SFXEngine {
     this.play(id, { ...o, delay: (o.delay || 0) + 0.06, pitch: (o.pitch || 0) + 2 });
   }
 
-  /** 循环音（走刀、火焰、扫描），返回停止函数 */
+  /** 循环音（引火、火焰），返回停止函数 */
   loop(id, o = {}) {
     const ctx = this.ensure();
     if (!ctx || !this.enabled) return () => {};
     const fn = LOOPS[id];
     if (!fn) return () => {};
-    if (this._loops.has(id)) this._loops.get(id)();
+    this.stopLoop(id);
     const stop = fn(this, o);
-    this._loops.set(id, stop);
+    this._loops.set(id, { stop, o });
     return () => { stop(); this._loops.delete(id); };
   }
 
   stopLoop(id) {
-    const s = this._loops.get(id);
-    if (s) { s(); this._loops.delete(id); }
+    const r = this._loops.get(id);
+    if (r) { r.stop(); this._loops.delete(id); }
+  }
+
+  /**
+   * 切后台：循环音全停。
+   *
+   * 回来时只把**环境音**接上（点亮之后那一团火，它本该一直烧着）；
+   * 引火那一记是跟着手指走的，人早松手了，接回来就成了一段停不下来的噪音。
+   */
+  suspendLoops() {
+    this._held = [...this._loops.entries()].filter(([id]) => AMBIENT_LOOPS.has(id));
+    for (const [, r] of this._loops) r.stop();
+    this._loops.clear();
+  }
+
+  resumeLoops() {
+    const held = this._held || [];
+    this._held = null;
+    for (const [id, r] of held) this.loop(id, r.o);
   }
 
 }

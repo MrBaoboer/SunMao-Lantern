@@ -27,6 +27,10 @@
   /* 金压深一档：白字压金（主按钮）与金字压纸（cue 动作词）都要过 4.5:1 */
   --accent:      #8a6520;
   --accent-lift: #6f4f15;
+  /* 减一档的金，用在「已经走过」这类非文本标记上。--accent-soft 那个 0.30 的
+     半透金压在纸上只有 1.5:1，进度条的三种状态因此有两种是看不出来的；
+     非文本对比度的下限是 3:1，这一档实测 3.6:1 */
+  --accent-mid:  #9c7530;
   --accent-soft: rgba(138, 101, 32, 0.30);
   --accent-faint:rgba(138, 101, 32, 0.11);
   --on-accent:   #fffdf7;
@@ -72,6 +76,7 @@
 
   --accent:      #d3aa63;
   --accent-lift: #e6c286;
+  --accent-mid:  #8a6c3c;
   --accent-soft: rgba(211, 170, 99, 0.34);
   --accent-faint:rgba(211, 170, 99, 0.13);
   --on-accent:   #241a0c;
@@ -133,6 +138,21 @@
   /* 坞摊开时的高度，由界面层实测写入 —— 底部这一摞据此整体上让 */
   --dock-h: 0px;
 
+  /*
+   * 刘海与横条。首页声明了 viewport-fit=cover —— 三维要铺满整块屏，
+   * 那么界面就得自己让开这四条边。不让的后果在带刘海的手机上很直接：
+   * 底部两枚翻页压在小白条底下，横屏时左右两侧的按钮被圆角切掉一截。
+   * 常驻界面的四个边距一律用 --pad-* 而不是裸的 --edge。
+   */
+  --sa-top:    env(safe-area-inset-top, 0px);
+  --sa-bottom: env(safe-area-inset-bottom, 0px);
+  --sa-left:   env(safe-area-inset-left, 0px);
+  --sa-right:  env(safe-area-inset-right, 0px);
+  --pad-top:    calc(var(--edge) + var(--sa-top));
+  --pad-bottom: calc(var(--edge) + var(--sa-bottom));
+  --pad-left:   calc(var(--edge) + var(--sa-left));
+  --pad-right:  calc(var(--edge) + var(--sa-right));
+
   /* ── 圆角与描边 ───────────────────────────────── */
   --r-xs: 3px; --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-full: 999px;
   --hair:      inset 0 0 0 1px var(--line);
@@ -148,8 +168,11 @@
   --ease-spring: cubic-bezier(0.2, 1.25, 0.5, 1);
 
   /* ── 层级 ─────────────────────────────────────── */
-  --z-anchor:  20;
   --z-chrome:  30;
+  /* 翻页压在底部那层渐隐暗角之上。窄屏把箭头挪到底部两角，正落在暗角最实的
+     那一段里 —— 同层级、DOM 又在后面，两枚箭头会被整块糊掉，而那是手机上
+     唯一的翻页入口。三维标注同理：它指的是画面里的东西，不该被暗角吃掉 */
+  --z-nav:     32;
   --z-note:    34;
   --z-toast:   40;
   /* 封面压过常驻界面，但让覆盖层压过它 —— 封面上的「怎么操作」才看得见 */

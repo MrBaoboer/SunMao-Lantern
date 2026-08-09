@@ -9,10 +9,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test": "node --test tools/unit.test.mjs",
     "verify": "node tools/verify-geometry.mjs",
     "smoke": "node tools/smoke.mjs",
     "shots": "node tools/shots.mjs",
-    "check": "npm run lint && npm run verify && npm run build && npm run smoke"
+    "script": "node tools/vo-manifest.mjs && node tools/make-script.mjs",
+    "size": "node tools/size-budget.mjs",
+    "check": "npm run lint && npm test && npm run verify && npm run build && npm run size && npm run smoke"
   },
   "engines": {
     "node": "^22.13.0 || >=24.0.0"

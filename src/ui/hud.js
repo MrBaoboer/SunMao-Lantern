@@ -62,7 +62,7 @@ export class HUD {
     this.el = {
       topbar: $('topbar'), chapters: $('chapters'), stepno: $('stepno'), steptitle: $('steptitle'),
       prev: $('nav-prev'), next: $('nav-next'),
-      note: $('note'), noteTab: $('note-tab'), toast: $('toast'),
+      note: $('note'), noteTab: $('note-tab'), toast: $('toast'), srStep: $('sr-step'),
       bottom: $('bottom'), cue: $('cue'), narration: $('narration'),
       alts: $('alts'), task: $('btn-task'),
       menu: $('btn-menu'), overlay: $('overlay'), cover: $('cover'),
@@ -76,6 +76,8 @@ export class HUD {
     this._noteOpen = false;
     this._escape = null;
     this._returnFocus = null;
+    this._base = null;
+    this._top = null;
     this.steps = [];
     this._safe = { top: 0, bottom: 0 };
 
@@ -102,7 +104,9 @@ export class HUD {
     this._ro = new ResizeObserver(() => this.#syncSafe());
     this._ro.observe(this.el.narration);
     this._ro.observe(this.el.topbar);
-    addEventListener('resize', () => this.#syncSafe());
+    addEventListener('resize', () => { this.#syncSafe(); this.#layoutNote(); });
+    // 手机横过来时 resize 未必先到，orientationchange 补一道
+    addEventListener('orientationchange', () => { this.#syncSafe(); this.#layoutNote(); });
   }
 
   /**
@@ -159,17 +163,30 @@ export class HUD {
         <span class="ch-nm">${PHASES[p]}</span>
       </div>`).join('');
 
+    // 每一章按它有几步分宽度。四章等宽的话，做骨架那八步会挤成 7px 一格 ——
+    // 手机上点不中，而「点一下跳到那一步」正是引导里写着的用法。
+    // 只能走 CSSOM：产物带的 CSP 是 `style-src 'self'`，模板里写 style="…"
+    // 会被当场挡下（属性形式的内联样式不吃 hash）
+    this.el.chapters.querySelectorAll('.ch').forEach((el, p) => {
+      el.style.flexGrow = String(byPhase[p].length || 1);
+    });
+
     this.el.chapters.addEventListener('click', (e) => {
       const t = e.target.closest('.tick');
       if (t) this.onJump?.(+t.dataset.i);
     });
-    this.el.chapters.addEventListener('pointerover', (e) => {
-      const t = e.target.closest('.tick');
-      if (t) this.#showTip(t);
-    });
-    this.el.chapters.addEventListener('pointerout', (e) => {
-      if (e.target.closest('.tick')) this.#hideTip();
-    });
+    // 悬停与键盘焦点都要给出步名 —— 这一排格子只有 2px 高，看不出哪一格是哪一步
+    for (const ev of ['pointerover', 'focusin']) {
+      this.el.chapters.addEventListener(ev, (e) => {
+        const t = e.target.closest('.tick');
+        if (t) this.#showTip(t);
+      });
+    }
+    for (const ev of ['pointerout', 'focusout']) {
+      this.el.chapters.addEventListener(ev, (e) => {
+        if (e.target.closest('.tick')) this.#hideTip();
+      });
+    }
   }
 
   #showTip(tick) {
@@ -193,6 +210,9 @@ export class HUD {
   setStep(index, total, title) {
     this.el.stepno.textContent = index >= 0 ? `${String(index + 1).padStart(2, '0')}／${total}` : '';
     this.el.steptitle.textContent = title || '';
+    // 顶部那两行是视觉上的「走到哪了」，读屏看不见它变化 —— 单独报一句。
+    // 字幕关掉时这是唯一的翻页信号
+    this.el.srStep.textContent = index >= 0 ? `第 ${index + 1} 步，共 ${total} 步：${title || ''}` : '';
     this.el.chapters.querySelectorAll('.tick').forEach((t) => {
       const i = +t.dataset.i;
       t.dataset.state = i < index ? 'done' : i === index ? 'now' : 'next';
@@ -218,11 +238,20 @@ export class HUD {
 
   /**
    * 操作提示：告诉手该做什么。<em> 标动作词，<b> 标计数。
+   *
+   * 这一行是读屏用户唯一能听到「现在该做什么」的地方，所以它是个 live region。
+   * 但走刀与装配的计数（「第 2 刀 / 共 3 刀」）每一下都会改它 —— 一步能改十几次，
+   * 全播出来就成了噪音。计数类的更新传 `quiet`：照常写进 DOM 给眼睛看，
+   * 写的那一下把播报关掉。
+   *
    * @param {string} html
    * @param {string} [ico] 图标名，见 ui/icons.js
+   * @param {{quiet?:boolean}} [o]
    */
-  setCue(html, ico) {
-    this.el.cue.innerHTML = html ? (ico ? icon(ico) : '') + `<span>${html}</span>` : '';
+  setCue(html, ico, { quiet = false } = {}) {
+    const e = this.el.cue;
+    e.setAttribute('aria-live', quiet ? 'off' : 'polite');
+    e.innerHTML = html ? (ico ? icon(ico) : '') + `<span>${html}</span>` : '';
   }
 
   toast(text, { gold = false, dur = 2200 } = {}) {
@@ -243,6 +272,8 @@ export class HUD {
     if (!n) {
       note.hidden = true; noteTab.hidden = true; note.innerHTML = '';
       this._noteOpen = false;
+      this._note = null;
+      this.#dropNoteRect();
       return;
     }
     const spec = (n.spec || []).length
@@ -256,18 +287,41 @@ export class HUD {
       n.foot ? `<div class="note-foot">${n.foot}</div>` : '',
     ].join('');
 
-    const narrow = matchMedia('(max-width: 680px)').matches;
-    this._noteOpen = !narrow;
-    note.hidden = narrow;
-    noteTab.hidden = !narrow;
-    noteTab.textContent = '笔记';
+    this._note = n;
+    this.#layoutNote(true);
     note.style.animation = 'none'; void note.offsetWidth; note.style.animation = '';
+  }
+
+  /**
+   * 宽屏摊开、窄屏折成一枚纸角。
+   *
+   * 这一判断必须能重跑：原先只在 setNote 时判一次，横过屏幕之后页签留在
+   * 宽屏的隐藏态，笔记既打不开也关不掉 —— 而整步的教学要点就在里面。
+   */
+  #layoutNote(reset = false) {
+    const { note, noteTab } = this.el;
+    if (!this._note) return;
+    const narrow = matchMedia('(max-width: 680px)').matches;
+    if (reset || this._noteNarrow !== narrow) this._noteOpen = !narrow;
+    this._noteNarrow = narrow;
+    note.hidden = !this._noteOpen;
+    noteTab.hidden = !narrow;
+    this.#paintNoteTab();
+    this.#dropNoteRect();
+  }
+
+  #paintNoteTab() {
+    const { noteTab } = this.el;
+    noteTab.textContent = this._noteOpen ? '收起' : '笔记';
+    noteTab.setAttribute('aria-expanded', String(this._noteOpen));
+    noteTab.setAttribute('aria-label', this._noteOpen ? '收起工艺笔记' : '展开工艺笔记');
   }
 
   toggleNote() {
     this._noteOpen = !this._noteOpen;
     this.el.note.hidden = !this._noteOpen;
-    this.el.noteTab.textContent = this._noteOpen ? '收起' : '笔记';
+    this.#paintNoteTab();
+    this.#dropNoteRect();
   }
 
   // ══════════════ 这一步的任务 ══════════════
@@ -328,12 +382,18 @@ export class HUD {
     const m = document.createElement('div');
     m.className = 'menu';
     m.setAttribute('role', 'menu');
+    // 夜色场景里界面被临时压成深色，这时按「深色」看不出变化 ——
+    // 开关照旧存下选择，但得说一句为什么现在没反应
+    const forced = this._tone === 'dark';
     m.innerHTML = `<button role="menuitem" data-k="help">${icon('book')}<span>怎么操作</span></button>`
       + '<div class="sep"></div>'
       + toggles.map((t) => {
         const on = read(t);
-        return `<button role="menuitemcheckbox" aria-checked="${on}" data-k="${t.k}">
+        const row = `<button role="menuitemcheckbox" aria-checked="${on}" data-k="${t.k}">
           ${icon(on || !t.off ? t.ico : t.off)}<span>${t.label}</span><i class="sw"></i></button>`;
+        return t.theme && forced
+          ? `${row}<p class="menu-note">这几步是夜里的场景，界面先跟着暗下来</p>`
+          : row;
       }).join('')
       + '<div class="sep"></div>'
       + `<button role="menuitem" data-k="inspect">${icon('cube')}<span>拆开看看</span></button>`
@@ -417,8 +477,9 @@ export class HUD {
   #paint() {
     const v = this._tone || this.state.theme || 'light';
     document.documentElement.dataset.theme = v;
-    document.querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', v === 'dark' ? '#0a0908' : '#f4efe3');
+    // 地址栏配色跟着令牌走，不写死两个色值 —— 改 --bg 时这里会自己跟上
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (bg) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg);
   }
 
   // ══════════════ 怎么操作 ══════════════
@@ -432,6 +493,7 @@ export class HUD {
     const touch = matchMedia('(pointer: coarse)').matches;
     const done = () => { this.hideOverlay(); onClose?.(); };
     this.sheet({
+      top: true,                 // 盖在这一步自己的坞上面，收起时把它交还
       title: '怎么操作',
       body: `<div class="guide">${rows.map((r) => `
         <div class="guide-row">
@@ -488,18 +550,37 @@ export class HUD {
     this.spots = [];
   }
 
+  /** 笔记那张纸的矩形变了（换步、折叠、改画幅）—— 下一帧重新量 */
+  #dropNoteRect() { this._noteRect = undefined; }
+
   updateSpots(camera) {
     if (!this.spots.length) return;
     // 右上角那张工艺笔记是一张不透明的纸，层级还压过标注 ——
     // 只避视口右缘不够，标签会被它整块吃掉。把它的实际矩形当成右边界。
-    const nb = (!this.el.note.hidden && this.el.note.getClientRects().length)
-      ? this.el.note.getBoundingClientRect() : null;
+    //
+    // 量一次就存着：原先每帧都 getClientRects + getBoundingClientRect，
+    // 而这个函数紧接着就要写十几个元素的 style —— 读写交替，每帧强制一次重排。
+    // 这张纸在一步之内是不动的。
+    if (this._noteRect === undefined) {
+      this._noteRect = (!this.el.note.hidden && this.el.note.getClientRects().length)
+        ? this.el.note.getBoundingClientRect() : null;
+    }
+    const nb = this._noteRect;
+    /*
+     * 标注压在底部暗角之上（`--z-nav`），否则它指的那个东西被整块糊掉。
+     * 代价是它现在也压在任务按钮之上，而标注是真按钮 —— 一旦投影落进界面
+     * 占掉的那两条边里，它就会替按钮把点击吃掉。落进去就藏起来：
+     * 那块地方本来就被界面盖着，看不见的标注也点不着。
+     * 藏了也不会卡住任何一步 —— 翻页从来不被拦。
+     */
+    const ceil = this._safe.top + 8;
+    const floor = innerHeight - this._safe.bottom - 8;
     const v = new THREE.Vector3();
     for (const s of this.spots) {
       v.copy(s.pos).project(camera);
-      const behind = v.z > 1;
       const x = (v.x * 0.5 + 0.5) * innerWidth;
       const y = (-v.y * 0.5 + 0.5) * innerHeight;
+      const behind = v.z > 1 || y < ceil || y > floor;
       s.el.style.display = behind ? 'none' : '';
       s.lb.style.display = behind || !s.active ? 'none' : '';
       s.el.style.left = `${x}px`; s.el.style.top = `${y}px`;
@@ -516,23 +597,69 @@ export class HUD {
 
   // ══════════════ 覆盖层 ══════════════
 
-  showOverlay(html, { veil = true, onMount, onEsc } = {}) {
+  /*
+   * 覆盖层分两层。
+   *
+   * 底层归这一步自己：选花纹的坞、分层拆解的坞、四扇门。
+   * 上层归随时可能盖上来的那一页：怎么操作、尺寸对照、拆开看看。
+   *
+   * 上层收起时底层原样回来。少了这一条，在「选一个花纹」那一步打开菜单看一眼
+   * 怎么操作，回来花纹就没了 —— 而那个坞是这一步唯一的前进入口，底部提示
+   * 还在说「点一个花纹」。四扇门与分层拆解也各有一条同样的死路。
+   *
+   * @param {{veil?:boolean, onMount?:Function, onEsc?:Function, onGone?:Function,
+   *          top?:boolean}} o
+   *   top：盖在这一步自己的坞之上，收起时把它交还
+   *   onGone：这一层不在了（被收起、被同层的另一页顶掉、或整个清空）时调一次。
+   *     「拆开看看」靠它把爆炸与半透还原 —— 上层是可以被另一个上层直接顶掉的
+   *     （坞不夺焦点也不挡菜单，摊着它照样能点右上角），顶掉时没人通知它，
+   *     状态就会卡在「以为自己还开着」，而它的控件已经没了。
+   */
+  showOverlay(html, { veil = true, onMount, onEsc, onGone, top = false } = {}) {
+    // 每一层各记各的「从哪儿来的」：上层收起时焦点要回到打开它的那个控件
+    // （多半是右上角的菜单），而不是掉到 body 上
+    const layer = { html, veil, onMount, onEsc, onGone, from: document.activeElement };
+    const gone = top ? [this._top] : [this._top, this._base];
+    if (top) this._top = layer;
+    else { this._base = layer; this._top = null; }
+    for (const l of gone) l?.onGone?.();
+    return this.#paintOverlay();
+  }
+
+  #paintOverlay() {
+    const layer = this._top || this._base;
     const o = this.el.overlay;
+    if (!layer) return this.#dropOverlay();
     if (o.hidden) this._returnFocus = document.activeElement;
+    o.querySelectorAll('.dock').forEach((d) => this._ro.unobserve(d));
     o.hidden = false;
-    o.className = `overlay ${veil ? 'veil' : 'bare'}`;
-    o.innerHTML = html;
-    this._escape = onEsc || null;
-    onMount?.(o);
+    o.className = `overlay ${layer.veil ? 'veil' : 'bare'}`;
+    o.innerHTML = layer.html;
+    this._escape = layer.onEsc || null;
+    layer.onMount?.(o);
     // 卷盖住了画面，焦点跟着进去；坞不夺焦点，手还在画面上
-    if (veil) {
+    if (layer.veil) {
       (o.querySelector('.btn-primary:not([hidden]):not(:disabled)')
         || o.querySelector('button:not([hidden]):not(:disabled)'))?.focus();
     }
     const dock = o.querySelector('.dock');
     if (dock) this._ro.observe(dock);
     // 卷盖住了画面，背后那些还能被 Tab 走到的按钮就不该再存在
-    this.#setChromeInert(veil);
+    this.#setChromeInert(layer.veil);
+    this.#syncSafe();
+    return o;
+  }
+
+  #dropOverlay() {
+    const o = this.el.overlay;
+    if (o.hidden) return o;
+    o.querySelectorAll('.dock').forEach((d) => this._ro.unobserve(d));
+    o.hidden = true;
+    o.innerHTML = '';
+    this.#setChromeInert(false);
+    this._escape = null;
+    if (this._returnFocus?.isConnected) this._returnFocus.focus();
+    this._returnFocus = null;
     this.#syncSafe();
     return o;
   }
@@ -553,9 +680,16 @@ export class HUD {
     for (const s of this.spots) s.el.inert = on;
   }
 
-  /** 卷：盖住画面的一页 */
-  sheet({ eyebrow, title, lede, body, actions = [], veil = true, onMount, onEsc } = {}) {
-    const html = `<div class="sheet scroll" role="dialog" aria-modal="true">
+  /**
+   * 卷：盖住画面的一页。
+   *
+   * `aria-label` 走标题；两处没有标题的卷（落笔、海报）自己传 label ——
+   * 一个没有名字的 dialog，读屏只会报一句「对话框」。
+   */
+  sheet({ eyebrow, title, lede, body, actions = [], veil = true, label, top, onMount, onEsc } = {}) {
+    const name = label || title || eyebrow;
+    const html = `<div class="sheet scroll" role="dialog" aria-modal="true"
+      ${name ? `aria-label="${name.replace(/<[^>]+>/g, '')}"` : ''}>
       ${eyebrow ? `<p class="eyebrow">${eyebrow}</p>` : ''}
       ${title ? `<h2 class="sheet-title">${title}</h2>` : ''}
       ${lede ? `<p class="sheet-lede">${lede}</p>` : ''}
@@ -563,34 +697,47 @@ export class HUD {
       ${actions.length ? `<div class="sheet-act">${actions.map(actionHTML).join('')}</div>` : ''}
     </div>`;
     return this.showOverlay(html, {
-      veil, onEsc,
+      veil, onEsc, top,
       onMount: (o) => { bindActions(o, actions); onMount?.(o); },
     });
   }
 
   /** 坞：停在底部的一排控件，画面完整让出来 */
-  dock({ body, actions = [], hint, onMount, onEsc } = {}) {
+  dock({ body, actions = [], hint, top, onMount, onEsc } = {}) {
     const html = `<div class="dock">
       ${body || ''}
       ${actions.length ? `<div class="dock-row">${actions.map(actionHTML).join('')}</div>` : ''}
       ${hint ? `<p class="dock-hint">${hint}</p>` : ''}
     </div>`;
     return this.showOverlay(html, {
-      veil: false, onEsc,
+      veil: false, onEsc, top,
       onMount: (o) => { bindActions(o, actions); onMount?.(o); },
     });
   }
 
+  /** 收起最上面那一层；底下压着的那一步自己的坞会原样回来 */
   hideOverlay() {
-    if (this.el.overlay.hidden) return;
-    this.el.overlay.querySelectorAll('.dock').forEach((d) => this._ro.unobserve(d));
-    this.el.overlay.hidden = true;
-    this.el.overlay.innerHTML = '';
-    this.#setChromeInert(false);
-    this._escape = null;
-    if (this._returnFocus?.isConnected) this._returnFocus.focus();
-    this._returnFocus = null;
-    this.#syncSafe();
+    if (this._top) {
+      const l = this._top;
+      this._top = null;
+      this.#paintOverlay();
+      l.onGone?.();
+      if (l.from?.isConnected) l.from.focus();
+      return;
+    }
+    const l = this._base;
+    this._base = null;
+    this.#dropOverlay();
+    l?.onGone?.();
+  }
+
+  /** 两层一起收干净 —— 翻页，以及从四扇门进互动模块时 */
+  closeOverlays() {
+    const gone = [this._top, this._base];
+    this._top = null;
+    this._base = null;
+    this.#dropOverlay();
+    for (const l of gone) l?.onGone?.();
   }
 
   get overlayOpen() { return !this.el.overlay.hidden; }

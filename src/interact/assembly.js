@@ -229,22 +229,31 @@ export class DragAssembly {
     if (!a.moved) return; // 单纯点击 → 交给点击装配（降级路径）
 
     const remain = (1 - a.u) * a.gap;
-    if (a.u >= 1 || remain <= s.snap) {
-      await this.seat(a.partId);
-    } else if (s.wedge && a.u > 1 - (J3.WEDGE_LEN + 1) / a.gap) {
+    /*
+     * 楔紧那一档必须排在吸附之前判。
+     *
+     * 两条门槛互相吞：吸附是 remain ≤ snap（C8 的 snap 是 5），楔紧回弹是
+     * remain < WEDGE_LEN + 1 = 3 —— 后者整个落在前者里面，写在后面就是死代码。
+     * 于是「末段会紧、没推到底会回弹」这条签名手感一次也没触发过，
+     * 而它正是 C8 想让手指感觉到的那件事。
+     */
+    if (s.wedge && a.u < 1 && remain < J3.WEDGE_LEN + 1) {
       // 停在末段没推到底 —— 回弹 2 mm，提示再用力
       const u1 = a.u - J3.WEDGE_LEN / a.gap;
       await tween(0.22, (k) => this.ctx.lantern.setAssemblyProgress(a.partId, a.u + (u1 - a.u) * k), { ease: Ease.outQuad });
       this.ctx.hud.toast('再用点力，推到底才会咬住');
+    } else if (a.u >= 1 || remain <= s.snap) {
+      await this.seat(a.partId);
     } else {
       // 推进不足 —— 缓慢滑回原位
       const u0 = a.u;
       await tween(0.42, (k) => this.ctx.lantern.setAssemblyProgress(a.partId, u0 * (1 - k)), { ease: Ease.inOutQuad });
       s.failCount++;
       this.ctx.hud.toast('再推近一点');
-      // 连续 3 次未成功 → 放宽吸附并主动提供帮助（隐性辅助）
+      // 连续 3 次未成功 → 放宽吸附并主动提供帮助（隐性辅助）。
+      // 有楔紧段的那一步不放宽 —— 把 snap 抬过楔紧段，末段回弹就又变回不可达
       if (s.failCount >= 3) {
-        s.snap = Math.max(s.snap, 12);
+        if (!s.wedge) s.snap = Math.max(s.snap, 12);
         this.ctx.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: () => this.autoSeatAll() }]);
       }
     }
