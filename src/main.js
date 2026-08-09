@@ -11,7 +11,7 @@
  * 你应当已随本程序收到一份该许可证的副本（见仓库根目录的 LICENSE）；
  * 如果没有，见 <https://www.gnu.org/licenses/>。
  *
- * 课程编排、旁白与美术素材不在本许可证之内，见 LICENSE-CONTENT 与 COMMERCIAL.md。
+ * 课程编排、旁白与美术素材不在本许可证之内，见 legal/CC-BY-NC-SA-4.0.txt 与 COMMERCIAL.md。
  */
 
 import './styles.css';
