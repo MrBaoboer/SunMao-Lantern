@@ -52,7 +52,7 @@ jobs:
   e2e:
     name: 冒烟 · 真实浏览器
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v7
@@ -77,11 +77,11 @@ jobs:
 
       - run: npm run build
       # 走的是 CPU 软件渲染（SwiftShader）。慢，但整条主线确实跑得完 ——
-      # 冒烟脚本自己会把高光溢出关掉，理由见 tools/smoke.mjs 里的注释
-      - run: npm run smoke -- --shots
+      # 冒烟脚本自己会把高光溢出关掉、两种画幅并行走，理由见 tools/smoke.mjs。
+      # 这里**不加 --shots**：三十六张软件渲染的截图能吃掉好几分钟，
+      # 而绿的跑次里没人会去看。出问题的那一步脚本自己会截。
+      - run: npm run smoke
 
-      # 挂了才有价值：每一步的截图是唯一能一眼看出「挂在哪一步、
-      # 错在画面还是控制台」的材料
       - if: failure()
         uses: actions/upload-artifact@v7
         with:

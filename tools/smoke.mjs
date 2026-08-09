@@ -79,7 +79,14 @@ const browser = await chromium.launch({
 const failures = [];
 const note = (vp, msg) => { failures.push(`[${vp}] ${msg}`); };
 
-for (const vp of VIEWPORTS) {
+/**
+ * 一种画幅走一遍。
+ *
+ * 两种画幅**并行**跑：软件渲染是 CPU 密集的，而 runner 有四个核；
+ * 两个页面各在自己的渲染进程里，互不抢同一份帧缓冲。
+ * 串着跑等于把这条作业的耗时加起来，而它本来就是整条流水线的长杆。
+ */
+async function walk(vp) {
   const ctx = await browser.newContext({
     viewport: { width: vp.width, height: vp.height },
     isMobile: vp.isMobile,
@@ -176,8 +183,6 @@ for (const vp of VIEWPORTS) {
     return { sd: Math.sqrt(Math.max(0, sq / n - mean * mean)), mean };
   }, bloom);
 
-  if (WANT_SHOTS) fs.mkdirSync(SHOT_DIR, { recursive: true });
-
   /*
    * 翻到某一步并等它铺开。
    *
@@ -194,6 +199,7 @@ for (const vp of VIEWPORTS) {
   };
 
   for (let i = 0; i < total; i++) {
+    const before = failures.length;
     await page.evaluate((n) => window.__engine.go(n), i);
     await settle();
 
@@ -226,8 +232,16 @@ for (const vp of VIEWPORTS) {
       note(vp.name, `第 ${i + 1} 步画面是一块纯色（亮度标准差 ${paint.sd.toFixed(2)}，均值 ${paint.mean.toFixed(0)}）`);
     }
 
-    if (WANT_SHOTS) {
+    /*
+     * 截图只在两种情况下拍：`--shots`（本地排查用，每一步都拍），
+     * 以及**这一步刚记下新的问题**。
+     *
+     * 一张 1440×900 的软件渲染截图不便宜，三十六张能吃掉 CI 上好几分钟 ——
+     * 而绿的那些跑次里没有一个人会去看它们。红的那一步反而是唯一有人看的。
+     */
+    if (WANT_SHOTS || failures.length > before) {
       const n = String(i + 1).padStart(2, '0');
+      fs.mkdirSync(SHOT_DIR, { recursive: true });
       await page.screenshot({ path: path.join(SHOT_DIR, `${vp.name}-${n}-${state.id}.png`) });
     }
   }
@@ -293,7 +307,7 @@ for (const vp of VIEWPORTS) {
         await page.waitForTimeout(tmo(220));
       }
       if (!ran) { note(vp.name, `${label}: 没有出现加工任务`); return; }
-      console.log(`    ${label} 加工完成 · ${ran} 道工序`);
+      console.log(`    [${vp.name}] ${label} 加工完成 · ${ran} 道工序`);
     };
     const seatAll = async (label) => {
       const has = await page.waitForFunction(() => !!window.__ctx.drag.session, null, { timeout: tmo(6000) }).catch(() => null);
@@ -305,7 +319,7 @@ for (const vp of VIEWPORTS) {
       await page.waitForFunction(() => !window.__ctx.drag.session?.pending?.size, null, { timeout: tmo(20000) })
         .catch(() => note(vp.name, `${label}: 装配没有完成`));
       await page.waitForTimeout(tmo(220));
-      console.log(`    ${label} 装配完成`);
+      console.log(`    [${vp.name}] ${label} 装配完成`);
     };
 
     await goStep('C2'); await runJobs('C2');
@@ -477,6 +491,8 @@ for (const vp of VIEWPORTS) {
   console.log(`  ${vp.name} ${vp.width}×${vp.height} · ${total} 步走完`);
   await ctx.close();
 }
+
+await Promise.all(VIEWPORTS.map(walk));
 
 await browser.close();
 await server?.close();
