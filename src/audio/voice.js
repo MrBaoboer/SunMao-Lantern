@@ -61,8 +61,44 @@ export class VoiceTrack {
     this.gen++;
     clearTimeout(this.timer);
     this.timer = null;
+    this._next = null;
+    this._held = null;
+    this._playing = false;
     if (this.audio) { this.audio.pause(); this.audio.src = ''; this.audio = null; }
     this.ui.setNarration('');
+  }
+
+  /** 排一句字幕，同时记下它什么时候该翻 —— 切后台要能原地停住 */
+  #schedule(fn, ms) {
+    this._next = fn;
+    this._dueAt = performance.now() + ms;
+    this.timer = setTimeout(fn, ms);
+  }
+
+  /**
+   * 切到后台就整段停住。
+   *
+   * 画面走 rAF，切走就停摆；旁白走 setTimeout 与 <audio>，切走还在跑。
+   * 不管的话，回来时这一步的旁白已经念完了，而画面还停在你离开的那一帧。
+   */
+  suspend() {
+    if (this._held !== null && this._held !== undefined) return;
+    // 音频无条件停 —— 它跟字幕的排期是两条线：刚开播还没排上字幕、
+    // 或者字幕已经念完而 mp3 还有尾巴，这两段都会漏掉
+    this._playing = !!this.audio && !this.audio.paused;
+    this.audio?.pause();
+    this._held = performance.now();
+    clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  resume() {
+    const at = this._held;
+    this._held = null;
+    if (at === null || at === undefined) return;
+    if (this._playing) this.audio?.play().catch(() => { /* 自动播放被拦，字幕照走 */ });
+    this._playing = false;
+    if (this._next) this.#schedule(this._next, Math.max(0, this._dueAt - at));
   }
 
   /**
@@ -85,12 +121,13 @@ export class VoiceTrack {
         if (this.gen !== gen) return;
         if (i >= lines.length) {
           this.ui.setNarration('');
+          this._next = null;
           o.onDone?.();
           return;
         }
         const l = lines[i++];
         if (this.state.captions) this.ui.setNarration(l.text, { lyric: o.lyric });
-        this.timer = setTimeout(step, l.dur * scale * 1000);
+        this.#schedule(step, l.dur * scale * 1000);
       };
       step();
     };

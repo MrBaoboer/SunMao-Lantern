@@ -7,7 +7,7 @@ import { V, Junk, buildNightSky, AIM_LANTERN, FIT_LANTERN } from '../steps/util.
 import { playVO } from './vo.js';
 import { buildPatternTexture } from '../render/lattice.js';
 import { makePosterNo } from '../core/state.js';
-import { tween, wait } from '../util/tween.js';
+import { tween, wait, reducedMotion } from '../util/tween.js';
 
 const junk = new Junk(null);
 
@@ -21,11 +21,18 @@ const WISHES = [
   '阖家团圆', '前程似锦', '心想事成',
   '财源广进', '学业有成', '喜乐无忧',
 ];
+/*
+ * 四组词任意搭配都得读得通。
+ *
+ * 原先第二组是「身体 / 事业 / 学业 / 生活」，第三组是「平平安安 / 顺顺利利 /
+ * 红红火火 / 长长久久」—— 交叉起来会凑出「愿自己身体红红火火」这种句子。
+ * 现在第二组换成整句，四组之间只用逗号相连，任何一种组合都成话。
+ */
 const COMBO = [
   { k: '给谁', v: ['家人', '朋友', '自己', '大家'] },
-  { k: '哪方面', v: ['身体', '事业', '学业', '生活'] },
-  { k: '怎么样', v: ['平平安安', '顺顺利利', '红红火火', '长长久久'] },
-  { k: '收个尾', v: ['新年快乐', '万事胜意', '福气满满', '岁岁如今朝'] },
+  { k: '愿什么', v: ['身体康健', '事事顺遂', '学业进步', '日子红火'] },
+  { k: '再添一句', v: ['平平安安', '顺顺利利', '长长久久', '岁岁如今朝'] },
+  { k: '收个尾', v: ['新年快乐', '万事胜意', '福气满满', '喜乐无忧'] },
 ];
 
 export function openM3(c, onExit) {
@@ -43,7 +50,8 @@ export function openM3(c, onExit) {
     closed = true; junk.clear(); c.hud.setBack(null); c.hud.hideOverlay(); c.voice.stop(); onExit?.();
   };
   c.hud.setBack(close);
-  const phrase = (s) => `愿${COMBO[0].v[s[0]]}${COMBO[1].v[s[1]]}${COMBO[2].v[s[2]]}，${COMBO[3].v[s[3]]}`;
+  const phrase = (s) =>
+    `愿${COMBO[0].v[s[0]]}${COMBO[1].v[s[1]]}，${COMBO[2].v[s[2]]}，${COMBO[3].v[s[3]]}`;
 
   const choose = () => {
     c.hud.sheet({
@@ -103,29 +111,38 @@ export function openM3(c, onExit) {
     c.state.wishText = picked;
     let fast = false;
     c.hud.sheet({
+      label: '正在写这句话',
       body: '<canvas id="ink" class="ink-pad" width="760" height="230"></canvas>',
       actions: [{ label: '写快一点', on: () => { fast = true; } }],
+      onEsc: close,
     });
     const cv = document.getElementById('ink');
     const g = cv.getContext('2d');
     const chars = [...picked];
     const size = Math.min(112, 700 / chars.length);
     const y = 140;
+    // 墨色跟着纸走。写死的 #1c1a17 压在夜色场景的深底上是 1.06:1 ——
+    // 整段落笔看不见，只在最后描金那一下字才凭空冒出来
+    const css = getComputedStyle(document.body);
+    const ink = css.getPropertyValue('--slip-ink').trim() || '#241e15';
+    const gold = css.getPropertyValue('--slip-mark').trim() || '#8a5a1e';
 
     c.sfx.play('BRUSH', { gain: 0.5 });
     await wait(0.4);
-    g.font = `${size}px ${getComputedStyle(document.body).getPropertyValue('--serif')}`;
+    g.font = `${size}px ${css.getPropertyValue('--serif')}`;
     g.textAlign = 'center'; g.textBaseline = 'middle';
 
+    // closed 守卫要贯穿整条链：中途按返回，笔声不该继续泼在四门页上
     for (const [ci, ch] of chars.entries()) {
+      if (closed) return;
       const cx = (760 / chars.length) * (ci + 0.5);
-      for (let s = 0; s < 4 && !fast; s++) {
+      for (let s = 0; s < 4 && !fast && !closed; s++) {
         g.save();
         g.beginPath();
         const d = size * 1.25 * ((s + 1) / 4);
         g.rect(cx - size * 0.63, y - size * 0.63, d, d);
         g.clip();
-        g.fillStyle = '#1c1a17';
+        g.fillStyle = ink;
         g.fillText(ch, cx, y);
         g.restore();
         c.sfx.play('BRUSH');
@@ -133,11 +150,13 @@ export function openM3(c, onExit) {
       }
       if (fast) break;
     }
+    if (closed) return;
     await tween(0.8, (t) => {
       g.clearRect(0, 0, 760, 230);
-      g.fillStyle = mix('#1c1a17', '#d3aa63', t);
+      g.fillStyle = mix(ink, gold, t);
       chars.forEach((ch, ci) => g.fillText(ch, (760 / chars.length) * (ci + 0.5), y));
     });
+    if (closed) return;                 // 描金那 0.8 秒里按了返回，这一记就会落在四门页上
     c.sfx.play('SUCCESS', { gain: 0.6 });
     await wait(0.7);
     if (closed) return;
@@ -239,7 +258,8 @@ export function openM4(c, onExit) {
   skyGeo.rotateX(Math.PI / 2);
   const sky = new THREE.Mesh(
     skyGeo,
-    new THREE.MeshBasicMaterial({ map: panorama(), side: THREE.BackSide }),
+    // 低配档把天球减半：2048×1024 一张 8 MB，而它只是远处一排屋脊剪影
+    new THREE.MeshBasicMaterial({ map: panorama(c.tier === 'low' ? 1024 : 2048), side: THREE.BackSide }),
   );
   c.stage.scene.add(sky);
   junk.add(sky);
@@ -254,7 +274,7 @@ export function openM4(c, onExit) {
   c.hud.setBack(close);
 
   const hang = () => {
-    if (placed.length >= 6) { c.hud.toast('最多挂六盏 —— 想换位置，先收起来'); return; }
+    if (placed.length >= 6) { c.hud.toast('已经挂满六盏了。按「收起来」清空，再重新挂'); return; }
     const clone = c.lantern.root.clone(true);
     // root 底下挂着内光与纹样聚光灯，clone(true) 会把它们一并复制。
     // 挂六盏就是多出六组光源：总辐照远超 stage.js 定下的曝光上限，画面糊成一片奶白；
@@ -273,25 +293,31 @@ export function openM4(c, onExit) {
     clone.userData.phase = Math.random() * 6;
     c.stage.scene.add(clone);
     placed.push(clone);
-    // 克隆体与真灯笼共用几何和材质 —— 只摘出场景，绝不能连带 dispose
-    junk.add({ dispose: () => c.stage.scene.remove(clone) });
     c.sfx.play('WOOD_TAP', { pitch: placed.length * 1.5 });
+    // 挂上第一盏才算做过这件事 —— 原先一进门就盖章，四门页上会凭空多一枚印，
+    // 片尾也可能在人还没动手时就冒出来
+    c.state.modulesDone = { ...c.state.modulesDone, M4: true };
     draw();
   };
 
   const shoot = () => {
     c.sfx.play('SHUTTER');
-    c.stage.composer.render();
+    // 与屏幕上看到的那一帧走同一条管线：低配档没有后处理，
+    // 走 composer 会拍出一张和画面不一样的图
+    if (c.stage.bloomEnabled) c.stage.composer.render();
+    else c.stage.renderer.render(c.stage.scene, c.stage.camera);
     const link = document.createElement('a');
     link.href = c.stage.renderer.domElement.toDataURL('image/png');
     link.download = '榫卯灯笼.png';
     link.click();
-    c.hud.toast('存下来了', { gold: true });
+    c.hud.toast('这一张已经存下来了', { gold: true });
   };
 
   const takeDown = () => {
+    if (!placed.length) { c.hud.toast('还没挂上去过'); return; }
     for (const p of placed) c.stage.scene.remove(p);
     placed.length = 0;
+    c.sfx.play('WOOD_SLIDE', { gain: 0.4 });
     draw();
   };
 
@@ -299,20 +325,26 @@ export function openM4(c, onExit) {
     actions: [
       { label: `挂一盏 ${placed.length}/6`, kind: 'primary', ico: 'plus', on: hang },
       { label: '拍下来', ico: 'camera', on: shoot },
-      { label: '收起来', ico: 'refresh', on: takeDown },
+      { label: '全部收起', ico: 'refresh', on: takeDown, disabled: !placed.length },
     ],
     hint: '转动画面找个位置，再挂一盏上去',
   });
 
+  const sway = reducedMotion() ? 0 : 0.06;
   const upd = (dt, t) => {
-    for (const p of placed) p.rotation.z = Math.sin(t * 0.6 + p.userData.phase) * 0.06;
+    for (const p of placed) p.rotation.z = Math.sin(t * 0.6 + p.userData.phase) * sway;
     void dt;
   };
   c.stage.updaters.add(upd);
-  junk.add({ dispose: () => c.stage.updaters.delete(upd) });
+  // 挂上去的那几盏由 placed 一份名单管到底 —— 每挂一盏就往 junk 里塞一个
+  // 只认那一盏的清理器，「全部收起」之后名单空了，清理器还留着一堆废引用
+  junk.add({ dispose: () => {
+    c.stage.updaters.delete(upd);
+    for (const p of placed) c.stage.scene.remove(p);
+    placed.length = 0;
+  } });
 
   draw();
-  c.state.modulesDone = { ...c.state.modulesDone, M4: true };
   playVO(c, 'M4');
 
   return close;
@@ -324,26 +356,29 @@ export function openM4(c, onExit) {
  * 只有夜景一种 —— 这一步 `setMood('night')` 是写死的，灯没点亮时却给一张白天的天空，
  * 于是暗调的布光配着亮蓝的天，两边对不上。挂灯笼本来也是夜里的事。
  */
-function panorama() {
+function panorama(W = 2048) {
+  const H = W / 2;
+  const k = W / 2048;                    // 所有尺寸按宽度等比缩放
   const cv = document.createElement('canvas');
-  cv.width = 2048; cv.height = 1024;
+  cv.width = W; cv.height = H;
   const g = cv.getContext('2d');
-  const sky = g.createLinearGradient(0, 0, 0, 1024);
+  const sky = g.createLinearGradient(0, 0, 0, H);
   sky.addColorStop(0, '#05070e'); sky.addColorStop(0.55, '#121828'); sky.addColorStop(1, '#0a0906');
-  g.fillStyle = sky; g.fillRect(0, 0, 2048, 1024);
+  g.fillStyle = sky; g.fillRect(0, 0, W, H);
   g.fillStyle = '#04060a';
-  for (let x = 0; x < 2048; x += 128) {
-    const h = 120 + Math.sin(x * 0.013) * 60;
+  const ridge = 700 * k;
+  for (let x = 0; x < W; x += 128 * k) {
+    const h = (120 + Math.sin((x / k) * 0.013) * 60) * k;
     g.beginPath();
-    g.moveTo(x - 20, 700); g.lineTo(x + 64, 700 - h); g.lineTo(x + 148, 700);
+    g.moveTo(x - 20 * k, ridge); g.lineTo(x + 64 * k, ridge - h); g.lineTo(x + 148 * k, ridge);
     g.closePath(); g.fill();
-    g.fillRect(x + 10, 700, 108, 324);
+    g.fillRect(x + 10 * k, ridge, 108 * k, H - ridge);
   }
   // 远处别人家的窗火
   g.fillStyle = 'rgba(255,160,80,.45)';
   for (let i = 0; i < 40; i++) {
     g.beginPath();
-    g.arc(Math.random() * 2048, 620 + Math.random() * 200, 3 + Math.random() * 5, 0, 7);
+    g.arc(Math.random() * W, (620 + Math.random() * 200) * k, (3 + Math.random() * 5) * k, 0, 7);
     g.fill();
   }
   const tex = new THREE.CanvasTexture(cv);

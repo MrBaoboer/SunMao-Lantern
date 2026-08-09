@@ -35,10 +35,12 @@ export function act4(ctx) {
       bgm: 'BGM_C_FESTIVE',
       cam: { az: 40, el: 10, dist: 360, target: [0, 0, 96], snap: true, fit: FIT_FRAME },
       narration: `框架好了，四个面还空着。
-要用一片叫「格心」的木板填上 —— 在一整块板上镂空做出花纹，这样才够结实。
+要用一片叫「格心」的木板填上。
+花纹是从一整块板上镂出来的。
+棂条互相搭接，所以镂空了还立得住。
 （气口）
-麻叶纹，放射相连，寓意生生不息；
 万字纹，回环相连，叫「万福不断头」。
+麻叶纹，放射相连，寓意生生不息。
 挑一个，四面都用它。`,
       async enter(c, engine) {
         junk.clear();
@@ -54,7 +56,7 @@ export function act4(ctx) {
               <canvas width="180" height="180" data-cv="${p.id}"></canvas>
               <span class="pick-meta">
                 <span class="pick-nm">${p.name}</span>
-                <span class="pick-mn">${p.meaning}</span>
+                <span class="pick-mn">${p.note}</span>
               </span>
               <span class="pick-on">${icon('check')}</span>
             </button>`).join('')}</div>`,
@@ -107,9 +109,11 @@ export function act4(ctx) {
       narration: `装板不靠榫，也不靠胶：上下两道槽把板夹住，就完了。
 可板比空腔还高一点，怎么塞进去？
 （气口）
-先斜着，把板顶进上面那道深槽 —— 上槽特意做得深，就是留这个余量的。
-摆正，再往下一落，下端正好掉进下面那道浅槽。上下都吃住了，板就掉不出来了。
-不粘不钉。木头会热胀冷缩，留着余地，它才不会开裂。`,
+先斜着，把板顶进上面那道深槽。
+上槽特意做得深，就是留这个余量的。
+摆正，再往下一落，下端正好掉进下面那道浅槽。
+上下都吃住了，板就掉不出来了。
+留着这点余地，木头才热胀冷缩得开。`,
       note: {
         title: '上槽是下槽的三倍深',
         foot: '两边一样深，这块板就根本塞不进去。',
@@ -157,7 +161,7 @@ export function act4(ctx) {
           c.sfx.play('PANEL_SEAT', { pitch: seated * 2 });
           c.fx.ripples.emit(home.clone().setZ(C.UPPER_Z0), out, { color: PALETTE.MORTISE, size: 12 });
           seated++;
-          c.hud.setCue(`格心 <b>${seated}</b> / 4`);
+          c.hud.setCue(`格心 <b>${seated}</b> / 4`, null, { quiet: true });
         };
 
         const one = async () => {
@@ -176,7 +180,7 @@ export function act4(ctx) {
         };
 
         c.hud.setTask('装第 1 片', one);
-        c.hud.setAlts([{ label: '四片一起装', ico: 'spark', onClick: async () => {
+        c.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: async () => {
           while (seated < 4) await install(PANELS[seated], false);
           c.hud.toast('四片都装好了', { gold: true });
           engine.done();
@@ -196,17 +200,22 @@ export function act4(ctx) {
       mood: 'studio',
       cam: { az: 55, el: 16, dist: 430, target: AIM_LANTERN, snap: true, fit: FIT_LANTERN },
       narration: `接下来是灯笼的「皮」。
-先在里面糊一层绵纸 —— 它挡在灯和木头之间，把硬光揉软；再在外面贴上红纸窗花。
+先在里面糊一层绵纸，把硬光揉软。
+再在外面贴上红纸窗花。
 （气口）
-然后是四个角的祥云牙子。它看着是云头花纹，其实撑着这个角，让方框不容易变歪。
-再装顶上的龙纹角花：一边把小舌插进槽里，一边正好盖住柱头 —— 柱子从此拔不出来。
+然后是四个角的祥云牙子。
+它看着是云头花纹，其实撑着这个角，让方框不容易变歪。
+再装顶上的龙纹角花。
+它一边把小舌插进槽里，一边正好盖住柱头。
+柱子从此拔不出来。
 好看的东西，往往同时是有用的。
 （气口）
-底下挂一个中国结，再接一串红流苏。最后，把灯芯放进去。`,
+底下挂一个中国结，再接一串红流苏。
+最后，把灯芯放进去。`,
       note: {
-        title: '角花在干什么',
-        body: '云头牙子撑住四个角；顶上的角花<em>盖住柱头</em>，柱子就再也拔不出来。',
-        foot: '一道咬，一道压 —— 两道锁。',
+        title: '两道锁',
+        spec: [['牙子', '插进底面的浅槽'], ['角花', '压住柱头顶端']],
+        body: '一道咬，一道压。到这里，柱子既拔不出来，也转不动。',
       },
       async enter(c, engine) {
         junk.clear();
@@ -242,7 +251,7 @@ export function act4(ctx) {
                 g.scale.setScalar(1);
                 c.sfx.play('PAPER', { pitch: 4 + i * 2, gain: 0.8 });
               }
-              c.hud.setCue('福到 · 年年有余 · 连年如意 · 福气临门');
+              c.hud.setCue('四面各贴一张 —— 福到、年年有余、连年如意、福气临门');
             },
           },
           {
@@ -305,9 +314,9 @@ export function act4(ctx) {
               c.sfx.play('WOOD_TAP', { pitch: -4 });
               c.hud.setCue('灯芯就位 —— 先不点，留到最后');
               c.hud.setNote({
-                title: '做完了',
-                spec: [['木构件', '13'], ['装饰件', '10'], ['格心与纸', '12'], ['灯芯', '1'], ['合计', '36 件']],
-                body: '榫卯节点 26 处。钉子 0，胶水 0。',
+                title: '一盏灯的全部',
+                spec: [['木构件', '13'], ['格心与纸', '12'], ['装饰件', '10'], ['灯芯', '1'], ['合计', '36 件']],
+                body: '钉子 0，胶水 0。',
               });
             },
           },
@@ -336,9 +345,11 @@ export function act4(ctx) {
       cam: { az: 48, el: 22, dist: 660, target: [0, 0, 92], snap: true, fit: { r: 200, h: 178 } },
       cps: 3.9,
       narration: `我们把它拆开看一遍。
-最底下是下面那个框：四根木条穿成井字，中间横着一根中梁。
-往上是一模一样的上框，只是没有中梁。
-中间四根柱子把两个框夹住，然后是四片格心、里外两层纸，最后是那些看着像花、其实在干活的装饰件。
+最底下是底盘：四根木条穿成井字，中间横着一根中梁。
+往上是几乎一样的上面的框，只是没有中梁。
+中间四根柱子，把两个框夹住。
+再往上是四片格心，里外两层纸。
+最外面那些看着像花，其实都在干活。
 （气口）
 五层，三十六件。每一件都只做一件事，但每一件都不能少。`,
       async enter(c) {
@@ -359,6 +370,10 @@ export function act4(ctx) {
               <input type="range" min="0" max="100" value="0" aria-label="拆开程度"></div></div>`,
           onMount: (o) => {
             o.querySelectorAll('.layer').forEach((b) => {
+              // 与滑杆同理：坞被交还回来时，选中的那一层要跟着模型现在的样子摆。
+              // 不摆的话，某一层还单独亮着，却没有一枚按钮显示为选中 ——
+              // 再点它一下会当成「打开」，于是要点两次才收得掉
+              b.setAttribute('aria-pressed', String(c.lantern.layerFocus === +b.dataset.l));
               b.addEventListener('click', () => {
                 const on = b.getAttribute('aria-pressed') === 'false';
                 o.querySelectorAll('.layer').forEach((x) => x.setAttribute('aria-pressed', 'false'));
@@ -369,6 +384,9 @@ export function act4(ctx) {
               });
             });
             const rng = o.querySelector('input');
+            // 坞可能被「怎么操作」盖过又交还回来 —— 滑杆要跟着模型现在的样子摆，
+            // 不能一律回到 0，否则灯笼摊开着而滑杆写着「没拆」
+            rng.value = Math.round(c.lantern.explodeT * 100);
             rng.addEventListener('input', () => c.lantern.setExplode(rng.value / 100, 'layered'));
             c.explodeRange = rng;
           },

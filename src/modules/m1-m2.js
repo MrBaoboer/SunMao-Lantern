@@ -41,11 +41,11 @@ export function openM1(c, onExit) {
   c.hud.setBack(close);
 
   c.hud.dock({
-    body: `<p class="dock-hint" id="tip">按住不放，等这一圈走满</p>
+    body: `<p class="dock-hint" id="tip" role="status" aria-live="polite">按住不放，等这一圈走满</p>
       <svg id="ring" class="ignite" viewBox="0 0 100 100" aria-hidden="true">
-        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(242,236,224,.13)" stroke-width="3"/>
-        <circle id="arc" cx="50" cy="50" r="44" fill="none" stroke="#d3aa63" stroke-width="3"
-                stroke-linecap="round" stroke-dasharray="276" stroke-dashoffset="276"/>
+        <circle class="ignite-track" cx="50" cy="50" r="44" />
+        <circle class="ignite-arc" id="arc" cx="50" cy="50" r="44"
+                stroke-dasharray="276" stroke-dashoffset="276"/>
       </svg>
       <div id="tools" class="dock-row" hidden>
         <div class="slider"><span>亮度</span>
@@ -114,6 +114,18 @@ export function openM1(c, onExit) {
       fire.addEventListener('pointerdown', start);
       fire.addEventListener('pointerleave', stop);
       addEventListener('pointerup', stop);
+
+      // 键盘也得点得着火。这枚按钮唯一的动作是「按住」，而空格与回车只会
+      // 发 click —— 只挂 pointer 事件，用键盘的人在这里就走不下去了。
+      // 按键自带重复，只认第一次下沉；焦点一走就当松手。
+      const KEYS = new Set([' ', 'Enter']);
+      fire.addEventListener('keydown', (e) => {
+        if (!KEYS.has(e.key)) return;
+        e.preventDefault();                 // 空格默认会触发 click
+        if (!e.repeat) start();
+      });
+      fire.addEventListener('keyup', (e) => { if (KEYS.has(e.key)) stop(); });
+      fire.addEventListener('blur', stop);
 
       const upd = (dt) => {
         if (!holding || lit) return;
@@ -205,7 +217,7 @@ export function openM2(c, onExit) {
       body: `<div class="riddle">${q.face.replace(/\n/g, '<br>')}</div>
         <div class="opts">${q.opts.map((o) => `
           <button class="opt" type="button" data-o="${o}">${o}</button>`).join('')}</div>
-        <div class="answer" id="ans"></div>`,
+        <div class="answer" id="ans" role="status" aria-live="polite"></div>`,
       actions: [
         { id: 'skip', label: '想不出来' },
         { id: 'next', label: last ? '看看结果' : '下一题', kind: 'primary', hidden: true },
@@ -253,9 +265,11 @@ export function openM2(c, onExit) {
     c.hud.sheet({
       eyebrow: `五题答对 ${score} 题`,
       title: name,
-      lede: score ? `灯笼比刚才亮了 ${score * 8}%` : '再来一轮，灯会更亮',
+      lede: score ? `灯笼比刚才亮了 ${score * 8}%` : '再来一次，灯会更亮',
+      // 出口不能只有「再来一次」—— 否则这一页读起来是「必须重玩」
       actions: [
-        { label: '再来一次', kind: 'primary', ico: 'refresh', on: () => { i = 0; score = 0; ask(); } },
+        { label: '再来一次', ico: 'refresh', on: () => { i = 0; score = 0; ask(); } },
+        { label: '回去看看别的', kind: 'primary', on: close },
       ],
       onEsc: close,
     });

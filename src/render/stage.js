@@ -89,6 +89,14 @@ const MOODS = {
  *
  * 换掉平色背景是这一版画面里最省的一笔 —— 主体背后有一圈光晕，
  * 边缘压暗，木头就从背景里"站"出来了，不必额外加地面或假阴影。
+ *
+ * 末尾那两个 include 不是装饰。uInner/uOuter 存的是**线性**值（Color.setHex
+ * 会把 sRGB 转进工作色空间），所以这段颜色必须过一道色调映射与 sRGB 编码
+ * 才是作者标的那个颜色。走 composer 时这两步由 OutputPass 代办，两个 include
+ * 因此自动失效（three 只在渲染到画布时才给材质接上色调映射）；而低配档是
+ * `renderer.render()` 直出画布，没有 OutputPass —— 少了这两句，线性值被原样
+ * 写进 sRGB 帧缓冲，背景整体发暗。实测浅色档边缘 157 / 213（craft）、
+ * 101 / 186（dusk，也就是开场与封面那一档），差得一眼看得出来。
  */
 function makeBackdrop() {
   const mat = new THREE.ShaderMaterial({
@@ -113,11 +121,12 @@ function makeBackdrop() {
         float d = length(p) * 1.42;
         float k = smoothstep(0.0, 1.0, clamp(d, 0.0, 1.0));
         gl_FragColor = vec4(mix(uInner, uOuter, k), 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
       }
     `,
     depthTest: false,
     depthWrite: false,
-    toneMapped: false,
   });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
   mesh.frustumCulled = false;
@@ -131,9 +140,28 @@ function makeBackdrop() {
  */
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 
+/**
+ * 三档的画质预算。
+ *
+ * `low` 走 `renderer.render()` 直出，没有后处理，因此默认帧缓冲的 MSAA
+ * （构造器的 antialias）是它唯一的抗锯齿来源，必须留着。
+ * `mid`/`high` 走 composer：最终只有 OutputPass 那一个全屏四边形画到默认帧缓冲，
+ * 给它开 4× MSAA 是纯浪费 —— 一块 1440×900@2x 的多重采样帧缓冲要上百兆显存，
+ * 而抗锯齿本来就由 composer 自己的离屏目标（samples）做。
+ */
+const TIERS = {
+  low:  { antialias: true,  maxPixelRatio: 1.5,  samples: 0, shadow: 0 },
+  mid:  { antialias: false, maxPixelRatio: 1.75, samples: 2, shadow: 1024 },
+  high: { antialias: false, maxPixelRatio: 2,    samples: 4, shadow: 2048 },
+};
+
 export class Stage {
-  constructor(canvas) {
+  /** @param {'low'|'mid'|'high'} [tier] */
+  constructor(canvas, tier = 'high') {
     this.canvas = canvas;
+    this.tier = TIERS[tier] ? tier : 'high';
+    const q = TIERS[this.tier];
+    this.quality = q;
     // Timer 而非 Clock（Clock 自 r183 起标记废弃）。connect(document) 接上页面可见性：
     // 标签页切走再切回来时计时器自己归零，那一帧不会甩出一个几十秒的 dt ——
     // 主循环虽然把 dt 掐在 0.05，但 elapsedTime 一样会跳，火焰与流苏会瞬移一大截。
@@ -142,13 +170,13 @@ export class Stage {
 
     // ── 渲染器 ──
     const renderer = new THREE.WebGLRenderer({
-      canvas, antialias: true, powerPreference: 'high-performance', stencil: false,
+      canvas, antialias: q.antialias, powerPreference: 'high-performance', stencil: false,
     });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(devicePixelRatio, q.maxPixelRatio));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = q.shadow > 0;
     // §11.2 关闭强锐利阴影。r185 起 PCFSoftShadowMap 被并进 PCFShadowMap 并废弃 ——
     // 现在的 PCF 本身就是软的（硬件 sampler2DShadow + 5 抽 Vogel 盘，按 shadow.radius 缩放）。
     // 继续写旧常量的话每次加载都会警告一句，然后被静默换成同一个值。
@@ -176,8 +204,8 @@ export class Stage {
     // ── 三点布光（§11.2 主线暖调，主光色温 4500K）──
     this.key = new THREE.DirectionalLight(0xfff0dc, 2.1);
     this.key.position.set(220, -300, 380);
-    this.key.castShadow = true;
-    this.key.shadow.mapSize.set(2048, 2048);
+    this.key.castShadow = q.shadow > 0;
+    this.key.shadow.mapSize.set(q.shadow || 1024, q.shadow || 1024);
     this.key.shadow.camera.near = 50;
     this.key.shadow.camera.far = 1200;
     const s = 190;
@@ -235,8 +263,8 @@ export class Stage {
     // EffectComposer 自建的离屏目标默认单采样，构造器上的 antialias 只管默认帧缓冲。
     // 不补这一下，开着 bloom 的桌面端全程没有抗锯齿，反倒是关掉 bloom 的低配档有 ——
     // 这盏灯满屏都是 3 mm 的棂条和高对比木棱，镜头又一直在缓慢环绕，锯齿会爬。
-    this.composer.renderTarget1.samples = 4;
-    this.composer.renderTarget2.samples = 4;
+    this.composer.renderTarget1.samples = q.samples;
+    this.composer.renderTarget2.samples = q.samples;
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // 阈值只是个起点：真正下发的那一档由 setMood() 按本档背景算出来
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.42, 0.72, BLOOM_FLOOR);
@@ -244,7 +272,16 @@ export class Stage {
     this.composer.addPass(new OutputPass());
     this.bloomEnabled = true;
 
-    this._onResize = () => this.resize();
+    /*
+     * resize 合并到下一帧。
+     *
+     * 手机上地址栏收起、软键盘进出，resize 会连着来十几次；每一次都要重建
+     * composer 那两组离屏目标（还各带 MSAA），正好卡在最需要流畅的那一下。
+     */
+    this._onResize = () => {
+      if (this._resizeRaf) return;
+      this._resizeRaf = requestAnimationFrame(() => { this._resizeRaf = 0; this.resize(); });
+    };
     addEventListener('resize', this._onResize);
     this.resize();
 
@@ -430,6 +467,7 @@ export class Stage {
 
   dispose() {
     this.stop();
+    cancelAnimationFrame(this._resizeRaf);
     removeEventListener('resize', this._onResize);
     this.timer.dispose();   // 摘掉 visibilitychange 监听
     this.controls.dispose();

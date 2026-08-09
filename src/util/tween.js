@@ -16,6 +16,16 @@ export const Ease = {
   ignite: (t) => Math.pow(t, 3.6),
 };
 
+/**
+ * 用户要求「减少动效」。
+ *
+ * CSS 那一侧已由 base.css 的 @media 关掉了；这一条给 JS 驱动的动效用 ——
+ * 封面自转、挂灯摆动、火焰跳动这类**持续不停**的运动，CSS 管不到。
+ * 每次读实时值，用户在系统里改了设置不必刷新页面。
+ */
+export const reducedMotion = () =>
+  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 const running = new Set();
 
 export function tick(dt) {
