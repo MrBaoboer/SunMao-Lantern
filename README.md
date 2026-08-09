@@ -191,15 +191,15 @@ npx playwright install chromium
 npm run smoke -- --shots
 ```
 
-推到 `main` 的每一次提交与每一个 PR，GitHub Actions 跑两条**并行**的作业：
+GitHub Actions 上两条作业，挂在不同的时机：
 
-- **工具链** —— `npm run check:code`，在 Node 22.13 与 24 上各一遍。这一半确实吃 Node 版本
-  （ESLint 10、rolldown、`node:test`），`engines` 声明支持两头，就得有人替这句话作证。一两分钟。
-- **冒烟** —— 无头浏览器走完主线与四个模块，**只跑一次**，跑在声明的下限 22.13 上。
-  它验的是页面在浏览器里的行为，而浏览器是同一个 Chromium；按 Node 版本再跑一遍多验到的约等于零。
-  跑挂时把每一步的截图作为 artifact 留下。
-
-总耗时取两者中长的那一个。
+- **工具链** —— `npm run check:code`，在 Node 22.13 与 24 上各一遍。**每个 PR 都跑**，
+  二三十秒就完。这一半确实吃 Node 版本（ESLint 10、rolldown、`node:test`），
+  `engines` 声明支持两头，就得有人替这句话作证。
+- **冒烟** —— 无头浏览器走完主线与四个模块，**只在合并进 `main` 之后跑**（也可以手动触发），
+  跑在声明的下限 22.13 上。软件渲染，十几分钟 —— 它是「页面到底能不能开」的唯一保障，
+  不能没有；但让每个 PR 都为它等一刻钟，代价与收益不成比例。`main` 本来就是部署源，
+  红了几分钟内就知道。跑挂时把出问题那一步的截图作为 artifact 留下。
 
 本文档里的五张图也是从构建产物里拍的，模型或界面改动之后重出一遍即可，图与实现不会各说各话：
 
@@ -257,7 +257,7 @@ tools/
   make-script.mjs       旁白解说稿排版
 vite.config.js          构建配置、开发期两个中间件、生产 CSP 注入
 eslint.config.js        ESLint 扁平配置
-.github/workflows/      工具链（两个 Node 版本）与冒烟（一次）两条并行作业
+.github/workflows/      工具链（每个 PR）与冒烟（合并进 main 之后）两条作业
 ```
 
 构建产物 833 kB（gzip 229 kB），其中 three.js 单独一块 619 kB（gzip 155 kB），其余全部代码加起来 214 kB。

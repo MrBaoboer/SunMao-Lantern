@@ -196,9 +196,13 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 
 `npm run check` = `check:code`（`lint` → `test` → `verify` → `build` → `size`）→ `smoke`。
 
-CI 把这两半拆成两条**并行**的作业，理由是它们对 Node 版本的敏感度完全不同：
-`check:code` 全是纯 Node 的活，在 22.13 与 24 上各跑一遍；`smoke` 验的是同一个 Chromium
-里的行为，只跑一次。原先两条作业各把全套跑一遍，两个二十二分钟，其中二十分钟是同一件事做两遍。
+CI 把这两半拆开，挂在不同的时机：
+
+- `check:code` 全是纯 Node 的活，对版本敏感，**每个 PR** 在 22.13 与 24 上各跑一遍，二三十秒。
+- `smoke` 是软件渲染的浏览器走查，十几分钟，**只在合并进 `main` 之后跑**（或手动触发）。
+  它验的是同一个 Chromium 里的行为，按 Node 版本再跑一遍多验到的约等于零，所以也不进矩阵。
+
+原先是两条作业各把全套跑一遍，两个二十二分钟，其中二十分钟是同一件事做两遍。
 
 - `test` 是 `node --test tools/unit.test.mjs`：模数守卫、CSG 内核的退化输入、补间的取消语义。零依赖。
 - `size` 是 `tools/size-budget.mjs`：three 一块、其余全部、gzip 总量各有上限，翻上去当场报。

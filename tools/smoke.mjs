@@ -250,9 +250,13 @@ async function walk(vp) {
    * 后处理这条管线单独验一次。
    *
    * 主线是关着 bloom 走的（见上面的注释），所以 composer 那条路要有人替它作证：
-   * 走一帧、量一次，同一画面下它应当比直出更亮 —— 高光溢出本来就是加法。
-   * 只渲染两帧，代价可以忽略；这一条同时也盖住了「OutputPass 掉了、
-   * 或者离屏目标尺寸不对导致整幅发黑」这类只在后处理路径上出现的故障。
+   * 走一帧、量一次，两条路给出的应当是同一幅画面。只渲染两帧，代价可以忽略。
+   *
+   * 这一条真正要拦的是「OutputPass 掉了」或「离屏目标不对」——
+   * 那种故障下整幅会退回线性值，暗掉两三成（背景那处修掉的老问题就是 157 vs 209）。
+   * 所以留 5% 的余量：高光溢出只在越过阈值的地方加亮，而夜色场景里
+   * 越线的像素本来就少，两条路的舍入差摆到 1% 上下是正常的 —— 卡死在
+   * 「必须更亮」上，等来的是一条随画幅浮动的假警报。
    */
   {
     await page.evaluate(() => window.__engine.goToStep('D5'));
@@ -261,8 +265,8 @@ async function walk(vp) {
     const off = await framePainted(false);
     const on = await framePainted(true);
     if (!(on.sd > 3)) note(vp.name, `后处理路径画面是一块纯色（标准差 ${on.sd.toFixed(2)}）`);
-    if (!(on.mean >= off.mean)) {
-      note(vp.name, `开了高光溢出反而更暗：composer ${on.mean.toFixed(1)} < 直出 ${off.mean.toFixed(1)}`);
+    if (!(on.mean >= off.mean * 0.95)) {
+      note(vp.name, `后处理路径整幅偏暗：composer ${on.mean.toFixed(1)} vs 直出 ${off.mean.toFixed(1)}`);
     }
     await page.evaluate(() => { window.__ctx.lantern.setLit(window.__ctx.state.lit ? 1 : 0); });
   }
