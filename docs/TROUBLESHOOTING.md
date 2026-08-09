@@ -1,6 +1,6 @@
 # 故障排查
 
-按「你看到了什么」找，每一条都给到下一步该做什么。
+按「你看到了什么」找。
 
 ---
 
@@ -19,19 +19,19 @@ Chrome 可以用 `--enable-unsafe-swiftshader` 强制走软件渲染，慢但能
 
 ### 封面一直停在「正在……」，进度条不走
 
-某一段初始化卡住了。控制台通常会有一条未捕获异常。
-`main()` 外面那个 `.catch()` 接的是它返回的 Promise —— `main()` 里 `await` 到的拒绝
-都会走到那里，封面会换成「三维画面没能启动」。真正接不住的只有两类：
-没被 `await` 的浮动 Promise（比如某个 `wait(...).then(...)` 链），以及主循环 updater
-里抛出的错（`stage.start()` 每个 updater 各有一层 try-catch，只打日志不中断这一帧）。
-所以「进度条不走、控制台有红字、封面文案却没变」基本可以断定是这两类之一。
+某一段初始化卡住了，控制台通常有一条未捕获异常。
 
-先确认 `npm install` 是完整的：`node_modules/three` 存在，且版本是 0.185.x。
+`main()` 里 `await` 到的拒绝都会被外面那个 `.catch()` 接住，封面会换成「三维画面没能启动」。
+所以停在「正在……」只可能是接不住的那两类：没被 `await` 的浮动 Promise（比如某个 `wait(...).then(...)` 链），
+以及主循环 updater 里抛出的错（各有一层 try-catch，只打日志不中断这一帧）。
+
+也先确认 `npm install` 是完整的：`node_modules/three` 存在，且版本是 0.185.x。
 
 ### 一片黑 / 一片空白，控制台却没有报错
 
-多半是 canvas 尺寸为 0。检查是不是把页面嵌进了一个高度未定的容器 ——
-`#stage` 是 `position: fixed; inset: 0`，需要视口有真实高度。
+多半是 canvas 尺寸为 0。
+检查是不是把页面嵌进了一个高度未定的容器 —— `#stage` 是 `position: fixed; inset: 0`，
+需要视口有真实高度。
 
 ---
 
@@ -39,15 +39,15 @@ Chrome 可以用 `--enable-unsafe-swiftshader` 强制走软件渲染，慢但能
 
 ### 灯笼被裁掉一截
 
-每一步的机位都要声明 `cam.fit`，缺了它窄画幅上一定裁边。
-在控制台里看当前这一步：
+每一步的机位都要声明 `cam.fit`，缺了它窄画幅上一定裁边。在控制台里看当前这一步：
 
 ```js
 __ctx.stage._lastFrame     // 这一步实际用的机位声明
 __ctx.stage.safe           // 界面占掉的上下边（像素）
 ```
 
-`fit` 为 `undefined` 就是漏了。取值见 `src/steps/util.js` 的 `FIT_LANTERN` / `FIT_FRAME` / `FIT_RING` / `FIT_BENCH`，
+`fit` 为 `undefined` 就是漏了。
+取值见 `src/steps/util.js` 的 `FIT_LANTERN` / `FIT_FRAME` / `FIT_RING` / `FIT_BENCH`，
 或直接写 `{ r: 水平半径, h: 垂直半高 }`（毫米，相对镜头目标点）。
 
 ### 底部的字和控件叠在一起
@@ -58,14 +58,13 @@ __ctx.stage.safe           // 界面占掉的上下边（像素）
 getComputedStyle(document.documentElement).getPropertyValue('--dock-h')
 ```
 
-是 `0px` 而底部确实有一排控件，说明那段 HTML 的根节点没有 `.dock` 类 ——
-`hud.dock()` 生成的结构不要在 `onMount` 里替换掉。
+是 `0px` 而底部确实有一排控件，说明那段 HTML 的根节点没有 `.dock` 类 —— `hud.dock()` 生成的结构不要在 `onMount` 里替换掉。
 
 ### 自己写脚本截图，机位怎么设都不生效
 
 封面挂着一个每帧改写推荐机位的自转 updater（`main.js` 里的 `drift`）。
-把 `#cover` 直接 `hidden` 掉，它照样在跑 —— 之后任何 `setRecommended()` 都会被它逐帧覆盖，
-拍出来永远是封面那个机位，而且每次的方位角还略有不同（它按时间累加）。
+把 `#cover` 直接 `hidden` 掉它照样在跑，之后任何 `setRecommended()` 都会被逐帧覆盖 ——
+拍出来永远是封面那个机位，每次的方位角还略有不同。
 
 **必须真的按下「开始做灯」**，`enter()` 才会把它摘掉：
 
@@ -74,28 +73,28 @@ await page.click('#cv-go');
 await page.evaluate(() => document.querySelector('.overlay .btn-primary')?.click()); // 收掉「怎么操作」
 ```
 
-`tools/shots.mjs` 就是这么做的，照抄即可。顺带一提：开场那一步在远处撒了一圈「灯河」光点精灵，
-拍产品图时记得 `scene.traverse((o) => { if (o.isSprite) o.visible = false; })`，
-否则画面边角会留下几点橙色。
+`tools/shots.mjs` 就是这么做的，照抄即可。另外开场那一步在远处撒了一圈「灯河」光点精灵，
+拍产品图时记得关掉，否则画面边角会留下几点橙色：
+
+```js
+scene.traverse((o) => { if (o.isSprite) o.visible = false; });
+```
 
 ### 木头是奶白色的，看不出木纹
 
-光加多了。`src/render/stage.js` 的 `MOODS` 里，四路光的总辐照相比现行预设再明显上调（三成以上），
+光加多了。`src/render/stage.js` 的 `MOODS` 里，四路光的总辐照相比现行预设再上调三成以上，
 ACES 就会把高光推平。想让画面更亮，优先调 `bg`（背景那一对颜色）和 `bloom`，不要整体上调光。
 
 ### 浅色模式下画面正中浮着一枚白色圆斑
 
 改过 `stage.js` 的 `MOODS` 里某一档的 `bg[0]`（背景中心色），而且改亮了。
 
-背景是一整块**径向渐变**，而 `UnrealBloomPass` 的高通是
-`smoothstep(threshold, threshold + 0.01, luma)` —— 0.01 的过渡宽度等于一刀硬切。
-背景中心一旦越过阈值，高通就沿等亮度线把渐变裁出一个圆盘，模糊之后就是
-画面正中那枚有边沿的白斑。深色各档背景亮度只有 0.01–0.02，碰不到；
-浅色的 `craft`（0.88）与 `studio`（0.92）本来就贴着 0.86 这条线。
+背景是一整块**径向渐变**，而 `UnrealBloomPass` 的高通是 `smoothstep(threshold, threshold + 0.01, luma)` ——
+0.01 的过渡宽度等于一刀硬切：背景中心一旦越过阈值，高通就沿等亮度线把渐变裁出一个圆盘，模糊之后就是那枚有边沿的白斑。
+深色各档背景亮度只有 0.01–0.02，碰不到；浅色的 `craft`（0.88）与 `studio`（0.92）本来就贴着 0.86 这条线。
 
-`setMood()` 已经把阈值取成「作者定的 0.86」与「本档背景最亮处 + 0.02」的高者，
-正常情况下不会再犯。会复发只有一种情况：绕过 `setMood()` 直接写
-`stage.bloom.threshold`。查一下当前这一档：
+`setMood()` 已经把阈值取成「作者定的 0.86」与「本档背景最亮处 + 0.02」的高者。会复发只有一种情况：
+绕过 `setMood()` 直接写 `stage.bloom.threshold`。查一下当前这一档：
 
 ```js
 __ctx.stage.bloom.threshold        // 浅色 studio 下应约 0.94，craft 约 0.90
@@ -104,31 +103,25 @@ __ctx.stage.bloom.enabled = false  // 关掉这一道 pass，白斑随之消失�
 
 ### 刀具看着是反的 / 歪的
 
-三把刀都按同一个约定建模：**刃口朝 -Z，柄在 +Z，刀身沿 +X**。
-`Machining._orientTool()` 据此搭正交基摆位 —— 不要改回 `lookAt()`，
-它转的是物体的 **+Z**，会把锯齿转到朝天；而且默认 up 是 +Z，
-「朝下看」正好是它的退化情形，滚转角由内部容错分支随手定。
+三把刀都按同一个约定建模：**刃口朝 -Z，柄在 +Z，刀身沿 +X**，`Machining._orientTool()` 据此搭正交基摆位。
+不要改回 `lookAt()` —— 它会把锯齿转到朝天，滚转角也不受控，原因见 [DESIGN.md §4](../DESIGN.md#4-教学件与刀具让动作和结果对得上)。
 
 `npm run smoke` 每一步都验一次刃口与攻角的点积，反了会直接报 `dot=-1.000`。
 
 ### 走刀时木头不掉料 / 刀没去过的地方也没了
 
-这一步的 `mach.begin()` 漏了 `carve`，或者 `carve.tag` 与 `onDone` 里 `addOp()` 的工序对不上。
-没有 `carve` 就退回老行为：走完几刀之后整道工序一次性开出来。
+不掉料：这一步的 `mach.begin()` 漏了 `carve`，
+或者 `carve.tag` 与 `onDone` 里 `addOp()` 的工序对不上。
+没有 `carve` 就退回老行为 —— 走完几刀之后整道工序一次性开出来。
 
-刀没去过的地方也一起没了，分两种：
+刀没去过的地方也没了，分两种：
 
-**同一趟刀里，别处的料也掉了。** 是「刀压在哪条道上」判错了。判据用的是
-**既不是进给轴、也不是进刀轴的那一个轴**：进给轴由 `to − from` 定，进刀轴由 `faceNormal` 定。
-两者若指同一个轴（等于顺着进刀方向走刀），判据就失效了 —— 检查这一步的
-`faceNormal` 是不是与走刀方向垂直。
+**同一趟刀里，别处的料也掉了。** 「刀压在哪条道上」判错了 —— 判据取的是既非进给轴、
+也非进刀轴的那第三个轴，两者指同一个轴时它就失效。检查这一步的 `faceNormal` 是不是与走刀方向垂直。
 
-**下一趟刀刚下去，那一处就已经成形了。** 这是走完的那几趟被记宽了。
-横截位置相同、只沿**进给方向**分开的两处料（横枨两头各一个透眼、各一个柱窝）
-在横截判据上是一模一样的，所以 `carveFinish()` 除了刃尖位置，还要记下
-**这一趟刃尖扫过的区间**；`buildPart()` 里 `laneCovers()` 用它做交集判断。
-少了那一段，第一个孔一凿完，第二个孔会立刻跟着成形。
-`verify.js` 的 `[CARVE]` 一条就是钉住这件事的，改动这条路径后先跑 `npm run verify`。
+**下一趟刀刚下去，那一处就已经成形了。** 走完的那几趟被记宽了 —— `carveFinish()` 除了刃尖位置，
+还要记下这一趟刃尖扫过的区间，`buildPart()` 里 `laneCovers()` 用它做交集判断（[DESIGN.md §4](../DESIGN.md#料要跟着刀走)）。
+`verify.js` 的 `[CARVE]` 钉的就是这件事，改动这条路径后先跑 `npm run verify`。
 
 ```js
 __ctx.mach.job.carveKey    // { parts, tag, travel, axis, dir, lane }
@@ -140,22 +133,20 @@ __ctx.lantern.parts.get('LB-B1').carved   // { tag, lanes: [{ lane, swept }] } �
 
 ### 教学件的凹槽看起来是凸的
 
-说明那处又用实心块拼了。凹进去的地方必须是**真的没有料** ——
-用 `demoSolid({ blank, cuts })` 让 CSG 挖出来，内壁才会照常受光。
-贴一块深色面片假装凹槽，得到的一定是相反的读数。
+说明那处又用实心块拼了。凹进去的地方必须**真的没有料** —— 用 `demoSolid({ blank, cuts })` 让 CSG 挖出来，
+内壁才会照常受光；贴一块深色面片假装凹槽，得到的一定是相反的读数。
 
 ### 浅色模式下某几步仍然是暗的
 
-这是设计如此。夜里的场景（D5「过年该做的事」与其后的互动模块）不跟主题走 ——
-那几步界面会临时借用深色（`hud.setTone()`），用户在菜单里的选择不受影响，
-切回白天的场景时会自己恢复。开场的傍晚（A1）是跟主题走的，浅色下偏米色属正常。
+设计如此：夜里的场景（D5 与其后的互动模块）不跟主题走，那几步界面临时借用深色（`hud.setTone()`），
+菜单里的选择不受影响，切回白天的场景时自己恢复。开场的傍晚（A1）是跟主题走的，浅色下偏米色属正常。
 
 ### 帧率低 / 风扇狂转
 
-`src/render/fx.js` 的 `detectTier()` 分三档，**移动设备一律判成 low**（这是主要分支，
-内存与核心数只管桌面端）。low 档关掉高光溢出与阴影、像素比压到 1.5、离屏目标不开 MSAA、
-M4 的天球贴图减半；mid 档像素比 1.75、MSAA 2×、阴影贴图 1024。三档的参数表在
-`src/render/stage.js` 顶部的 `TIERS`。
+`src/render/fx.js` 的 `detectTier()` 分三档，**移动设备一律判成 low**（内存与核心数只管桌面端）。
+low 档关掉高光溢出与阴影、像素比压到 1.5、离屏目标不开 MSAA、M4 的天球贴图减半；mid 档像素比 1.75、
+MSAA 2×、阴影贴图 1024。三档的参数表在 `src/render/stage.js` 顶部的 `TIERS`。
+
 想手动确认：
 
 ```js
@@ -188,14 +179,12 @@ __ctx.stage.renderer.shadowMap.enabled = false
 浏览器内核要单独装一次：
 
 ```bash
-npm install
 npx playwright install chromium
 ```
 
 ### `npm run smoke` 报「没有 dist/」
 
-它跑的是构建产物，不是开发服务器。先 `npm run build`。
-想对着已经起好的地址跑：
+它跑的是构建产物，不是开发服务器。先 `npm run build`。想对着已经起好的地址跑：
 
 ```bash
 npm run smoke -- --url http://localhost:5173
@@ -214,8 +203,8 @@ npm run smoke -- --shots
 
 ### `npm run verify` 有断言失败
 
-输出里会写清哪一条、期望什么、实际什么。几何是整数毫米的，失败一定是真的对不上，
-不是精度问题。以 `src/core/verify.js` 的断言为准 —— 它是整个项目里唯一会自己报错的规格。
+输出里会写清哪一条、期望什么、实际什么。几何是整数毫米的，失败一定是真的对不上，不是精度问题。
+文档与断言打架时，以 `src/core/verify.js` 为准。
 
 ---
 
@@ -228,7 +217,7 @@ npm run smoke -- --shots
 
 ### 部署上去是旧版本
 
-Vercel 按提交部署。本地改完要先推上去：
+Vercel 按提交部署，本地改完要先推上去：
 
 ```bash
 npm run build
