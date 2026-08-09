@@ -1,3 +1,19 @@
+/*
+ * 榫卯灯笼 · 国风流光
+ * Copyright © 2026 MrBaoboer
+ *
+ * 本程序是自由软件：你可以依据自由软件基金会发布的 GNU Affero 通用公共许可证
+ * （第 3 版）的条款重新分发和／或修改它。
+ *
+ * 分发本程序是希望它有用，但不附带任何担保；甚至不含对适销性或特定用途适用性的
+ * 默示担保。详见 GNU Affero 通用公共许可证。
+ *
+ * 你应当已随本程序收到一份该许可证的副本（见仓库根目录的 LICENSE）；
+ * 如果没有，见 <https://www.gnu.org/licenses/>。
+ *
+ * 课程编排、旁白与美术素材不在本许可证之内，见 LICENSE-CONTENT 与 COMMERCIAL.md。
+ */
+
 import './styles.css';
 import * as THREE from 'three';
 
