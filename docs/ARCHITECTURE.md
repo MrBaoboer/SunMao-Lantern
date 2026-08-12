@@ -181,7 +181,7 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 
 `vercel.json` 只留跟产物无关的那几个头：缓存，加一组安全响应头（清单见 [SECURITY.md](../SECURITY.md)）。
 
-`tools/shots.mjs`（`npm run shots`）从**构建产物**里重出 README 的五张图 —— 截图由真实运行的页面产出。
+`tools/shots.mjs`（`npm run shots`）从**构建产物**里重出 README 的五张图 —— 拍的是真实运行的页面。
 
 ## 检查
 
@@ -195,13 +195,11 @@ CI 把这两半拆开，挂在不同的时机：
   只跑声明的下限 22.13。它验的是同一个 Chromium 里的行为，
   按 Node 版本再跑一遍多验到的约等于零。`main` 本来就是部署源，红了几分钟内就知道。
 
-其余：
+`test` 与 `size` 的实现在 `tools/unit.test.mjs`（零依赖）与 `tools/size-budget.mjs`。
 
-- `test` 是 `node --test tools/unit.test.mjs`：模数守卫、CSG 内核的退化输入、补间的取消语义。零依赖。
-- `size` 是 `tools/size-budget.mjs`：three 一块、其余全部、gzip 总量各有上限，翻上去当场报。
-- CI 上的冒烟**不加 `--shots`** —— 三十六张软件渲染截图要好几分钟，而绿的跑次没人看。
-  脚本只在某一步刚记下问题时截那一张，失败时 `.shots/smoke/` 作为 artifact 上传。
-  本地排查才用 `npm run smoke -- --shots`，每一步都截。
+CI 上的冒烟**不加 `--shots`** —— 三十六张软件渲染截图要好几分钟，而绿的跑次没人看。
+脚本只在某一步刚记下问题时截那一张，失败时 `.shots/smoke/` 作为 artifact 上传。
+本地排查才用 `npm run smoke -- --shots`，每一步都截。
 
 ESLint 用扁平配置，只开 `recommended` 一档，风格问题一概不管。两处按项目实际情况放宽：
 `caughtErrors: 'none'`（隐私模式读 `localStorage`、解码失败之类的空 `catch` 到处都是，是有意的），
