@@ -169,6 +169,7 @@ export function openM3(c, onExit) {
     c.state.modulesDone = { ...c.state.modulesDone, M3: true };
     c.sfx.play('SUCCESS');
     c.hud.sheet({
+      label: '写好的海报',
       body: `<img class="poster" src="${url}" alt="写着「${c.state.wishText}」的灯笼海报">`,
       actions: [
         { label: '换一句', ico: 'refresh', on: choose },

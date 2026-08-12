@@ -11,13 +11,13 @@
 五层，只允许向下依赖，没有回指。
 
 ```
-core/       尺寸与几何          不认识 three.js 之外的任何东西，也不认识界面
+core/       尺寸与几何          谁也不认识：纯数字与盒体，连 three.js 都不碰
   ↓
 render/     把几何变成画面      认识 core，不认识步骤内容
 interact/   把指针变成装配      认识 render，不认识具体是哪一步
 audio/      声音                谁也不认识
   ↓
-ui/         界面组件            只认识 DOM 与自己的样式，不认识灯笼
+ui/         界面组件            认识 DOM 与 three 的向量（标注和箭头要投到屏幕上），不认识灯笼
   ↓
 app/        分步引擎            只认识「一步长什么样」这个约定
   ↓
@@ -41,7 +41,7 @@ modules/    做完之后的四件事
 | `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `sheet()` · `dock()` · `addSpot()` · `hideOverlay()` / `closeOverlays()` |
 | `drag` | 单自由度装配 | `begin({parts,…})` · `autoSeatAll()` |
 | `mach` | 拖刀加工 | `begin({tool,from,to,carve,…})` · `autoRun()` |
-| `sfx` `bgm` `voice` | 声音 | `play()` · `loop()` |
+| `sfx` `bgm` `voice` | 声音 | 三个都有 `play()`；`loop()` 只有 `sfx` 有，BGM 的循环写在曲目表的 `loop` 字段上 |
 | `fx` | 粒子 | `chips` · `ripples` · `ring` · `tier` |
 | `guides` | 三维方向箭头 | `set()` · `clear()` |
 | `state` | 状态 | 直接读写；只有偏好会落盘，进度纯内存 |
@@ -58,8 +58,8 @@ modules/    做完之后的四件事
   id: 'C5', phase: 2,               // phase 决定它归到顶部哪一章
   title: '底盘做好了',
   mood: 'craft',                    // 场景基调，见 render/stage.js 的 MOODS
-  bgm: 'BGM_B_CRAFT',
-  cam: { az: 40, el: 36, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: FIT_RING },
+  bgm: 'BGM_B_CRAFT',               // 只有换曲子的那一步声明它
+  cam: { az: 40, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: FIT_RING },
   cue: { ico: 'drag', text: '<em>拖动横枨</em>，套住两个榫头' },
   narration: `两根横枨套上去……`,   // 字幕与配音共用这一份
   note: { title: '出头', spec: [...], body: '…' },
@@ -72,8 +72,9 @@ modules/    做完之后的四件事
 `cam.fit` 不是可选的装饰：它声明「这一步必须完整看到多大一块」，相机据此在窄画幅上自动后退。省掉它，
 手机上就会裁边。取值见 `steps/util.js` 的 `FIT_*`。
 
-引擎在 `go()` 里做的事，按顺序：停旁白 → `prev.exit()` → 取消拖拽与加工 → 清标注、笔记、任务、
-提示 → `closeOverlays()`（两层一起收）→ `ctx.exitInspect?.()` → 清高亮与剖切 → 铺开新一步 → `enter()`。
+引擎在 `go()` 里做的事，按顺序：`cancelAll()`（掐断上一步没跑完的补间）→ 停旁白 → `prev.exit()` →
+取消拖拽与加工 → 清标注、笔记、任务、提示 → `closeOverlays()`（两层一起收）→ `ctx.exitInspect?.()` →
+清高亮与剖切 → `stage.hold(false)`（解开上一步锁住的机位）→ 铺开新一步 → `enter()`。
 
 `exitInspect` 是「拆开看看」注册在 `ctx` 上的复位钩子。少了它，开着「拆开看看」翻页时坞被收掉，
 爆炸与半透却留在模型上 —— 灯笼永久停在拆开的样子，没有任何入口能收回去。
@@ -101,9 +102,9 @@ lantern.js   持有 13 件木构件 + 4 片格心 + 装饰件，管两件事：
 改一道工序只需 `lantern.addOp(id, OP.TENON)` —— 几何当场重建，切面自动变亮。加工动画因此不需要美术出图，也不会与几何失同步。
 
 **走刀去料**走的是同一条管线，只是把工序拆成了连续量。
-给 `mach.begin()` 加一句 `carve: { parts: ['LB-A1'], tag: OP.BEAM_SLOT }`，刀每动一下就把「刃尖在哪、
-走了多少」交给 `lantern.carve()` → `buildPart(id, ops, carve)`，现算这一刀啃掉的那一块。
-三条判定与其中的坑见 [DESIGN.md §4](../DESIGN.md#料要跟着刀走)，`verify.js` 的 `[CARVE]` 钉住其中最容易错的一条。
+给 `mach.begin()` 加一句 `carve: { parts: ['LB-A1'], tag: OP.BEAM_SLOT }`，刀的位置与进度就一路交给
+`lantern.carve()` → `buildPart(id, ops, carve)`。三条判定与其中的坑见 [DESIGN.md §4](../DESIGN.md#料要跟着刀走)，
+`verify.js` 的 `[CARVE]` 钉住其中最容易错的一条。
 
 刀够不着的部分（另一根枨、另一个端头）仍由 `onDone` 里的 `addOp()` 补上，文案会明说「另一头同样一锯」。
 
@@ -129,10 +130,10 @@ lantern.js   持有 13 件木构件 + 4 片格心 + 装饰件，管两件事：
 ## 加一步要改哪几个文件
 
 1. 在 `steps/act1.js` / `act3.js` / `act4.js` 里加一个步骤对象，`phase` 填对；
-2. 给 `cam.fit` 一个值，`steps/util.js` 里有现成的四个，不合适就写 `{ r, h }`；
+2. 别漏掉 `cam.fit`，理由见上；
 3. 只在这一步存在的场景挂件，用 `Junk` 收着，在 `exit()` 里 `clear()`；
-4. 旁白写在 `narration`，不要另开文案文件 —— 配音稿由 `npm run script` 从源码导出；
-   单行别超过约三十字（字幕按行推进，一行有多长它就在屏幕上停多久）；
+4. 旁白写在 `narration`，不要另开文案文件；单行别超过约三十字
+   （字幕按行推进，一行有多长它就在屏幕上停多久）；
 5. 跑 `npm run smoke`，它会检查这一步可达、有标题、相机正常。
 
 顶部章节是按 `phase` 自动铺的，不用改导航。
@@ -178,11 +179,9 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 - **不写死在 `vercel.json` 里。** 那段脚本以后改一个字，写死的哈希就失配，而失配特别隐蔽：
   页面照样能用，只是主题脚本被挡，每次打开先闪一下白。
 
-`vercel.json` 只留跟产物无关的那几个头：
-缓存、`X-Content-Type-Options`、`Referrer-Policy`、`Cross-Origin-Opener-Policy` 与 `Permissions-Policy`。
+`vercel.json` 只留跟产物无关的那几个头：缓存，加一组安全响应头（清单见 [SECURITY.md](../SECURITY.md)）。
 
-`tools/shots.mjs`（`npm run shots`）从**构建产物**里重出 README 的五张图 —— 截图由真实运行的页面产出，
-改了模型或界面就重跑一次。
+`tools/shots.mjs`（`npm run shots`）从**构建产物**里重出 README 的五张图 —— 截图由真实运行的页面产出。
 
 ## 检查
 

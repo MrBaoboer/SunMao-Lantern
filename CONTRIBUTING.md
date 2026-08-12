@@ -11,27 +11,24 @@
 
 ## 先跑起来
 
-```bash
-npm install
-npm run dev
-```
-
 命令清单与环境要求见 [README](README.md#跑起来)，模块边界见 [ARCHITECTURE.md](docs/ARCHITECTURE.md)，
 跑不起来先翻 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)。
 
 ## 提交之前
 
 ```bash
-npm run check:code   # lint + 单元断言 + 几何验算 + 构建 + 体积门槛，一分钟以内
+npm run check:code
 ```
 
-动过三维、主线步骤或界面布局，再跑一次冒烟（要先 `npx playwright install chromium`）：
+动过三维、主线步骤或界面布局，再跑一次冒烟。它跑的是构建产物，所以要排在 `check:code` 之后，
+浏览器内核也得先按 README 装一次：
 
 ```bash
 npm run smoke
 ```
 
-CI 上每个 PR 会跑 `check:code`；冒烟只在合并进 `main` 之后跑，所以本地这一遍值得。
+CI 上每个 PR 只跑 `check:code`，冒烟要合并进 `main` 之后才跑（[为什么](docs/ARCHITECTURE.md#检查)），
+所以本地这一遍值得。
 
 ---
 
