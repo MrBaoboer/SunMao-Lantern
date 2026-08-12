@@ -207,6 +207,7 @@ async function main() {
         // 这几秒里用户可能又进了别的模块 —— 片尾不该盖到人家头上
         if (hubToken !== myToken) return;
         hud.sheet({
+          label: '片尾',
           body: `<div class="finale">
             <div class="ln">13 根木条</div><div class="ln">0 颗钉子</div><div class="ln">7000 年</div>
           </div>`,

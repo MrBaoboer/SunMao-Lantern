@@ -25,7 +25,8 @@ const GUIDE = [
     touch: '按住画面拖，换个角度看；双指开合缩放。转到哪儿就停在哪儿' },
   { k: ['layers'], t: '顶上一格就是一步，点一下直接跳过去' },
   { k: ['more'], t: '深色、声音、字幕，都在右上角' },
-  { k: ['X'], t: '随时把灯笼拆开、调透明，看看里面', full: true },
+  { k: ['X'], t: '没有卷或坞挡着时，按 X 把灯笼拆开、调透明，看看里面',
+    touch: '右上角的「拆开看看」，把灯笼拆开、调透明', full: true },
   { k: ['spark'], t: '不想自己动手，就选旁边的「帮我加工」「帮我装上」', full: true },
 ];
 
@@ -213,9 +214,16 @@ export class HUD {
     // 顶部那两行是视觉上的「走到哪了」，读屏看不见它变化 —— 单独报一句。
     // 字幕关掉时这是唯一的翻页信号
     this.el.srStep.textContent = index >= 0 ? `第 ${index + 1} 步，共 ${total} 步：${title || ''}` : '';
+    // 格子的三种状态只有颜色高低之分，读屏读不出来 —— 名字里带上状态，
+    // 当下那一格再挂 aria-current
     this.el.chapters.querySelectorAll('.tick').forEach((t) => {
       const i = +t.dataset.i;
-      t.dataset.state = i < index ? 'done' : i === index ? 'now' : 'next';
+      const state = i < index ? 'done' : i === index ? 'now' : 'next';
+      const status = state === 'done' ? '已走过' : state === 'now' ? '当前' : '还没到';
+      t.dataset.state = state;
+      t.setAttribute('aria-label', `第 ${i + 1} 步 ${this.steps[i].title}，${status}`);
+      if (state === 'now') t.setAttribute('aria-current', 'step');
+      else t.removeAttribute('aria-current');
     });
     const phase = this.steps[index]?.phase ?? 0;
     this.el.chapters.querySelectorAll('.ch').forEach((ch) => {
@@ -683,7 +691,7 @@ export class HUD {
   /**
    * 卷：盖住画面的一页。
    *
-   * `aria-label` 走标题；两处没有标题的卷（落笔、海报）自己传 label ——
+   * `aria-label` 走标题；三处没有标题的卷（落笔、海报、片尾）自己传 label ——
    * 一个没有名字的 dialog，读屏只会报一句「对话框」。
    */
   sheet({ eyebrow, title, lede, body, actions = [], veil = true, label, top, onMount, onEsc } = {}) {
