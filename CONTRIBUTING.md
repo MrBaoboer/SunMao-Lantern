@@ -28,7 +28,7 @@ npm run smoke
 ```
 
 CI 上每个 PR 只跑 `check:code`，冒烟要合并进 `main` 之后才跑（[为什么](docs/ARCHITECTURE.md#检查)），
-所以本地这一遍值得。
+所以本地这一遍不能省。
 
 ---
 
