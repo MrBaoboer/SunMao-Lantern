@@ -158,9 +158,8 @@ export function openM6(c, onExit) {
 Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径，
 放子路径下不用改配置。`three` 单独切一个 chunk，因为它比其余全部代码加起来还大。
 
-分包写法跟着 Vite 8 走：打包器换成了 rolldown，
-配置键是 `build.rolldownOptions`（`rollupOptions` 已改名），`manualChunks` 的对象写法也没了 —— 改用 `output.codeSplitting.groups` 按模块 id 匹配，
-见 `vite.config.js`。
+分包配置按 Vite 8 的 rolldown 写：键是 `build.rolldownOptions`（不是 `rollupOptions`），
+分组用 `output.codeSplitting.groups` 按模块 id 匹配（`manualChunks` 在这里无效），见 `vite.config.js`。
 
 开发期两个中间件（`vite.config.js`，`apply: 'serve'`，不进生产构建）：
 
