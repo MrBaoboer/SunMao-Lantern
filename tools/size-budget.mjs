@@ -1,12 +1,12 @@
 /**
  * 产物体积门槛。
  *
- * README 里写着「产物 xxx kB」这类数字，没人守着就会慢慢变成旧闻；
+ * docs/DEVELOPMENT.md 里写着「产物 xxx kB」这类数字，没人守着就会慢慢变成旧闻；
  * 更实际的用处是拦住「误打包」——把一个本该按需引入的东西塞进了首屏，
  * 或者 three 的 tree-shaking 被一次改动破掉，体积会成倍上去而没有任何报错。
  *
  * 门槛按当前实测值留约两成余量。真的需要更多空间时，改这里的数，
- * 顺手把 README 的那一行也改掉 —— 这就是让两者不失同步的机制。
+ * 顺手把 docs/DEVELOPMENT.md 的那一行也改掉 —— 这就是让两者不失同步的机制。
  *
  *   node tools/size-budget.mjs
  */
@@ -69,7 +69,7 @@ for (const [name, got, cap] of checks) {
 }
 console.log('');
 if (bad) {
-  console.error(`产物超出门槛 · ${bad} 项。确认不是误打包之后，改 tools/size-budget.mjs 的 BUDGET，并同步 README。`);
+  console.error(`产物超出门槛 · ${bad} 项。确认不是误打包之后，改 tools/size-budget.mjs 的 BUDGET，并同步 docs/DEVELOPMENT.md。`);
   process.exit(1);
 }
 console.log('产物体积在门槛内');

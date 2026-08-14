@@ -25,7 +25,7 @@
 .cover-veil {
   opacity: 0;
   background: var(--veil-cover);
-  /* 不加前缀的写法要到 Safari 18 才有；README 划的下限是 16.4，那一段只认 -webkit- */
+  /* 不加前缀的写法要到 Safari 18 才有；docs/DEVELOPMENT.md 划的下限是 16.4，那一段只认 -webkit- */
   -webkit-backdrop-filter: blur(13px) saturate(1.06);
   backdrop-filter: blur(13px) saturate(1.06);
 }

@@ -11,7 +11,7 @@
 
 ## 先跑起来
 
-命令清单与环境要求见 [README](README.md#跑起来)，模块边界见 [ARCHITECTURE.md](docs/ARCHITECTURE.md)，
+命令清单与环境要求见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，模块边界见 [ARCHITECTURE.md](docs/ARCHITECTURE.md)，
 跑不起来先翻 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)。
 
 ## 提交之前
@@ -21,7 +21,7 @@ npm run check:code
 ```
 
 动过三维、主线步骤或界面布局，再跑一次冒烟。它跑的是构建产物，所以要排在 `check:code` 之后，
-浏览器内核也得先按 README 装一次：
+浏览器内核也得先按 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#命令) 装一次：
 
 ```bash
 npm run smoke
