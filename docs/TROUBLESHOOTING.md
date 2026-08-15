@@ -128,6 +128,46 @@ __ctx.mach.job.sweptHi
 __ctx.lantern.parts.get('LB-B1').carved   // { tag, lanes: [{ lane, swept }] } 走完的那几趟
 ```
 
+### 刀插在木头里 / 第一刀还没走，刃口就已经在料中间
+
+`mach.begin()` 的工件量不到了：起刀高度是按 `carve.parts` 的包围盒算的，
+`carve` 漏了、构件当时还没摆到位（`detach()` 排在 `begin()` 之后）、或者传的是一件隐藏着的备份件，
+`job.lift` 就会是 0，刀直接坐在刃线上 —— 而刃线是**走到底**时刃尖的位置。
+
+```js
+__ctx.mach.job.lift      // 起刀抬起多少毫米，0 就是没量到
+__ctx.mach.job.retract   // 抬起的方向（进刀轴的反向）
+```
+
+约定见 [DESIGN.md §4](../DESIGN.md#4-教学件与刀具让动作和结果对得上)。
+
+### 木纹在木头里流动 / 拖着走的时候花纹变了
+
+有人把木料着色器的取样点改回了世界坐标（`vGrain` 应当取 `position`，即构件自己的坐标系）。
+纹理必须长在木头上：料被拖动、离位陈列、爆炸拆开都不能让花纹动，
+转过来摆的料也不能变成横纹。十三根各有各的花靠 `seed` 与 `tone`，不靠位置，
+见 [DESIGN.md §1](../DESIGN.md#1-几何算出来的不是建出来的)。
+
+### 明明什么都停了，画面却在轻微颤动
+
+多半是有人拿掉了 `stage.js` 里 `setSafeArea()` 的 `REFRAME_MIN` 门槛。
+字幕一句一行、两行来回换，安全区就差一行的高度；每变一次就重算一次机位的话，
+相机与主光的目标点每隔几秒挪一点，阴影贴图整体位移，灯笼纸上棂条的影子于是持续爬动。
+
+```js
+__ctx.stage.setRecommended = new Proxy(__ctx.stage.setRecommended, {  // 数一数它被叫了几次
+  apply(f, t, a) { console.log('reframe', __ctx.stage.safe); return f.apply(t, a); } });
+```
+
+静置几秒之后，相机每帧位移应当是 0。取景门槛见 [DESIGN.md §6](../DESIGN.md#6-取景算出来的不是摆出来的)。
+
+### 翻回上一步，画面空了
+
+那一步的 `enter()` 接着上一步的现场写，自己没把台子摆全。每一步都必须能从任何一步进来 ——
+顶上的格子可以跳到任何一处，箭头也能往回翻。补齐 `attachAll()` / `showOnly()` / `allFinished()` /
+`showPanels` / `showDecor` / 灯芯这几项，见 [ARCHITECTURE.md](ARCHITECTURE.md#一步长什么样)。
+`npm run smoke` 会倒着走一遍十八步，并数每一步画面里有几件东西。
+
 ### 教学件的凹槽看起来是凸的
 
 那处又用实心块拼了。改用 `demoSolid({ blank, cuts })` 让 CSG 真的挖出来，内壁才会照常受光。

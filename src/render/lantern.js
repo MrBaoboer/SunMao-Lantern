@@ -82,7 +82,7 @@ export class Lantern {
       const home = homeOf(id);
       const mat = makeWoodMaterial({
         grainAxis: grainAxisOf(solid),
-        center: home,
+        seed: home,                    // 基准位只当纹理种子用，构件搬走了纹也不跟着跑
         tone: ((i * 0.137) % 1) - 0.5, // 每根随机色差，避免 13 根纹理完全一致
       });
       const mesh = new THREE.Mesh(geo, mat);
@@ -115,7 +115,7 @@ export class Lantern {
       g.rotation.z = pl.rotZ;
       const geo = buildLatticeGeometry(this.state.patternId);
       const mat = makeWoodMaterial({
-        grainAxis: 0, center: new THREE.Vector3(...pl.pos), tone: 0.32,
+        grainAxis: 0, seed: new THREE.Vector3(...pl.pos), tone: 0.32,
       });
       mat.color.setHex(0xc09456); // 格心用浅一档的榉木（§2 V-14）
       const mesh = new THREE.Mesh(geo, mat);

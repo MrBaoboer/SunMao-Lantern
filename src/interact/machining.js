@@ -246,8 +246,28 @@ export class Machining {
       this.job.carveT = 0;
       this.job.carveQ = -1;
       this._carve();
+      /*
+       * 起刀高度。
+       *
+       * 走刀线给的是**刀走到底**时刃尖所在的那条线，直接把刀摆上去，第一刀还没去料
+       * 刀身就已经埋在实料里了 —— 凿子插进木头、锯片没在料中，正是「穿模」的样子。
+       * 所以按进刀轴量出料的表面，开工时刃尖落在表面上，随去料进度一层层沉下去：
+       * 刃尖永远踩在当前的切削面上，不会比料先到。
+       */
+      const box = new THREE.Box3();
+      for (const id of o.carve.parts) {
+        const p = this.ctx.lantern.parts.get(id);
+        if (!p?.mesh) continue;
+        p.mesh.updateWorldMatrix(true, true);
+        box.expandByObject(p.mesh);
+      }
+      this.job.retract = new THREE.Vector3().setComponent(axis, -this.job.carveKey.dir);
+      const face = this.job.carveKey.dir < 0 ? box.max : box.min;
+      this.job.lift = box.isEmpty() ? 0
+        : Math.max(0, -this.job.carveKey.dir * (face.getComponent(axis) - o.from.getComponent(axis)));
     }
     t.position.copy(o.from);
+    if (this.job.lift) t.position.addScaledVector(this.job.retract, this.job.lift);
     this._orientTool(t, o);
     t.userData.ring.visible = true;
     this._setRing(0);
@@ -409,8 +429,10 @@ export class Machining {
     // autoRun 收尾的 tween 可能在 end() 之后再 tick 到几次 —— 静默忽略
     if (!j || !this.tool) return;
     j.u = u;
-    this.tool.position.copy(j.from).addScaledVector(j.dir, u * j.len);
+    // 先算这一刻去了多少料，再按去料进度把刀放下去 —— 刃尖踩在当前的切削面上
     this._carve();
+    this.tool.position.copy(j.from).addScaledVector(j.dir, u * j.len);
+    if (j.lift) this.tool.position.addScaledVector(j.retract, j.lift * (1 - (j.carveT ?? 1)));
     // 一次往复（走到一端再回到另一端）算一刀
     const atEnd = u > 0.94 ? 1 : u < 0.06 ? 0 : null;
     if (atEnd !== null && atEnd !== j.lastEnd) {

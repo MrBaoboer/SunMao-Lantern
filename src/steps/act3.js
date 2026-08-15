@@ -316,6 +316,9 @@ export function act3(ctx) {
       },
       async enter(c, engine) {
         junk.clear();
+        // 先归位再取用：从 C2 跳过来时这三根还摆在工作台上，
+        // 而 applyAssembly 不管离位的构件 —— 少这一句，底盘就散在台面上
+        c.lantern.attachAll();
         only(c, ['LB-A1', 'LB-A2', 'LB-C1']);
         for (const id of ['LB-A1', 'LB-A2']) {
           c.lantern.setOps(id, new Set([OP.BEAM_SLOT]));
@@ -779,7 +782,9 @@ export function act3(ctx) {
         });
         c.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: () => c.drag.autoSeatAll() }]);
       },
-      exit(c) { junk.clear(); c.guides.clear(); },
+      // 合龙那一下整盏灯会沉一下再弹回来。补间被翻页掐断时它停在半路，
+      // 往后每一步的灯笼都会矮那么一点 —— 收尾时无条件归零
+      exit(c) { junk.clear(); c.guides.clear(); c.lantern.root.position.z = 0; },
     },
   ];
 }

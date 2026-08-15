@@ -31,6 +31,18 @@ const BLOOM_FLOOR = 0.86;
 /** 背景与阈值之间留的余量：高通自己还有 0.01 的过渡宽度，留双倍 */
 const BLOOM_MARGIN = 0.02;
 
+/**
+ * 界面高度变多少才值得重新取景（像素）。
+ *
+ * 字幕一句一行、两行来回换，安全区就跟着差一行的高度。原先每变一次就重算一次机位 ——
+ * 于是画面每隔几秒轻轻挪一下：相机在飘，主光的目标点跟着飘，阴影贴图随之整体位移，
+ * 纸面上棂条的影子就会持续爬动。看上去正是「东西明明停着，却在轻微颤动」。
+ *
+ * 那点位移换不来任何取景上的好处：一行字不过占画面高度的百分之三。
+ * 门槛取一行半，坞这一级的变化（上百像素）照样重新取景。
+ */
+const REFRAME_MIN = 48;
+
 const _luma = new THREE.Color();
 
 /**
@@ -310,10 +322,13 @@ export class Stage {
   setSafeArea({ top = 0, bottom = 0 }) {
     if (this.safe.top === top && this.safe.bottom === bottom) return;
     this.safe = { top, bottom };
-    // 动手的时候不重新取景。字幕一句句换，每句行数不同，安全区跟着变 ——
-    // 于是推荐机位每隔几秒挪一点，手上正在对位的画面就一直在缓慢地飘。
+    // 动手的时候一律不重新取景 —— 手上正在对位，画面不能自己飘。
     // 记下新的安全区留给下一步用，这一步的机位保持进来时的样子。
     if (this.held) return;
+    // 小变化不动机位（见 REFRAME_MIN）。比的是**上一次真正据以取景的那一组**，
+    // 不是上一帧 —— 否则一行一行地慢慢涨，每次都不到门槛，加起来却早过了
+    const was = this._framedSafe || { top: 0, bottom: 0 };
+    if (Math.abs(top - was.top) < REFRAME_MIN && Math.abs(bottom - was.bottom) < REFRAME_MIN) return;
     if (this._lastFrame) this.setRecommended(this._lastFrame, { keepUser: true });
   }
 
@@ -359,6 +374,7 @@ export class Stage {
   setRecommended(o = {}, { keepUser = false } = {}) {
     const { az = 45, el = 22, dist = 420, target = FOCUS, ease = 1.0, fit } = o;
     this._lastFrame = { ...o, target };
+    this._framedSafe = { ...this.safe };   // 这一次取景据的是哪一组安全区
     const t = target.clone();
 
     const d = fit ? Math.max(dist, this.fitDistance(fit) * 1.06) : dist;

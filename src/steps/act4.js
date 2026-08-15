@@ -78,21 +78,30 @@ export function act4(ctx) {
               g.globalAlpha = 1;
               tex.dispose();
             }
+            const choose = (btn) => {
+              o.querySelectorAll('.pick').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+              btn.setAttribute('aria-pressed', 'true');
+              c.state.patternId = btn.dataset.id;
+              c.lantern.setPattern(btn.dataset.id);
+              c.lantern.showPanels(true);
+              for (const pid of PANELS) c.lantern.parts.get(pid).installed = true;
+              c.lantern.applyAssembly();
+              c.sfx.play('WOOD_TAP');
+              c.hud.setCue('四面都用它了');
+              engine.done();
+            };
             // 选中即定案，直接往下走 —— 不再多一个确认按钮
             o.querySelectorAll('.pick').forEach((btn) => {
               btn.addEventListener('click', async () => {
-                o.querySelectorAll('.pick').forEach((b) => b.setAttribute('aria-pressed', 'false'));
-                btn.setAttribute('aria-pressed', 'true');
-                c.state.patternId = btn.dataset.id;
-                c.lantern.setPattern(btn.dataset.id);
-                c.lantern.showPanels(true);
-                for (const pid of PANELS) c.lantern.parts.get(pid).installed = true;
-                c.lantern.applyAssembly();
-                c.sfx.play('WOOD_TAP');
+                choose(btn);
                 await wait(0.7);
                 engine.next();
               });
             });
+            // 直接按「下一步」：替他把现在选着的那一个定下来，页先不翻 ——
+            // 四面用哪个花纹是这一遍唯一的个性化选择，总得让他看见它落到灯上
+            engine.assist(() => choose(o.querySelector('.pick[aria-pressed="true"]')
+              || o.querySelector('.pick')));
           },
         });
         c.hud.setCue('点一个花纹，就用它了', 'tap');

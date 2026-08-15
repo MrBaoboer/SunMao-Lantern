@@ -198,7 +198,8 @@ async function walk(vp) {
     await page.waitForTimeout(tmo(ms));
   };
 
-  for (let i = 0; i < total; i++) {
+  /** 走到第 i 步，把这一步该成立的都验一遍 */
+  const checkStep = async (i, tag = '') => {
     const before = failures.length;
     await page.evaluate((n) => window.__engine.go(n), i);
     await settle();
@@ -218,18 +219,41 @@ async function walk(vp) {
         const attack = c.mach.job.faceNormal.clone().normalize();
         tool = { kind: c.mach.tool.userData.kind, dot: edge.dot(attack) };
       }
-      return { id: e.current?.id, title, cam, tool };
+      /*
+       * 画面里到底有没有东西。
+       *
+       * 「不是一块纯色」拦不住这一类：背景本来就是一圈渐变，把整盏灯藏干净之后
+       * 亮度标准差仍有 4 上下，照样过线。所以直接数：可见、且投影落在画面里的网格。
+       */
+      const V3 = c.stage.camera.position.constructor;
+      const v = new V3();
+      let onScreen = 0;
+      // 相机的视图矩阵是渲染那一刻才更新的。翻页刚跳完机位、这一帧还没画出来时，
+      // project() 会拿上一步的视图矩阵去投 —— 投出来的坐标能到几十，一件都不在画幅里
+      c.stage.camera.updateMatrixWorld(true);
+      c.stage.scene.traverse((o) => {
+        if (!o.isMesh || o === c.stage.backdrop || o === c.stage.ground) return;
+        for (let p = o; p; p = p.parent) if (!p.visible) return;
+        o.getWorldPosition(v).project(c.stage.camera);
+        if (Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 && v.z < 1) onScreen++;
+      });
+      return { id: e.current?.id, title, cam, tool, onScreen };
     });
-    if (!state.id) note(vp.name, `第 ${i + 1} 步没有进入`);
-    if (!state.title) note(vp.name, `第 ${i + 1} 步没有标题`);
-    if (!(state.cam > 0)) note(vp.name, `第 ${i + 1} 步相机距离异常：${state.cam}`);
+    if (!state.id) note(vp.name, `${tag}第 ${i + 1} 步没有进入`);
+    if (!state.title) note(vp.name, `${tag}第 ${i + 1} 步没有标题`);
+    if (!(state.cam > 0)) note(vp.name, `${tag}第 ${i + 1} 步相机距离异常：${state.cam}`);
     if (state.tool && state.tool.dot < 0.99) {
-      note(vp.name, `第 ${i + 1} 步 ${state.tool.kind} 刃口没有对着工件（dot=${state.tool.dot.toFixed(3)}）`);
+      note(vp.name, `${tag}第 ${i + 1} 步 ${state.tool.kind} 刃口没有对着工件（dot=${state.tool.dot.toFixed(3)}）`);
+    }
+
+    // 最少的一步（B1–B3 两块教学件）也有两件；一件都没有 = 这一步没把台子摆起来
+    if (state.onScreen < 2) {
+      note(vp.name, `${tag}第 ${i + 1} 步画面里只有 ${state.onScreen} 件东西`);
     }
 
     const paint = await framePainted();
     if (!(paint.sd > 3)) {
-      note(vp.name, `第 ${i + 1} 步画面是一块纯色（亮度标准差 ${paint.sd.toFixed(2)}，均值 ${paint.mean.toFixed(0)}）`);
+      note(vp.name, `${tag}第 ${i + 1} 步画面是一块纯色（亮度标准差 ${paint.sd.toFixed(2)}，均值 ${paint.mean.toFixed(0)}）`);
     }
 
     /*
@@ -242,8 +266,21 @@ async function walk(vp) {
     if (WANT_SHOTS || failures.length > before) {
       const n = String(i + 1).padStart(2, '0');
       fs.mkdirSync(SHOT_DIR, { recursive: true });
-      await page.screenshot({ path: path.join(SHOT_DIR, `${vp.name}-${n}-${state.id}.png`) });
+      await page.screenshot({ path: path.join(SHOT_DIR, `${vp.name}-${tag ? 'b' : ''}${n}-${state.id}.png`) });
     }
+  };
+
+  for (let i = 0; i < total; i++) await checkStep(i);
+
+  /*
+   * 倒着再走一遍（桌面画幅一遍就够）。
+   *
+   * 正着走时每一步都由上一步替它铺好了台子，于是「这一步自己没把台子摆全」
+   * 这一类毛病一条都看不见 —— A2 从 B1 翻回来整盏灯消失，正着走十八步全绿。
+   * 倒着走一遍，每一步都得自己成立。
+   */
+  if (!vp.isMobile) {
+    for (let i = total - 1; i >= 0; i--) await checkStep(i, '倒着走 · ');
   }
 
   /*
@@ -347,6 +384,41 @@ async function walk(vp) {
     const upperOps = await page.evaluate(() =>
       ['UB-A1', 'UB-B1'].map((id) => window.__ctx.lantern.parts.get(id).ops.size));
     if (upperOps.some((n) => n < 4)) note(vp.name, `C6 之后上枨框工序数偏少：${upperOps.join(' / ')}`);
+
+    /*
+     * 需要动手的一步：一下「下一步」做一段，做完最后一段才翻页。
+     * 三条一起钉 —— 只验「装完了」不验「一下只装一件」，一口气全做完那版照样是绿的。
+     *
+     * 必须从别的步骤进来：`goToStep` 对当前所在的这一步是空操作，
+     * 接着上一段直接再来一次，验的会是一个已经装完的步骤。
+     */
+    await goStep('C5');
+    const navNext = () => page.evaluate(() => document.getElementById('nav-next').click());
+    const rested = () => page.waitForFunction(
+      () => !window.__engine.helping && !window.__engine.busy, null, { timeout: tmo(30000) })
+      .catch(() => note(vp.name, 'C5：按下「下一步」之后这一段没有落地'));
+    const nav = async () => {
+      await navNext(); await rested(); await page.waitForTimeout(tmo(220));
+      return page.evaluate(() => ({
+        id: window.__engine.current?.id,
+        left: window.__ctx.drag.session?.pending?.size ?? 0,
+        done: window.__engine.taskDone,
+      }));
+    };
+    const pend = await page.evaluate(() => window.__ctx.drag.session?.pending?.size ?? 0);
+    if (pend !== 2) note(vp.name, `C5 应有 2 件待装，实际 ${pend} —— 下面三条不作数`);
+    const one = await nav();
+    if (one.id !== 'C5' || one.left !== 1) {
+      note(vp.name, `C5：第一下应只装一件、且不翻页，实际停在 ${one.id}、还剩 ${one.left} 件`);
+    }
+    const two = await nav();
+    if (two.id !== 'C5' || two.left !== 0 || !two.done) {
+      note(vp.name, `C5：第二下应装完另一件、仍不翻页，实际停在 ${two.id}、还剩 ${two.left} 件`);
+    }
+    await navNext();
+    await settle(220);
+    const landed = await page.evaluate(() => window.__engine.current?.id);
+    if (landed !== 'C6') note(vp.name, `C5 装完再按「下一步」应到 C6，实际 ${landed}`);
 
     // 快速翻页：上一步的僵尸回调不能落到下一步上
     await page.evaluate(() => { window.__engine.go(17); window.__engine.go(2); window.__engine.go(9); });
