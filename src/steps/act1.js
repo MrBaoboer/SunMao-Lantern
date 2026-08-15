@@ -64,6 +64,16 @@ export function act1(ctx) {
         body: '它能被完整拆开，再装回去。',
       },
       async enter(c) {
+        // 每一步都得自己把台子摆好。上一步可能是 B1 —— 那一步把整盏灯藏了个干净，
+        // 从它翻回来时若只改亮度，画面上就一件东西也没有
+        c.lantern.attachAll();
+        c.lantern.showOnly(null);
+        c.lantern.allFinished();
+        for (const p of c.lantern.parts.values()) p.installed = true;
+        c.lantern.applyAssembly();
+        c.lantern.showPanels(true);
+        c.lantern.showDecor(true);
+        c.lantern.core.visible = true;
         c.lantern.setLit(0);
         const preview = async () => {
           await tween(1.2, (k) => c.lantern.setExplode(k, 'unified'), { ease: Ease.outCubic });
@@ -179,9 +189,27 @@ export function act1(ctx) {
               engine.done();
             },
           });
-          spot(V(av(2.6), 0, Z), '头', '榫头', '伸出去、插进卯里的那一截');
-          spot(V(av(2.0), av(0.45), Z), '颊', '榫颊', '两侧的面，决定松紧');
-          spot(V(av(1.2), 0, Z + av(1.1)), '肩', '榫肩', '根部的台阶，把力传过去');
+          const dots = [
+            spot(V(av(2.6), 0, Z), '头', '榫头', '伸出去、插进卯里的那一截'),
+            spot(V(av(2.0), av(0.45), Z), '颊', '榫颊', '两侧的面，决定松紧'),
+            spot(V(av(1.2), 0, Z + av(1.1)), '肩', '榫肩', '根部的台阶，把力传过去'),
+          ];
+          // 推进去只是这一步的前半段 —— 按「下一步」时一下点开一个部位。
+          //
+          // 按次序走，不能挑「现在没开的那一枚」：一次只摊开一张，点开第二枚时
+          // 第一枚会被自动收起，于是「没开的第一枚」永远在前两枚之间来回，第三枚一辈子轮不到。
+          // 已经自己点开过的那一枚跳过 —— 再点一下是收起，反倒不算数
+          let opened = 0;
+          const openOne = () => {
+            while (opened < dots.length) {
+              const d = dots[opened++];
+              if (d.active) continue;
+              d.el.click();
+              break;
+            }
+            if (opened < dots.length) engine.assist(openOne);
+          };
+          engine.assist(openOne);
         };
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },
