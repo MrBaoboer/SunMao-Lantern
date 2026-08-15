@@ -217,7 +217,11 @@ async function walk(vp) {
         const V3 = c.stage.camera.position.constructor;      // THREE.Vector3
         const edge = new V3(0, 0, -1).applyQuaternion(c.mach.tool.quaternion).normalize();
         const attack = c.mach.job.faceNormal.clone().normalize();
-        tool = { kind: c.mach.tool.userData.kind, dot: edge.dot(attack) };
+        // 探面的目标：空的话刀就直接坐在走刀线上（= 埋进料里），见 DESIGN.md §4
+        tool = {
+          kind: c.mach.tool.userData.kind, dot: edge.dot(attack),
+          rides: c.mach.job.rideMeshes?.length ?? 0,
+        };
       }
       /*
        * 画面里到底有没有东西。
@@ -244,6 +248,9 @@ async function walk(vp) {
     if (!(state.cam > 0)) note(vp.name, `${tag}第 ${i + 1} 步相机距离异常：${state.cam}`);
     if (state.tool && state.tool.dot < 0.99) {
       note(vp.name, `${tag}第 ${i + 1} 步 ${state.tool.kind} 刃口没有对着工件（dot=${state.tool.dot.toFixed(3)}）`);
+    }
+    if (state.tool && !state.tool.rides) {
+      note(vp.name, `${tag}第 ${i + 1} 步 ${state.tool.kind} 没有可探面的工件 —— 刀会埋进料里`);
     }
 
     // 最少的一步（B1–B3 两块教学件）也有两件；一件都没有 = 这一步没把台子摆起来

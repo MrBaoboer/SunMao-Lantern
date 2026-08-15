@@ -86,6 +86,12 @@ function shaft(rBot, rTop, len, mat, { facets = 8, spin = Math.PI / 8 } = {}) {
  * act3 里被反复编译与删除 —— 七段加工、十几趟走刀，每一次卡顿都正好落在
  * 「该开始拖了」的那一刻。几何仍然每次重建（它便宜），材质留着。
  */
+/** 探面射线的起点高度（毫米）—— 比任何一件工件都高，保证从料外射进去 */
+const RIDE_H = 90;
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3();
+const _a = new THREE.Vector3();
+
 const TOOL_MATS = {
   steel: new THREE.MeshStandardMaterial({ color: 0xb9bfc4, roughness: 0.3, metalness: 0.9 }),
   dark: new THREE.MeshStandardMaterial({ color: 0x3f4247, roughness: 0.5, metalness: 0.6 }),
@@ -148,7 +154,14 @@ export function buildTool(kind) {
     // 而不是把一个盒子的顶点捏尖 —— 后者两面对称，读出来是把锥子。
     // 全长压到 43：一根 12 见方的料旁边杵一把 62 的凿，取景只能一路后退。
     const EW = 4.0;                          // 刃宽（横在切口上）
-    const ET = 6.0;                          // 刃厚（顺走刀方向）
+    /*
+     * 刃厚（顺走刀方向）也取 4：**刀身不能比它凿的那个口子胖**。
+     *
+     * 原先是 6。C4 的透眼只有 4 mm 宽（J1.THICK），而走刀恰恰是顺着这 4 mm 走的 ——
+     * 于是刀凿到底时两侧各有 1 mm 埋在实料里，20 个顶点没进木头。全片的槽口都是 4
+     * （J2.SLOT_W / TONGUE、J4.PANEL_T）或 6（J3.SOCKET / NECK），取 4 处处都容得下。
+     */
+    const ET = 4.0;
     const tip = new THREE.Mesh(bladeFromProfile([
       [-ET / 2, 0], [-ET / 2, 11], [ET / 2, 11], [ET / 2, 4.5], [-ET / 2 + 0.4, 0],
     ], EW), steel);
@@ -163,6 +176,22 @@ export function buildTool(kind) {
     const hoop = shaft(4.6, 4.6, 2, steel); hoop.position.z = 42.4;
     g.add(tip, neck, bolster, ferrule, lower, upper, hoop);
   }
+
+  /*
+   * 刀身贴着料面的那一段有多长（沿走刀方向，从刃尖往前后各算）。
+   *
+   * 探面时要按这个跨度多问几处：只问刃尖的话，锯板与刨底会压进旁边还没开口的料里。
+   * 只算工作端（局部 z < 15 的那些件）—— 柄举在半空，它伸多远与踩在哪个面上无关。
+   */
+  const work = new THREE.Box3();
+  const one = new THREE.Box3();
+  for (const m of g.children) {
+    m.updateMatrix();
+    m.geometry.computeBoundingBox();
+    one.copy(m.geometry.boundingBox).applyMatrix4(m.matrix);
+    if (one.min.z < 15) work.union(one);
+  }
+  g.userData.reach = work.isEmpty() ? 0 : Math.max(Math.abs(work.min.x), Math.abs(work.max.x));
 
   // 走刀进度环：叠在刀尾上方，永远压在画面最前。
   // 这一个是每次新建的，因为 end() 里要连着几何一起换掉
@@ -247,27 +276,46 @@ export class Machining {
       this.job.carveQ = -1;
       this._carve();
       /*
-       * 起刀高度。
+       * 刀踩在料面上，不埋进料里。
        *
-       * 走刀线给的是**刀走到底**时刃尖所在的那条线，直接把刀摆上去，第一刀还没去料
-       * 刀身就已经埋在实料里了 —— 凿子插进木头、锯片没在料中，正是「穿模」的样子。
-       * 所以按进刀轴量出料的表面，开工时刃尖落在表面上，随去料进度一层层沉下去：
-       * 刃尖永远踩在当前的切削面上，不会比料先到。
+       * 走刀线给的是**刀走到底**时刃尖所在的那条线。直接把刀摆上去有两处不对：
+       * 第一刀还没去料，刀身就已经插在实料中间；而走刀线又总比口子长（C4 的透眼只有
+       * 4 mm 宽，刀却要走 15.6 mm，好让手上有一段够拖的行程），于是大半个行程里
+       * 刀都在实料里穿行。这正是「凿子插进木块、穿模」的来源。
+       *
+       * 所以不再自己算深度，改成每帧探一次面：从刀上方沿进刀方向打射线，
+       * 取刀身底下**最高**的那个面，把刃尖放上去。料被啃掉多少，面就低多少，刀跟着沉；
+       * 走到还没开口的那一段，面又回到外表面，刀自己抬起来。
        */
+      this.job.retract = new THREE.Vector3().setComponent(axis, -this.job.carveKey.dir);
       const box = new THREE.Box3();
+      this.job.rideMeshes = [];
       for (const id of o.carve.parts) {
         const p = this.ctx.lantern.parts.get(id);
         if (!p?.mesh) continue;
         p.mesh.updateWorldMatrix(true, true);
         box.expandByObject(p.mesh);
+        this.job.rideMeshes.push(p.mesh);
       }
-      this.job.retract = new THREE.Vector3().setComponent(axis, -this.job.carveKey.dir);
       const face = this.job.carveKey.dir < 0 ? box.max : box.min;
+      // 刃尖最高抬到外表面，最低落到走刀线 —— 探面的结果夹在这两者之间
       this.job.lift = box.isEmpty() ? 0
         : Math.max(0, -this.job.carveKey.dir * (face.getComponent(axis) - o.from.getComponent(axis)));
+      /*
+       * 探面沿刀身取五处（刃尖与前后各两点），跨度是刀身工作端的伸出量（buildTool 的 reach）。
+       *
+       * 取**最高**的那个面：刀是刚体，架在最高处，底下有坑就悬着 —— 一处也不会陷进实料。
+       * 只探刃尖会松一档，槽口比刀窄的那几趟（C4 的透眼只有 4 mm，与凿身同宽）
+       * 刀会一头扎进去，身子压在孔沿的实料里。
+       *
+       * 代价是：容不下刀的口子，刀就停在面上不往里走。这是对的 ——
+       * 刚体本来就进不去比自己窄的口子，而料在一层层地少，动作与结果依旧对得上。
+       */
+      const half = Math.min(30, t.userData.reach || 0);
+      this.job.rideSpan = half > 0.5 ? [-half, -half / 2, 0, half / 2, half] : [0];
+      this.job.rideLast = this.job.lift;
     }
-    t.position.copy(o.from);
-    if (this.job.lift) t.position.addScaledVector(this.job.retract, this.job.lift);
+    this._ride(o.from);
     this._orientTool(t, o);
     t.userData.ring.visible = true;
     this._setRing(0);
@@ -311,6 +359,44 @@ export class Machining {
         swept: [j.sweptLo, j.sweptHi],
       });
     }
+  }
+
+  /**
+   * 把刀放到当前料面上。
+   *
+   * 沿刀身取三处（刃尖与前后两端），各从上方打一条射线到工件上，取**最高**的那个面 ——
+   * 刚性的刀身架在最高处，底下有坑就悬着，绝不会有一处陷进实料。
+   * 三处都打空（刀已经走出料外）时沿用上一次的高度，免得在空中跳一下。
+   *
+   * 夹在 [走刀线, 外表面] 之间：低不过作者写的刃线，高不过开工时的那个面。
+   * @param {THREE.Vector3} [at] 不传就按当前进给量算
+   */
+  _ride(at) {
+    const j = this.job;
+    const t = this.tool;
+    if (!j || !t) return;
+    const nominal = _p.copy(at || j.from);
+    if (!at) nominal.addScaledVector(j.dir, j.u * j.len);
+    if (!j.retract || !j.rideMeshes?.length) { t.position.copy(nominal); return; }
+
+    const attack = _a.copy(j.retract).negate();
+    let off = null;
+    for (const s of j.rideSpan) {
+      _s.copy(nominal).addScaledVector(j.dir, s).addScaledVector(j.retract, RIDE_H);
+      this.ray.set(_s, attack);
+      this.ray.far = RIDE_H * 2;
+      let near = Infinity;
+      for (const mesh of j.rideMeshes) {
+        const hit = this.ray.intersectObject(mesh, true)[0];
+        if (hit && hit.distance < near) near = hit.distance;
+      }
+      if (near === Infinity) continue;
+      const h = RIDE_H - near;                 // 这一处的面相对刃线有多高
+      if (off === null || h > off) off = h;
+    }
+    off = Math.max(0, Math.min(j.lift, off ?? j.rideLast ?? 0));
+    j.rideLast = off;
+    t.position.copy(nominal).addScaledVector(j.retract, off);
   }
 
   /**
@@ -429,10 +515,9 @@ export class Machining {
     // autoRun 收尾的 tween 可能在 end() 之后再 tick 到几次 —— 静默忽略
     if (!j || !this.tool) return;
     j.u = u;
-    // 先算这一刻去了多少料，再按去料进度把刀放下去 —— 刃尖踩在当前的切削面上
+    // 先啃料，再探面 —— 刃尖踩的是这一刻真实的切削面
     this._carve();
-    this.tool.position.copy(j.from).addScaledVector(j.dir, u * j.len);
-    if (j.lift) this.tool.position.addScaledVector(j.retract, j.lift * (1 - (j.carveT ?? 1)));
+    this._ride();
     // 一次往复（走到一端再回到另一端）算一刀
     const atEnd = u > 0.94 ? 1 : u < 0.06 ? 0 : null;
     if (atEnd !== null && atEnd !== j.lastEnd) {
