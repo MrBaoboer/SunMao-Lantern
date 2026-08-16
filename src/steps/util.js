@@ -163,7 +163,7 @@ export function demoSolid({ blank, cuts = [], at = [0, 0, 0], tone = 0, edge, ed
   const geo = solidToGeometry(solid);
   const mat = makeWoodMaterial({
     grainAxis: grainAxisOf(solid),
-    center: new THREE.Vector3(...at),
+    seed: new THREE.Vector3(...at),   // 只做纹理种子：教学件是要被拖着走的
     tone,
   });
   const mesh = new THREE.Mesh(geo, mat);
@@ -297,6 +297,14 @@ export function makeSimpleDrag(ctx) {
     ctx.guides.set(spots.map((p) => ({ pos: p.clone(), dir: d.clone() })));
     // 动手的步骤一开始就把机位钉死，手上对位时画面不会自己漂
     ctx.stage.hold(true);
+
+    // 直接按「下一步」时由引擎代劳：走的就是拖到底那一刻的 onSeat，没有第二套演法。
+    // seated 一并置真 —— 已经咬合的料不该还能被拖回来
+    ctx.engine?.assist(async () => {
+      if (seated) return;
+      seated = true;
+      await onSeat?.();
+    });
 
     junk?.add({ dispose: () => {
       ctx.stage.canvas.removeEventListener('pointerdown', onDown);

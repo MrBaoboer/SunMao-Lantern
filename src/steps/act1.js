@@ -20,7 +20,7 @@ export function act1(ctx) {
       title: '一盏灯，为一年收尾',
       mood: 'dusk',
       bgm: 'BGM_A_OPENING',
-      cam: { az: 62, el: 12, dist: 470, target: AIM_LANTERN, snap: true, fit: FIT_LANTERN },
+      cam: { az: 62, el: 12, dist: 470, target: AIM_LANTERN, fit: FIT_LANTERN },
       cps: 3.6,
       cue: { ico: 'drag', text: '拖动画面，换个角度看' },
       narration: `每到岁末，中国人会用一盏灯，为一年收尾。
@@ -64,6 +64,16 @@ export function act1(ctx) {
         body: '它能被完整拆开，再装回去。',
       },
       async enter(c) {
+        // 每一步都得自己把台子摆好。上一步可能是 B1 —— 那一步把整盏灯藏了个干净，
+        // 从它翻回来时若只改亮度，画面上就一件东西也没有
+        c.lantern.attachAll();
+        c.lantern.showOnly(null);
+        c.lantern.allFinished();
+        for (const p of c.lantern.parts.values()) p.installed = true;
+        c.lantern.applyAssembly();
+        c.lantern.showPanels(true);
+        c.lantern.showDecor(true);
+        c.lantern.core.visible = true;
         c.lantern.setLit(0);
         const preview = async () => {
           await tween(1.2, (k) => c.lantern.setExplode(k, 'unified'), { ease: Ease.outCubic });
@@ -87,7 +97,7 @@ export function act1(ctx) {
       // 左卯右榫，且要看得见卯眼。卯是自左端面向里挖的盲眼，开口朝 −X ——
       // 相机得站到 −X 那一侧才看得进去；同时方位角要落在 (90°, 180°) 里，
       // 屏幕右方才是 −X，凸出来的那根才在右边。
-      cam: { az: 128, el: 14, dist: 210, target: [0, 0, 96], snap: true, fit: { r: 82, h: 44 } },
+      cam: { az: 128, el: 14, dist: 210, target: [0, 0, 96], fit: { r: 82, h: 44 } },
       cps: 3.6,
       // 画面随时可以被拖着转，所以指代一律按「长什么样」，不按左右
       cue: { ico: 'drag', text: '<em>拖动</em>凸出来的那一块，推进对面的孔里' },
@@ -179,9 +189,27 @@ export function act1(ctx) {
               engine.done();
             },
           });
-          spot(V(av(2.6), 0, Z), '头', '榫头', '伸出去、插进卯里的那一截');
-          spot(V(av(2.0), av(0.45), Z), '颊', '榫颊', '两侧的面，决定松紧');
-          spot(V(av(1.2), 0, Z + av(1.1)), '肩', '榫肩', '根部的台阶，把力传过去');
+          const dots = [
+            spot(V(av(2.6), 0, Z), '头', '榫头', '伸出去、插进卯里的那一截'),
+            spot(V(av(2.0), av(0.45), Z), '颊', '榫颊', '两侧的面，决定松紧'),
+            spot(V(av(1.2), 0, Z + av(1.1)), '肩', '榫肩', '根部的台阶，把力传过去'),
+          ];
+          // 推进去只是这一步的前半段 —— 按「下一步」时一下点开一个部位。
+          //
+          // 按次序走，不能挑「现在没开的那一枚」：一次只摊开一张，点开第二枚时
+          // 第一枚会被自动收起，于是「没开的第一枚」永远在前两枚之间来回，第三枚一辈子轮不到。
+          // 已经自己点开过的那一枚跳过 —— 再点一下是收起，反倒不算数
+          let opened = 0;
+          const openOne = () => {
+            while (opened < dots.length) {
+              const d = dots[opened++];
+              if (d.active) continue;
+              d.el.click();
+              break;
+            }
+            if (opened < dots.length) engine.assist(openOne);
+          };
+          engine.assist(openOne);
         };
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },
@@ -192,7 +220,7 @@ export function act1(ctx) {
       id: 'B2', phase: 1,
       title: '直榫：穿过去，露一截',
       mood: 'craft',
-      cam: { az: 118, el: 14, dist: 200, target: [0, 0, 96], snap: true, fit: { r: 78, h: 40 } },
+      cam: { az: 118, el: 14, dist: 200, target: [0, 0, 96], fit: { r: 78, h: 40 } },
       cue: { ico: 'drag', text: '<em>拖动</em>带榫头的那根，把榫头推进孔里' },
       narration: `第一种，直榫 —— 最基础，也最常见。
 这盏灯用的是穿透的那一种，叫「透榫」。
@@ -263,7 +291,7 @@ export function act1(ctx) {
       id: 'B3', phase: 1,
       title: '夹榫：从上往下落',
       mood: 'craft',
-      cam: { az: 38, el: 28, dist: 190, target: [0, 0, 108], snap: true, fit: { r: 60, h: 52 } },
+      cam: { az: 38, el: 28, dist: 190, target: [0, 0, 108], fit: { r: 60, h: 52 } },
       cue: { ico: 'pull', text: '<em>向下拖动</em>，把叉口落进两条槽' },
       narration: `第二种，夹榫。
 这一回，不是一根插进另一根。

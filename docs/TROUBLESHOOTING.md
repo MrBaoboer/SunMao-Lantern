@@ -49,6 +49,29 @@ __ctx.stage.safe           // 界面占掉的上下边（像素）
 `fit` 为 `undefined` 就是漏了。取值见 `src/steps/util.js` 的 `FIT_*`，
 或直接写 `{ r: 水平半径, h: 垂直半高 }`（毫米，相对镜头目标点）。
 
+`fit` 写了却仍然裁边，量一下这一步真正有多大 —— 拆开、离位陈列、装饰件外移都会让实际
+跨度远超「一盏灯」的尺寸：
+
+```js
+// 当前可见网格的世界包围盒（水平半径 / 竖向两端）
+(() => { let r = 0, lo = Infinity, hi = -Infinity;
+  __ctx.stage.scene.traverse((o) => { if (!o.isMesh || !o.visible || !o.geometry) return;
+    o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox;
+    for (let i = 0; i < 8; i++) { const v = new (window.__ctx.stage.camera.position.constructor)(
+      i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z);
+      o.localToWorld(v); r = Math.max(r, Math.hypot(v.x, v.y));
+      lo = Math.min(lo, v.z); hi = Math.max(hi, v.z); } });
+  return { r, lo, hi }; })()
+```
+
+还有一种：算出来的距离被**手动缩放的上限**夹住了。`setRecommended()` 会把 `maxDistance`
+抬到至少容得下这一步，绕开它直接写 `controls.maxDistance` 就会复发。
+
+```js
+__ctx.stage.controls.maxDistance                  // 应 ≥ 相机到目标的距离
+__ctx.stage.camera.position.distanceTo(__ctx.stage.controls.target)
+```
+
 ### 底部的字和控件叠在一起
 
 坞的高度没被量到。界面层每次开关覆盖层都会重算并写入 `--dock-h`：
@@ -57,7 +80,9 @@ __ctx.stage.safe           // 界面占掉的上下边（像素）
 getComputedStyle(document.documentElement).getPropertyValue('--dock-h')
 ```
 
-是 `0px` 而底部确实有一排控件，说明那段 HTML 的根节点没有 `.dock` 类 —— `hud.dock()` 生成的结构不要在 `onMount` 里替换掉。
+是 `0px` 而底部确实有一排控件，分两种：那段 HTML 的根节点没有 `.dock` 类（`hud.dock()` 生成的结构不要在
+`onMount` 里替换掉）；或者有人把 `#syncSafe()` 里写 `--dock-h` 那一句挪到了「安全区没变就早退」之后 ——
+坞高与安全区是两件事，坞比底部那一摞矮时安全区根本不变，早退就再也写不到这个变量。
 
 ### 自己写脚本截图，机位怎么设都不生效
 
@@ -127,6 +152,66 @@ __ctx.mach.job.sweptLo     // 这一趟刃尖扫过的区间（进给轴，世�
 __ctx.mach.job.sweptHi
 __ctx.lantern.parts.get('LB-B1').carved   // { tag, lanes: [{ lane, swept }] } 走完的那几趟
 ```
+
+### 刀插在木头里
+
+探面探空了。刀的高度是每帧探出来的：沿刀身取五处，各从上方沿进刀方向打射线，取最高的面，
+把刃尖放上去。`carve` 漏了、构件当时还没摆到位（`detach()` 排在 `begin()` 之后）、
+或者传的是一件隐藏着的备份件，`rideMeshes` 就是空的 —— 刀直接坐在走刀线上，
+而走刀线是**走到底**时刃尖的位置，不是料的表面。
+
+```js
+__ctx.mach.job.rideMeshes   // 探面的目标；空的就是没量到
+__ctx.mach.job.rideLast     // 刃尖此刻高出走刀线多少毫米
+__ctx.mach.job.lift         // 开工时那个面有多高（探面结果的上限）
+```
+
+反过来，**刀停在面上不往里走**多半不是毛病：口子比刀窄（透眼 4 mm，与凿身同宽）时，
+刚体本来就进不去。约定见 [DESIGN.md §4](../DESIGN.md#4-教学件与刀具让动作和结果对得上)。
+
+### 拖着转的时候，木头（或压在灯笼纸上的棂条）在沸腾
+
+程序化花纹的走样。有人把 `materials.js` 的 `fbmF()` 换回了不带足迹的 `fbm()`，
+或者把足迹参数（`fw`）算错了 —— 比如拿世界坐标而不是构件自己的坐标去求导。
+
+判据是「同一处像素在相邻两帧之间来回跳」，而不是「整片在变」：镜头转起来，
+花纹本来就该跟着木头一起挪。分辨的办法是把木料换成平色跑一遍，量出「合法的明暗变化」有多少：
+
+```js
+// 控制台里把某一根换成同色平材质，两个机位各渲一帧比一比
+const m = __ctx.lantern.parts.get('PL-01').material;
+__ctx.lantern.parts.get('PL-01').mesh.material = new m.constructor({ color: m.color, roughness: m.roughness });
+```
+
+MSAA 与提高像素比都救不了这一类 —— 前者只管几何边缘，后者只是多采几次同一片噪声。
+理由见 [DESIGN.md §1](../DESIGN.md#1-几何算出来的不是建出来的)。
+
+### 木纹在木头里流动 / 拖着走的时候花纹变了
+
+有人把木料着色器的取样点改回了世界坐标（`vGrain` 应当取 `position`，即构件自己的坐标系）。
+纹理必须长在木头上：料被拖动、离位陈列、爆炸拆开都不能让花纹动，
+转过来摆的料也不能变成横纹。十三根各有各的花靠 `seed` 与 `tone`，不靠位置，
+见 [DESIGN.md §1](../DESIGN.md#1-几何算出来的不是建出来的)。
+
+### 明明什么都停了，画面却在轻微颤动
+
+多半是有人拿掉了 `stage.js` 里 `setSafeArea()` 的 `REFRAME_MIN` 门槛。
+字幕一句一行、两行来回换，安全区就差一行的高度；每变一次就重算一次机位的话，
+相机与主光的目标点每隔几秒挪一点，阴影贴图整体位移，灯笼纸上棂条的影子于是持续爬动。
+
+```js
+__ctx.stage.setRecommended = new Proxy(__ctx.stage.setRecommended, {  // 数一数它被叫了几次
+  apply(f, t, a) { console.log('reframe', __ctx.stage.safe); return f.apply(t, a); } });
+```
+
+静置几秒之后，相机每帧位移应当是 0。取景门槛见 [DESIGN.md §6](../DESIGN.md#6-取景算出来的不是摆出来的)。
+
+### 翻回上一步，画面空了
+
+那一步的 `enter()` 接着上一步的现场写，自己没把台子摆全。每一步都必须能从任何一步进来 ——
+顶上的格子可以跳到任何一处，箭头也能往回翻。补齐 `attachAll()` / `showOnly()` / `allFinished()` /
+`showPanels` / `showDecor` / 灯芯这几项，见 [ARCHITECTURE.md](ARCHITECTURE.md#一步长什么样)。
+`npm run smoke` 会倒着走一遍十八步，并数每一步画面里有几件东西。
 
 ### 教学件的凹槽看起来是凸的
 

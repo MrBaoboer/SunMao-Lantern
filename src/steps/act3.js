@@ -45,7 +45,7 @@ export function act3(ctx) {
       title: '十三根木条',
       mood: 'studio',
       bgm: 'BGM_B_CRAFT',
-      cam: { az: -84, el: 38, dist: 560, target: [0, -48, 96], snap: true, fit: { r: 210, h: 92 } },
+      cam: { az: -84, el: 38, dist: 560, target: [0, -48, 96], fit: { r: 210, h: 92 } },
       narration: `木料都在这儿了，截面都是方的。
 九根短料，用来做上下两个框；四根长料，是灯笼的柱子。
 （气口）
@@ -104,7 +104,7 @@ export function act3(ctx) {
       mood: 'craft',
       // 槽是自 −Y 侧面向里开的盲槽 —— 相机站到 −Y 这一侧，
       // 凿出来的缺口才朝着用户，而不是背过去
-      cam: { az: -64, el: 26, dist: 150, target: AIM_BENCH, snap: true, fit: FIT_BENCH },
+      cam: { az: -64, el: 26, dist: 150, target: AIM_BENCH, fit: FIT_BENCH },
       cue: { ico: 'drag', text: '<em>拖动凿子</em>，沿着槽来回走' },
       narration: `先从两根顺枨开始。枨，chéng，就是框子上的横木。
 在它的顶面凿两条平行的槽。
@@ -254,7 +254,7 @@ export function act3(ctx) {
       id: 'C3', phase: 2,
       title: '落下去，成「工」字',
       mood: 'craft',
-      cam: { az: 46, el: 34, dist: 280, target: [0, 0, C.LOWER_Z1], snap: true, fit: { r: 76, h: 52 } },
+      cam: { az: 46, el: 34, dist: 280, target: [0, 0, C.LOWER_Z1], fit: { r: 76, h: 52 } },
       cue: { ico: 'pull', text: '<em>向下拖动</em>中梁，两端一起落' },
       narration: `刚才练的夹榫，现在用真的来一次。
 中梁从上往下落，两端的叉口同时咬住两根顺枨。
@@ -299,7 +299,7 @@ export function act3(ctx) {
       id: 'C4', phase: 2,
       title: '切榫头，凿透眼',
       mood: 'craft',
-      cam: { az: 30, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: { r: 80, h: 54 } },
+      cam: { az: 30, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], fit: { r: 80, h: 54 } },
       cue: { ico: 'drag', text: '<em>拖动锯</em>，沿榫肩线切下去' },
       narration: `四个端头，各锯出一个榫头。
 榫头不开在正中间，要往里偏一点。
@@ -316,6 +316,9 @@ export function act3(ctx) {
       },
       async enter(c, engine) {
         junk.clear();
+        // 先归位再取用：从 C2 跳过来时这三根还摆在工作台上，
+        // 而 applyAssembly 不管离位的构件 —— 少这一句，底盘就散在台面上
+        c.lantern.attachAll();
         only(c, ['LB-A1', 'LB-A2', 'LB-C1']);
         for (const id of ['LB-A1', 'LB-A2']) {
           c.lantern.setOps(id, new Set([OP.BEAM_SLOT]));
@@ -498,7 +501,7 @@ export function act3(ctx) {
       id: 'C5', phase: 2,
       title: '底盘做好了',
       mood: 'craft',
-      cam: { az: 40, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: FIT_RING },
+      cam: { az: 40, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], fit: FIT_RING },
       cue: { ico: 'drag', text: '<em>拖动横枨</em>，套住两个榫头' },
       narration: `两根横枨套上去。
 一根横枨，两个孔 —— 要同时对准两个榫头，推到底。
@@ -550,7 +553,7 @@ export function act3(ctx) {
       id: 'C6', phase: 2,
       title: '上面的框：中间一刀都不动',
       mood: 'craft',
-      cam: { az: 34, el: 26, dist: 340, target: [0, 0, 96], snap: true, fit: { r: 100, h: 104 } },
+      cam: { az: 34, el: 26, dist: 340, target: [0, 0, 96], fit: { r: 100, h: 104 } },
       cps: 3.8,
       narration: `上面的框，做法几乎照搬底盘 —— 但有一处，照搬就错了。
 底盘中间架着中梁，所以那两根顺枨要开槽。
@@ -644,7 +647,7 @@ export function act3(ctx) {
       id: 'C7', phase: 2,
       title: '柱子：削掉四分之三',
       mood: 'craft',
-      cam: { az: 50, el: 12, dist: 300, target: [0, 0, 96], snap: true, fit: { r: 62, h: 104 } },
+      cam: { az: 50, el: 12, dist: 300, target: [0, 0, 96], fit: { r: 62, h: 104 } },
       cue: { ico: 'drag', text: '<em>拖动凿子</em>，一层一层削到底' },
       narration: `最后四根长料，做柱子。
 柱子要把上下两个框连起来，还得让它们上下分不开。
@@ -736,7 +739,7 @@ export function act3(ctx) {
       id: 'C8', phase: 2,
       title: '四柱推入，合龙',
       mood: 'craft',
-      cam: { az: 42, el: 26, dist: 540, target: [0, 0, 96], snap: true, fit: { r: 132, h: 108 } },
+      cam: { az: 42, el: 26, dist: 540, target: [0, 0, 96], fit: { r: 132, h: 108 } },
       cue: { ico: 'drag', text: '沿着箭头，<em>横着推</em>进去' },
       narration: `注意方向 —— 柱子不能从上往下放。
 柱身比细颈粗，竖着落下去，只会架在框上。
@@ -779,7 +782,9 @@ export function act3(ctx) {
         });
         c.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: () => c.drag.autoSeatAll() }]);
       },
-      exit(c) { junk.clear(); c.guides.clear(); },
+      // 合龙那一下整盏灯会沉一下再弹回来。补间被翻页掐断时它停在半路，
+      // 往后每一步的灯笼都会矮那么一点 —— 收尾时无条件归零
+      exit(c) { junk.clear(); c.guides.clear(); c.lantern.root.position.z = 0; },
     },
   ];
 }
