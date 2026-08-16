@@ -13,7 +13,7 @@
 
 约 8 分钟 · 不用注册 · 不用下载 · 手机也能玩
 
-[这是什么](#这是什么) · [自己做一遍](#自己做一遍) · [怎么操作](#怎么操作) · [隐私](#隐私) · [跑起来](#跑起来) · [许可](#许可)
+[这是什么](#这是什么) · [自己做一遍](#自己做一遍) · [怎么操作](#怎么操作) · [隐私](#隐私) · [许可](#许可)
 
 </div>
 
@@ -101,7 +101,7 @@
 
 ---
 
-## 跑起来
+## 开发与参与
 
 无框架、无后端，运行时只有 [three.js](https://threejs.org) 一个依赖，Vite 打包，产物是一堆静态文件。
 
@@ -110,22 +110,12 @@ npm install
 npm run dev
 ```
 
-打开 <http://localhost:5173>。需要支持 WebGL 2 的浏览器。
-构建、测试、部署与完整环境要求见[开发与维护](docs/DEVELOPMENT.md)。
+打开 <http://localhost:5173>，需要支持 WebGL 2 的浏览器。
 
-## 文档
+命令、环境、项目结构与部署见[**开发与维护**](docs/DEVELOPMENT.md)，其余技术文档都从那里索引。
 
-- [开发与维护](docs/DEVELOPMENT.md) —— 环境、命令、实现要点、项目结构与部署
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) —— 模块边界、数据流、加一步要改哪几个文件
-- [DESIGN.md](DESIGN.md) —— 几何、主线与三维交互的实现说明
-- [UI.md](UI.md) —— 界面设计语言：主题、令牌、组件、文案规则
-- [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) —— 跑不起来、画面不对、测试挂了怎么查
-- [旁白解说稿.md](旁白解说稿.md) —— 全片旁白，可直接交给配音
-
-## 参与
-
-修 bug、改拗口的文案、补无障碍与浏览器兼容 —— 这几类最有用，直接提 PR。
-要加依赖、换框架、加新模块，先开个 Issue 聊。约定与本地要跑哪几条检查见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+想动手改的话，修 bug、改拗口的文案、补无障碍与浏览器兼容这几类最有用，直接提 PR；
+要加依赖、换框架、加新模块，先开个 Issue 聊。约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 发现安全问题走 [SECURITY.md](SECURITY.md) 的私密通道，不要开公开 Issue。参与讨论请遵守[行为准则](CODE_OF_CONDUCT.md)。
 
@@ -133,6 +123,6 @@ npm run dev
 
 双轨授权：代码 [AGPL-3.0](LICENSE)，内容与素材 [CC BY-NC-SA 4.0](legal/CC-BY-NC-SA-4.0.txt) ——
 **能跑的东西归 AGPL，念出来、写出来、画出来的东西归 CC。**
-两层的具体界线、AGPL 在这里怎么生效、什么时候需要商业授权，见 [COMMERCIAL.md](COMMERCIAL.md)。
+界线、AGPL 在这里怎么生效、什么时候需要商业授权，见 [COMMERCIAL.md](COMMERCIAL.md)。
 
 Copyright © 2026 MrBaoboer
