@@ -92,17 +92,3 @@ export function cancelAll() {
   for (const w of waits) clearTimeout(w.id);
   waits.clear();
 }
-
-/** 数值弹簧（用于拖拽阻尼与回弹） */
-export class Spring {
-  constructor(value = 0, { stiffness = 170, damping = 22 } = {}) {
-    this.value = value; this.target = value; this.v = 0;
-    this.k = stiffness; this.d = damping;
-  }
-  step(dt) {
-    const a = this.k * (this.target - this.value) - this.d * this.v;
-    this.v += a * dt;
-    this.value += this.v * dt;
-    return this.value;
-  }
-}

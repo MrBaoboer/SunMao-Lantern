@@ -82,7 +82,7 @@ export class Lantern {
       const home = homeOf(id);
       const mat = makeWoodMaterial({
         grainAxis: grainAxisOf(solid),
-        center: home,
+        seed: home,                    // 基准位只当纹理种子用，构件搬走了纹也不跟着跑
         tone: ((i * 0.137) % 1) - 0.5, // 每根随机色差，避免 13 根纹理完全一致
       });
       const mesh = new THREE.Mesh(geo, mat);
@@ -115,7 +115,7 @@ export class Lantern {
       g.rotation.z = pl.rotZ;
       const geo = buildLatticeGeometry(this.state.patternId);
       const mat = makeWoodMaterial({
-        grainAxis: 0, center: new THREE.Vector3(...pl.pos), tone: 0.32,
+        grainAxis: 0, seed: new THREE.Vector3(...pl.pos), tone: 0.32,
       });
       mat.color.setHex(0xc09456); // 格心用浅一档的榉木（§2 V-14）
       const mesh = new THREE.Mesh(geo, mat);
@@ -511,15 +511,26 @@ export class Lantern {
     for (const p of this.parts.values()) setHighlight(p.material, 0x000000, 0);
   }
 
-  /** 半透剖切：外壳淡出至 25% 不透明度（§7 剖切的降级方案，此处作为常态实现） */
-  setSection(partIds, on) {
+  /**
+   * 半透剖切：外壳淡出至 25% 不透明度（§7 剖切的降级方案，此处作为常态实现）。
+   *
+   * @param {string[]} partIds 剖开来看的那几件 —— 留实，并暗两级（剖面色）
+   * @param {boolean}  on
+   * @param {string[]} [keepIds] 留实但**不**当剖面的那几件。
+   *   D2 要看的是「板斜着顶进上面那道深槽」：上枨框剖开，可正在装的那片格心
+   *   若跟着淡到 25%，这一步演的那件事本身就看不见了 —— 剖切是为了让开视线，
+   *   不是把主角一起抹掉。
+   */
+  setSection(partIds, on, keepIds) {
     const set = new Set(partIds ?? []);
+    const keep = new Set(keepIds ?? []);
     for (const p of this.parts.values()) {
       const s = on && set.has(p.id);
+      const ghost = on && !s && !keep.has(p.id);
       setSectionMode(p.material, s ? 1 : 0);
-      p.material.transparent = on && !s;
-      p.material.opacity = on && !s ? 0.25 : 1;
-      p.material.depthWrite = !(on && !s);
+      p.material.transparent = ghost;
+      p.material.opacity = ghost ? 0.25 : 1;
+      p.material.depthWrite = !ghost;
       p.material.needsUpdate = true;
     }
   }

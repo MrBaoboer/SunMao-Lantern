@@ -205,6 +205,24 @@ export function buildLatticeGeometry(patternId) {
     }
   }
 
+  /*
+   * 渲染用的让位。
+   *
+   * 几何上格心是**严丝合缝**的：主体宽 8a 正好抵住两根立柱的内侧面，板厚 a/3
+   * 正好填满 a/3 的装板槽（verify.js 的 V-21 / V-22 钉着这两条，[CLASH] 也要求
+   * 重叠体积为 0）。可两个面一旦落在同一个平面上，深度缓冲里就是同一个值 ——
+   * 谁盖住谁由浮点末位决定，镜头一动就翻来翻去。表现出来正是「板边与木条的接缝
+   * 一路明暗闪烁」，从格心四周一直闪到板底。
+   *
+   * 所以画出来的那一片比算出来的那一片各边缩 0.3 mm。这一档远大于深度缓冲的
+   * 分辨力（近裁面 10 mm 时，即使退到一千七之外也只有约 0.02 mm），
+   * 又远小于一个像素（常规机位约 0.36 mm/px），画面上看不出来。
+   * 改的只是渲染网格 —— core/parts.js 那份用于验算的实体一毫米没动。
+   */
+  const GAP = 0.3;
+  const sx = (W - GAP * 2) / W, sy = (T - GAP * 2) / T, sz = (H - GAP * 2) / H;
+  for (let i = 0; i < P.length; i += 3) { P[i] *= sx; P[i + 1] *= sy; P[i + 2] *= sz; }
+
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(P), 3));
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(N), 3));
