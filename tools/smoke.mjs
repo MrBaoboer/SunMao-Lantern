@@ -35,9 +35,21 @@ const SHOT_DIR = path.resolve('.shots/smoke');
 const PATIENCE = process.env.CI ? 4 : 1;
 const tmo = (ms) => ms * PATIENCE;
 
+/*
+ * 手机那一档要连**画质分档**一起验到。
+ *
+ * `detectTier()` 先问 `navigator.userAgentData.mobile`，而 Playwright 的 `isMobile`
+ * 只改视口与触摸，不动 UA —— 于是 userAgentData.mobile 是 false，判出来是 high 档：
+ * 手机画幅那一遍照样开着 bloom、阴影与 4× MSAA，走的是 composer 那条路，
+ * 和真机上跑的完全不是同一份管线。带上真的移动 UA，这一遍才真的是低配档
+ * （bloom 关、阴影关、MSAA 0、renderer.render 直出）。
+ */
+const PHONE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36'
+  + ' (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
+
 const VIEWPORTS = [
   { name: 'desktop', width: 1440, height: 900, isMobile: false },
-  { name: 'mobile', width: 390, height: 844, isMobile: true },
+  { name: 'mobile', width: 390, height: 844, isMobile: true, userAgent: PHONE_UA, tier: 'low' },
 ];
 
 /** 允许出现的控制台噪音：软件渲染与无声卡环境的既有告警，与页面正确性无关 */
@@ -91,6 +103,7 @@ async function walk(vp) {
     viewport: { width: vp.width, height: vp.height },
     isMobile: vp.isMobile,
     hasTouch: vp.isMobile,
+    ...(vp.userAgent ? { userAgent: vp.userAgent } : {}),
   });
   const page = await ctx.newPage();
 
@@ -126,6 +139,19 @@ async function walk(vp) {
   const check = await page.evaluate(() => window.__verifyReport ?? null);
   if (check && check.failed) note(vp.name, `几何验算未通过：${check.failed} 项`);
 
+  // 这一遍真的落在声明的那一档上吗 —— 低配档的整条渲染路径都不一样
+  if (vp.tier) {
+    const got = await page.evaluate(() => ({
+      tier: window.__ctx.tier,
+      bloom: window.__ctx.stage.bloomEnabled,
+      shadow: window.__ctx.stage.renderer.shadowMap.enabled,
+    }));
+    if (got.tier !== vp.tier) note(vp.name, `画质档应为 ${vp.tier}，实际 ${got.tier}`);
+    if (vp.tier === 'low' && (got.bloom || got.shadow)) {
+      note(vp.name, `低配档不该开后处理与阴影：bloom=${got.bloom} shadow=${got.shadow}`);
+    }
+  }
+
   await page.click('#cv-go');
   // 「开始做灯」到第一步之间有几段固定等待（封面退场 480 ms + 引导页）——
   // 这几处也得过 tmo()，CI 上慢一个量级时落空会让 engine.go(0) 根本没执行
@@ -145,8 +171,8 @@ async function walk(vp) {
    *
    * 后处理这条管线另有专门的一条断言（见下面的 composerPainted），
    * 只渲染几帧，不必让整条主线都陪着。
-   * 顺带一提：手机画幅本来就走低配档（detectTier 把移动设备判成 low），
-   * 产品上就是不开 bloom 的 —— 那一遍这样跑反而更贴近真实。
+   * 手机那一遍本来就在低配档上（VIEWPORTS 带了移动 UA，上面刚断言过），
+   * 产品上就是不开 bloom 的 —— 这一句对它是空操作。
    */
   await page.evaluate(() => { window.__ctx.stage.bloomEnabled = false; });
 
@@ -195,10 +221,16 @@ async function walk(vp) {
     await page.waitForFunction(() => window.__engine && !window.__engine.busy,
       null, { timeout: tmo(25000) })
       .catch(() => note(vp.name, '这一步二十五秒内没有铺开'));
+    // 翻页不再跳切，相机要绕过去 —— 铺开之后再等它走到位，
+    // 否则「画面里有几件东西」量的是转场中途的那一帧
+    await page.waitForFunction(() => window.__ctx?.stage?.camSettled !== false,
+      null, { timeout: tmo(20000) })
+      .catch(() => note(vp.name, '这一步的转场二十秒内没有走完'));
     await page.waitForTimeout(tmo(ms));
   };
 
-  for (let i = 0; i < total; i++) {
+  /** 走到第 i 步，把这一步该成立的都验一遍 */
+  const checkStep = async (i, tag = '') => {
     const before = failures.length;
     await page.evaluate((n) => window.__engine.go(n), i);
     await settle();
@@ -216,20 +248,50 @@ async function walk(vp) {
         const V3 = c.stage.camera.position.constructor;      // THREE.Vector3
         const edge = new V3(0, 0, -1).applyQuaternion(c.mach.tool.quaternion).normalize();
         const attack = c.mach.job.faceNormal.clone().normalize();
-        tool = { kind: c.mach.tool.userData.kind, dot: edge.dot(attack) };
+        // 探面的目标：空的话刀就直接坐在走刀线上（= 埋进料里），见 DESIGN.md §4
+        tool = {
+          kind: c.mach.tool.userData.kind, dot: edge.dot(attack),
+          rides: c.mach.job.rideMeshes?.length ?? 0,
+        };
       }
-      return { id: e.current?.id, title, cam, tool };
+      /*
+       * 画面里到底有没有东西。
+       *
+       * 「不是一块纯色」拦不住这一类：背景本来就是一圈渐变，把整盏灯藏干净之后
+       * 亮度标准差仍有 4 上下，照样过线。所以直接数：可见、且投影落在画面里的网格。
+       */
+      const V3 = c.stage.camera.position.constructor;
+      const v = new V3();
+      let onScreen = 0;
+      // 相机的视图矩阵是渲染那一刻才更新的。翻页刚跳完机位、这一帧还没画出来时，
+      // project() 会拿上一步的视图矩阵去投 —— 投出来的坐标能到几十，一件都不在画幅里
+      c.stage.camera.updateMatrixWorld(true);
+      c.stage.scene.traverse((o) => {
+        if (!o.isMesh || o === c.stage.backdrop || o === c.stage.ground) return;
+        for (let p = o; p; p = p.parent) if (!p.visible) return;
+        o.getWorldPosition(v).project(c.stage.camera);
+        if (Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 && v.z < 1) onScreen++;
+      });
+      return { id: e.current?.id, title, cam, tool, onScreen };
     });
-    if (!state.id) note(vp.name, `第 ${i + 1} 步没有进入`);
-    if (!state.title) note(vp.name, `第 ${i + 1} 步没有标题`);
-    if (!(state.cam > 0)) note(vp.name, `第 ${i + 1} 步相机距离异常：${state.cam}`);
+    if (!state.id) note(vp.name, `${tag}第 ${i + 1} 步没有进入`);
+    if (!state.title) note(vp.name, `${tag}第 ${i + 1} 步没有标题`);
+    if (!(state.cam > 0)) note(vp.name, `${tag}第 ${i + 1} 步相机距离异常：${state.cam}`);
     if (state.tool && state.tool.dot < 0.99) {
-      note(vp.name, `第 ${i + 1} 步 ${state.tool.kind} 刃口没有对着工件（dot=${state.tool.dot.toFixed(3)}）`);
+      note(vp.name, `${tag}第 ${i + 1} 步 ${state.tool.kind} 刃口没有对着工件（dot=${state.tool.dot.toFixed(3)}）`);
+    }
+    if (state.tool && !state.tool.rides) {
+      note(vp.name, `${tag}第 ${i + 1} 步 ${state.tool.kind} 没有可探面的工件 —— 刀会埋进料里`);
+    }
+
+    // 最少的一步（B1–B3 两块教学件）也有两件；一件都没有 = 这一步没把台子摆起来
+    if (state.onScreen < 2) {
+      note(vp.name, `${tag}第 ${i + 1} 步画面里只有 ${state.onScreen} 件东西`);
     }
 
     const paint = await framePainted();
     if (!(paint.sd > 3)) {
-      note(vp.name, `第 ${i + 1} 步画面是一块纯色（亮度标准差 ${paint.sd.toFixed(2)}，均值 ${paint.mean.toFixed(0)}）`);
+      note(vp.name, `${tag}第 ${i + 1} 步画面是一块纯色（亮度标准差 ${paint.sd.toFixed(2)}，均值 ${paint.mean.toFixed(0)}）`);
     }
 
     /*
@@ -242,8 +304,21 @@ async function walk(vp) {
     if (WANT_SHOTS || failures.length > before) {
       const n = String(i + 1).padStart(2, '0');
       fs.mkdirSync(SHOT_DIR, { recursive: true });
-      await page.screenshot({ path: path.join(SHOT_DIR, `${vp.name}-${n}-${state.id}.png`) });
+      await page.screenshot({ path: path.join(SHOT_DIR, `${vp.name}-${tag ? 'b' : ''}${n}-${state.id}.png`) });
     }
+  };
+
+  for (let i = 0; i < total; i++) await checkStep(i);
+
+  /*
+   * 倒着再走一遍（桌面画幅一遍就够）。
+   *
+   * 正着走时每一步都由上一步替它铺好了台子，于是「这一步自己没把台子摆全」
+   * 这一类毛病一条都看不见 —— A2 从 B1 翻回来整盏灯消失，正着走十八步全绿。
+   * 倒着走一遍，每一步都得自己成立。
+   */
+  if (!vp.isMobile) {
+    for (let i = total - 1; i >= 0; i--) await checkStep(i, '倒着走 · ');
   }
 
   /*
@@ -348,6 +423,41 @@ async function walk(vp) {
       ['UB-A1', 'UB-B1'].map((id) => window.__ctx.lantern.parts.get(id).ops.size));
     if (upperOps.some((n) => n < 4)) note(vp.name, `C6 之后上枨框工序数偏少：${upperOps.join(' / ')}`);
 
+    /*
+     * 需要动手的一步：一下「下一步」做一段，做完最后一段才翻页。
+     * 三条一起钉 —— 只验「装完了」不验「一下只装一件」，一口气全做完那版照样是绿的。
+     *
+     * 必须从别的步骤进来：`goToStep` 对当前所在的这一步是空操作，
+     * 接着上一段直接再来一次，验的会是一个已经装完的步骤。
+     */
+    await goStep('C5');
+    const navNext = () => page.evaluate(() => document.getElementById('nav-next').click());
+    const rested = () => page.waitForFunction(
+      () => !window.__engine.helping && !window.__engine.busy, null, { timeout: tmo(30000) })
+      .catch(() => note(vp.name, 'C5：按下「下一步」之后这一段没有落地'));
+    const nav = async () => {
+      await navNext(); await rested(); await page.waitForTimeout(tmo(220));
+      return page.evaluate(() => ({
+        id: window.__engine.current?.id,
+        left: window.__ctx.drag.session?.pending?.size ?? 0,
+        done: window.__engine.taskDone,
+      }));
+    };
+    const pend = await page.evaluate(() => window.__ctx.drag.session?.pending?.size ?? 0);
+    if (pend !== 2) note(vp.name, `C5 应有 2 件待装，实际 ${pend} —— 下面三条不作数`);
+    const one = await nav();
+    if (one.id !== 'C5' || one.left !== 1) {
+      note(vp.name, `C5：第一下应只装一件、且不翻页，实际停在 ${one.id}、还剩 ${one.left} 件`);
+    }
+    const two = await nav();
+    if (two.id !== 'C5' || two.left !== 0 || !two.done) {
+      note(vp.name, `C5：第二下应装完另一件、仍不翻页，实际停在 ${two.id}、还剩 ${two.left} 件`);
+    }
+    await navNext();
+    await settle(220);
+    const landed = await page.evaluate(() => window.__engine.current?.id);
+    if (landed !== 'C6') note(vp.name, `C5 装完再按「下一步」应到 C6，实际 ${landed}`);
+
     // 快速翻页：上一步的僵尸回调不能落到下一步上
     await page.evaluate(() => { window.__engine.go(17); window.__engine.go(2); window.__engine.go(9); });
     await settle(400);
@@ -383,34 +493,51 @@ async function walk(vp) {
     await page.evaluate(() => document.getElementById('btn-back')?.click());
     await page.waitForTimeout(900);
 
-    // M3 海报：画面区域必须真的截到灯笼，不能是空白
-    await openDoor('M3');
-    await page.click('.wish >> nth=0', { timeout: tmo(5000) }).catch(() => note(vp.name, 'M3 没有出现愿望列表'));
-    await page.click('#go', { timeout: tmo(3000) }).catch(() => {});
-    // 落笔动画点「写快一点」跳过逐字，低帧率下才等得完
-    await page.waitForTimeout(800);
-    await page.evaluate(() => {
-      document.querySelectorAll('#overlay button').forEach((b) => { if (b.textContent.includes('写快一点')) b.click(); });
-    });
-    await page.waitForSelector('img.poster', { timeout: tmo(60000) })
-      .catch(() => note(vp.name, 'M3 海报没有生成'));
-    const posterOk = await page.evaluate(async () => {
-      const img = document.querySelector('img.poster');
-      if (!img) return false;
-      await img.decode();
-      const cv = document.createElement('canvas');
-      cv.width = 64; cv.height = 64;
-      const g = cv.getContext('2d');
-      // 采样海报中部（灯笼截图的落点）：空白只剩纯渐变，亮度方差趋近 0
-      g.drawImage(img, 0, img.naturalHeight * 0.22, img.naturalWidth, img.naturalHeight * 0.4, 0, 0, 64, 64);
-      const d = g.getImageData(0, 0, 64, 64).data;
-      let sum = 0, sq = 0;
-      const n = d.length / 4;
-      for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 3; sum += l; sq += l * l; }
-      const mean = sum / n;
-      return Math.sqrt(sq / n - mean * mean) > 6;
-    }).catch(() => false);
-    if (!posterOk) note(vp.name, 'M3 海报的画面区域是空白（截图前没有渲染）');
+    /*
+     * M3 海报：画面区域必须真的截到灯笼，不能是空白。
+     *
+     * 这一段的每一下都是「先 waitForSelector 断言它在，再进 evaluate 里点」——
+     * 与本文件其余各处一致，不用 `page.click()`。后者要等元素「稳住」才肯落点，
+     * 而卷有 480 ms 入场、卡片还有悬停位移；两种画幅并行 + 软件渲染时帧率只有个位数，
+     * 稳定判定动辄好几秒。原先「选愿望 5 秒 / 点写上去 3 秒且失败被吞掉」就卡在这里：
+     * 报出来的是下游的「海报没有生成 / 海报空白」两条，指向完全错误的地方。
+     */
+    if (await openDoor('M3')) {
+      const wishes = await page.waitForSelector('.wish', { timeout: tmo(10000) }).catch(() => null);
+      if (!wishes) note(vp.name, 'M3 没有出现愿望列表');
+      await page.evaluate(() => document.querySelector('.wish')?.click());
+
+      // 「写上去」在选中愿望之前是禁用的
+      const go = await page.waitForSelector('#go:not([disabled])', { timeout: tmo(10000) }).catch(() => null);
+      if (!go) note(vp.name, 'M3 选了愿望之后「写上去」仍然不可点');
+      await page.evaluate(() => document.querySelector('#go')?.click());
+
+      // 落笔那一页认它自己的画布；点「写快一点」跳过逐字，低帧率下才等得完
+      const pad = await page.waitForSelector('#ink', { timeout: tmo(15000) }).catch(() => null);
+      if (!pad) note(vp.name, 'M3 没有进入落笔那一页');
+      await page.evaluate(() => {
+        document.querySelectorAll('#overlay button').forEach((b) => { if (b.textContent.includes('写快一点')) b.click(); });
+      });
+      await page.waitForSelector('img.poster', { timeout: tmo(60000) })
+        .catch(() => note(vp.name, 'M3 海报没有生成'));
+      const posterOk = await page.evaluate(async () => {
+        const img = document.querySelector('img.poster');
+        if (!img) return false;
+        await img.decode();
+        const cv = document.createElement('canvas');
+        cv.width = 64; cv.height = 64;
+        const g = cv.getContext('2d');
+        // 采样海报中部（灯笼截图的落点）：空白只剩纯渐变，亮度方差趋近 0
+        g.drawImage(img, 0, img.naturalHeight * 0.22, img.naturalWidth, img.naturalHeight * 0.4, 0, 0, 64, 64);
+        const d = g.getImageData(0, 0, 64, 64).data;
+        let sum = 0, sq = 0;
+        const n = d.length / 4;
+        for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 3; sum += l; sq += l * l; }
+        const mean = sum / n;
+        return Math.sqrt(sq / n - mean * mean) > 6;
+      }).catch(() => false);
+      if (!posterOk) note(vp.name, 'M3 海报的画面区域是空白（截图前没有渲染）');
+    }
     await page.keyboard.press('Escape');
     await page.waitForTimeout(tmo(900));
 

@@ -45,7 +45,10 @@ export function act3(ctx) {
       title: '十三根木条',
       mood: 'studio',
       bgm: 'BGM_B_CRAFT',
-      cam: { az: -84, el: 38, dist: 560, target: [0, -48, 96], snap: true, fit: { r: 210, h: 92 } },
+      // 料沿 X 铺开，方位角必须贴近 ±90°，否则十三根会挤成斜斜的一片、数不出九加四。
+      // 站 −Y 这一侧是跟着下一步走的：C2 要看见凿出来的口子，只能站 −Y（见那一步）。
+      // 上一步 B3 因此也挪到 −20 搭桥，进场只需绕六十几度。
+      cam: { az: -84, el: 38, dist: 560, target: [0, -48, 96], fit: { r: 210, h: 92 } },
       narration: `木料都在这儿了，截面都是方的。
 九根短料，用来做上下两个框；四根长料，是灯笼的柱子。
 （气口）
@@ -102,9 +105,15 @@ export function act3(ctx) {
       id: 'C2', phase: 2,
       title: '开槽，开叉',
       mood: 'craft',
-      // 槽是自 −Y 侧面向里开的盲槽 —— 相机站到 −Y 这一侧，
-      // 凿出来的缺口才朝着用户，而不是背过去
-      cam: { az: -64, el: 26, dist: 150, target: AIM_BENCH, snap: true, fit: FIT_BENCH },
+      /*
+       * 必须站在 −Y 这一侧。
+       *
+       * 槽是自 −Y 侧面向里开的盲槽：站这边，凿出来的口子、槽壁与槽底都朝着人；
+       * 站到 +Y 去（一度为了少绕几度试过）只剩顶面一条缝，等于什么也没凿。
+       * 后半段中梁那三道活在 +Y 那一头，机位因此要绕过去 —— 那是换了工件，
+       * 不是白绕，而且是走过去的，不跳切。
+       */
+      cam: { az: -64, el: 26, dist: 150, target: AIM_BENCH, fit: FIT_BENCH },
       cue: { ico: 'drag', text: '<em>拖动凿子</em>，沿着槽来回走' },
       narration: `先从两根顺枨开始。枨，chéng，就是框子上的横木。
 在它的顶面凿两条平行的槽。
@@ -254,7 +263,9 @@ export function act3(ctx) {
       id: 'C3', phase: 2,
       title: '落下去，成「工」字',
       mood: 'craft',
-      cam: { az: 46, el: 34, dist: 280, target: [0, 0, C.LOWER_Z1], snap: true, fit: { r: 76, h: 52 } },
+      // 24 而不是 44：往 C2 那边靠 —— 倒着从这儿翻回 C2（−64）少绕二十度，
+      // 而正着走时上一段刚好停在中梁的 34，只差十度
+      cam: { az: 24, el: 34, dist: 280, target: [0, 0, C.LOWER_Z1], fit: { r: 76, h: 52 } },
       cue: { ico: 'pull', text: '<em>向下拖动</em>中梁，两端一起落' },
       narration: `刚才练的夹榫，现在用真的来一次。
 中梁从上往下落，两端的叉口同时咬住两根顺枨。
@@ -299,7 +310,18 @@ export function act3(ctx) {
       id: 'C4', phase: 2,
       title: '切榫头，凿透眼',
       mood: 'craft',
-      cam: { az: 30, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: { r: 80, h: 54 } },
+      /*
+       * 直接站在第一锯那个角上。
+       *
+       * 原先这里声明的是「320 mm 外看整个底盘」，可 enter() 第一件事就是推近到
+       * 175 看那个角 —— 两个机位隔着一帧下达，读起来是进场之后又晃了一下。
+       * 这一步开场要看的本来就是榫肩线，那就一步到位。退回全景是后面那件事
+       * （四个柱窝要一眼看全），到时候再退，那一下是有理由的。
+       */
+      cam: {
+        az: 28, el: 26, dist: 175,
+        target: [C.RAIL_B_X, C.RAIL_A_Y, C.LOWER_Z1 + 4], fit: { r: 58, h: 36 },
+      },
       cue: { ico: 'drag', text: '<em>拖动锯</em>，沿榫肩线切下去' },
       narration: `四个端头，各锯出一个榫头。
 榫头不开在正中间，要往里偏一点。
@@ -316,6 +338,9 @@ export function act3(ctx) {
       },
       async enter(c, engine) {
         junk.clear();
+        // 先归位再取用：从 C2 跳过来时这三根还摆在工作台上，
+        // 而 applyAssembly 不管离位的构件 —— 少这一句，底盘就散在台面上
+        c.lantern.attachAll();
         only(c, ['LB-A1', 'LB-A2', 'LB-C1']);
         for (const id of ['LB-A1', 'LB-A2']) {
           c.lantern.setOps(id, new Set([OP.BEAM_SLOT]));
@@ -443,14 +468,8 @@ export function act3(ctx) {
         // 行程跨过顺枨中心线前后各一个模数 —— 拉得比料宽长一点是锯的常态，
         // 但不能像原先那样一路荡到料外两个身位，那会让开镜第一眼就是"锯悬在半空"
         //
-        // 机位得凑到这个角上。这一步是整章唯一一段沿用步骤级全景走刀的：
-        // 320 mm 外看整个 120 见方的底盘，锯掉的是 18×4×12 的一小条，
-        // 画面上几乎看不出少了什么。act3 其余六段加工都各自推近过。
-        c.stage.setRecommended({
-          az: 24, el: 26, dist: 175,
-          target: V(C.RAIL_B_X, C.RAIL_A_Y, C.LOWER_Z1 + 4),
-          fit: { r: 58, h: 36 },
-        });
+        // 机位不必在这儿再下达一次 —— 这一步声明的就是这个角（见上面的 cam）。
+        // 原先声明全景、进来立刻推近，等于每次进场都多晃一下。
         cut(c, {
           tool: 'saw',
           from: V(C.INNER_FACE, C.RAIL_A_Y - a(1), (C.LOWER_Z0 + C.LOWER_Z1) / 2),
@@ -498,7 +517,7 @@ export function act3(ctx) {
       id: 'C5', phase: 2,
       title: '底盘做好了',
       mood: 'craft',
-      cam: { az: 40, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], snap: true, fit: FIT_RING },
+      cam: { az: 40, el: 30, dist: 320, target: [0, 0, C.LOWER_Z1], fit: FIT_RING },
       cue: { ico: 'drag', text: '<em>拖动横枨</em>，套住两个榫头' },
       narration: `两根横枨套上去。
 一根横枨，两个孔 —— 要同时对准两个榫头，推到底。
@@ -550,7 +569,7 @@ export function act3(ctx) {
       id: 'C6', phase: 2,
       title: '上面的框：中间一刀都不动',
       mood: 'craft',
-      cam: { az: 34, el: 26, dist: 340, target: [0, 0, 96], snap: true, fit: { r: 100, h: 104 } },
+      cam: { az: 38, el: 26, dist: 340, target: [0, 0, 96], fit: { r: 100, h: 104 } },
       cps: 3.8,
       narration: `上面的框，做法几乎照搬底盘 —— 但有一处，照搬就错了。
 底盘中间架着中梁，所以那两根顺枨要开槽。
@@ -644,7 +663,7 @@ export function act3(ctx) {
       id: 'C7', phase: 2,
       title: '柱子：削掉四分之三',
       mood: 'craft',
-      cam: { az: 50, el: 12, dist: 300, target: [0, 0, 96], snap: true, fit: { r: 62, h: 104 } },
+      cam: { az: 44, el: 12, dist: 300, target: [0, 0, 96], fit: { r: 62, h: 104 } },
       cue: { ico: 'drag', text: '<em>拖动凿子</em>，一层一层削到底' },
       narration: `最后四根长料，做柱子。
 柱子要把上下两个框连起来，还得让它们上下分不开。
@@ -692,7 +711,8 @@ export function act3(ctx) {
           const zw = (seg[0] + seg[1]) / 2 - M.HEIGHT / 2 + 96;
           // 整根柱子都得在画面里。细颈只有 12 mm，凑近了看确实清楚，
           // 但"三段两颈"这件事一旦裁掉柱身就说不成立了。
-          c.stage.setRecommended({ az: 50, el: 10, dist: 300, target: V(0, 0, 96), fit: { r: 62, h: 104 } });
+          // 与这一步声明的机位完全一致 —— 只是把用户可能转走的画面拉回来，不产生新的运镜
+          c.stage.setRecommended({ az: 44, el: 12, dist: 300, target: V(0, 0, 96), fit: { r: 62, h: 104 } });
           marks.forEach((m, i) => { m.material.opacity = i === stage ? 0.5 : 0.16; });
           c.hud.setCue(`<em>拖动凿子</em>削第 <b>${stage + 1}</b> 处细颈 · 共 2 处 · 一层一层削到底`, 'drag');
           // 刀从柱子外侧横着走。走在轴线上会让刀身穿进柱子里，
@@ -736,7 +756,7 @@ export function act3(ctx) {
       id: 'C8', phase: 2,
       title: '四柱推入，合龙',
       mood: 'craft',
-      cam: { az: 42, el: 26, dist: 540, target: [0, 0, 96], snap: true, fit: { r: 132, h: 108 } },
+      cam: { az: 42, el: 26, dist: 540, target: [0, 0, 96], fit: { r: 132, h: 108 } },
       cue: { ico: 'drag', text: '沿着箭头，<em>横着推</em>进去' },
       narration: `注意方向 —— 柱子不能从上往下放。
 柱身比细颈粗，竖着落下去，只会架在框上。
@@ -768,8 +788,12 @@ export function act3(ctx) {
           onSeat: (id, n) => c.hud.setCue(`柱子 <b>${n}</b> / 4`, null, { quiet: true }),
           onAll: async () => {
             c.guides.clear();
-            await tween(0.5, (k) => { c.lantern.root.position.z = -1 * Math.sin(k * Math.PI); });
-            c.lantern.root.position.z = 0;
+            /*
+             * 这里原先让整盏灯沉 1 mm 再弹回来（0.5 s），本意是「合龙落定」。
+             * 可它没有声音、也不与任何别的东西同步，读出来就是完成动画之前
+             * 平白顿了一下。合龙那一记本来就由 WOOD_SETTLE 与那道光环交代，
+             * 不需要再让整个主体动一次 —— 撤掉。
+             */
             c.sfx.play('WOOD_SETTLE');
             c.fx.ring.sweep({ z0: 0, z1: M.HEIGHT, dur: 1.2 });
             c.hud.setCue('十三根木条 · <em>全部到位</em>');
@@ -779,7 +803,9 @@ export function act3(ctx) {
         });
         c.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: () => c.drag.autoSeatAll() }]);
       },
-      exit(c) { junk.clear(); c.guides.clear(); },
+      // 合龙那一下整盏灯会沉一下再弹回来。补间被翻页掐断时它停在半路，
+      // 往后每一步的灯笼都会矮那么一点 —— 收尾时无条件归零
+      exit(c) { junk.clear(); c.guides.clear(); c.lantern.root.position.z = 0; },
     },
   ];
 }

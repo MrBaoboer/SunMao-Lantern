@@ -74,26 +74,35 @@ src/
   modules/    m1-m2 点灯与灯谜 · m3-m4 心愿与挂灯 · vo 模块旁白与片尾
   util/       tween 补间与调度
   main.js     唯一的装配处 · styles.css 样式入口
-tools/        单元断言 · 几何验算 · 冒烟测试 · 体积门槛 · 重出截图 · 导出旁白
+public/       原样进产物：站点图标两枚 · audio/{bgm,vo} 音频挂载口
+art/          原画（不进产物）：站点图标就是从它生成的
+tools/        单元断言 · 几何验算 · 冒烟测试 · 体积门槛 · 重出截图 · 导出旁白 · 生成图标
 vite.config.js   构建配置、开发期两个中间件、生产 CSP 注入
 ```
 
 模块边界与依赖方向见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-构建产物 836 kB（gzip 229 kB），其中 three.js 单独一块 619 kB，其余全部代码加起来 217 kB；
+构建产物 860 kB（gzip 248 kB），其中 three.js 单独一块 619 kB，其余全部加起来 241 kB；
 门槛写在 `tools/size-budget.mjs`，`npm run size` 越线即红。
-产物里没有图片也没有字体：图标是内联 SVG 线稿，favicon 与那层纸纹是 data-URI SVG。
+产物里没有字体，图片只有站点图标那两枚 PNG（`public/favicon-32.png` 与 `public/apple-touch-icon.png`，
+合计 16 kB）：界面上的图标仍是内联 SVG 线稿，那层纸纹是 data-URI SVG。
 
 仓库也不含音频文件，旁白与背景音乐留了挂载口；没有音频时字幕照常走完（见 [DESIGN.md §9](../DESIGN.md#9-音频)）。
 
 ## 生成物
 
-README 的五张图与《旁白解说稿.md》都是生成的，不要手改；改了模型、界面或旁白之后重出一遍：
+README 的五张图、《旁白解说稿.md》与两枚站点图标都是生成的，不要手改；
+改了模型、界面、旁白或原画之后重出一遍：
 
 ```bash
 npm run shots      # 从构建产物里重拍五张图 → docs/img/
 npm run script     # 从源码导出旁白 → 旁白解说稿.md
+python tools/make-icons.py   # 从 art/lantern-icon.png 生成两枚站点图标 → public/
 ```
+
+图标那条要 Python 3 与 Pillow，所以没做成 npm 脚本，也不进 `npm run check` ——
+原画一年也未必改一次，为它给整条工具链添一个 Python 依赖不合算。取景、圆角与调色板的
+取舍写在脚本头部。
 
 ## 部署
 

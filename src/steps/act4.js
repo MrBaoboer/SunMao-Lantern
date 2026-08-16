@@ -33,7 +33,7 @@ export function act4(ctx) {
       title: '选一个花纹',
       mood: 'studio',
       bgm: 'BGM_C_FESTIVE',
-      cam: { az: 40, el: 10, dist: 360, target: [0, 0, 96], snap: true, fit: FIT_FRAME },
+      cam: { az: 40, el: 10, dist: 360, target: [0, 0, 96], fit: FIT_FRAME },
       narration: `框架好了，四个面还空着。
 每一面要填一片镂空的木板，叫「格心」。
 细木条叫棂条，一根搭着一根。
@@ -78,21 +78,30 @@ export function act4(ctx) {
               g.globalAlpha = 1;
               tex.dispose();
             }
+            const choose = (btn) => {
+              o.querySelectorAll('.pick').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+              btn.setAttribute('aria-pressed', 'true');
+              c.state.patternId = btn.dataset.id;
+              c.lantern.setPattern(btn.dataset.id);
+              c.lantern.showPanels(true);
+              for (const pid of PANELS) c.lantern.parts.get(pid).installed = true;
+              c.lantern.applyAssembly();
+              c.sfx.play('WOOD_TAP');
+              c.hud.setCue('四面都用它了');
+              engine.done();
+            };
             // 选中即定案，直接往下走 —— 不再多一个确认按钮
             o.querySelectorAll('.pick').forEach((btn) => {
               btn.addEventListener('click', async () => {
-                o.querySelectorAll('.pick').forEach((b) => b.setAttribute('aria-pressed', 'false'));
-                btn.setAttribute('aria-pressed', 'true');
-                c.state.patternId = btn.dataset.id;
-                c.lantern.setPattern(btn.dataset.id);
-                c.lantern.showPanels(true);
-                for (const pid of PANELS) c.lantern.parts.get(pid).installed = true;
-                c.lantern.applyAssembly();
-                c.sfx.play('WOOD_TAP');
+                choose(btn);
                 await wait(0.7);
                 engine.next();
               });
             });
+            // 直接按「下一步」：替他把现在选着的那一个定下来，页先不翻 ——
+            // 四面用哪个花纹是这一遍唯一的个性化选择，总得让他看见它落到灯上
+            engine.assist(() => choose(o.querySelector('.pick[aria-pressed="true"]')
+              || o.querySelector('.pick')));
           },
         });
         c.hud.setCue('点一个花纹，就用它了', 'tap');
@@ -105,7 +114,7 @@ export function act4(ctx) {
       id: 'D2', phase: 3,
       title: '把板子装进去',
       mood: 'studio',
-      cam: { az: 35, el: 14, dist: 350, target: [0, 0, 96], snap: true, fit: FIT_FRAME },
+      cam: { az: 38, el: 14, dist: 350, target: [0, 0, 96], fit: FIT_FRAME },
       narration: `装板不靠榫，也不靠胶。
 上下两道槽把板夹住，就成了。
 可板比两个框中间的空当还高一点。
@@ -171,7 +180,8 @@ export function act4(ctx) {
         const one = async () => {
           const pid = PANELS[seated];
           if (!pid) return;
-          if (seated === 0) c.lantern.setSection(['UB-A1'], true);
+          // 上枨框剖开，好看清那道深槽；正在装的这一片留实 —— 它才是这一步要看的东西
+          if (seated === 0) c.lantern.setSection(['UB-A1'], true, [pid]);
           await install(pid, seated === 0);
           c.lantern.setSection(null, false);
           if (seated >= 4) {
@@ -202,7 +212,7 @@ export function act4(ctx) {
       id: 'D3', phase: 3,
       title: '糊纸，贴花，上锁',
       mood: 'studio',
-      cam: { az: 55, el: 16, dist: 430, target: AIM_LANTERN, snap: true, fit: FIT_LANTERN },
+      cam: { az: 50, el: 16, dist: 430, target: AIM_LANTERN, fit: FIT_LANTERN },
       narration: `接下来是灯笼的「皮」。
 先在里面糊一层绵纸。
 再在外面贴上红纸窗花。
@@ -216,9 +226,10 @@ export function act4(ctx) {
 中梁底下挂一个中国结，再接一串红流苏。
 最后把灯芯放进去 —— 它就坐在中梁上面。`,
       note: {
-        title: '两道锁',
-        spec: [['牙子', '插进底面的浅槽'], ['角花', '压住柱头顶端']],
-        body: '一道咬，一道压。到这里，柱子既拔不出来，也转不动。',
+        title: '上的是哪一道锁',
+        spec: [['角花外挡边', '向外出挑 2 毫米'], ['角花压舌', '落进顶面浅槽']],
+        body: '柱身和柱脚早已上下夹住框，剩下的只有往外退这一条路 —— '
+            + '角花外缘多出来的那圈边，正好横在路口。牙子不在这条路上，它管的是角。',
       },
       async enter(c, engine) {
         junk.clear();
@@ -290,7 +301,7 @@ export function act4(ctx) {
                 c.sfx.play('SNAP_LOCK', { pitch: i * 2, gain: 0.7 });
                 if (i === 0) { await wait(0.7); c.lantern.setSection(null, false); }
               }
-              c.hud.setCue('两道锁 —— 一道咬，一道压');
+              c.hud.setCue('四个柱头，都盖上了');
             },
           },
           {
@@ -343,9 +354,11 @@ export function act4(ctx) {
       id: 'D4', phase: 3,
       title: '拆开看一遍',
       mood: 'studio',
-      // 分层拆开后最高的是柱头角花、最低的是穗子 —— 取景按这两端的实际跨度给，
-      // 原先的 h=172 兜不住向下抽出的穗子
-      cam: { az: 48, el: 22, dist: 660, target: [0, 0, 92], snap: true, fit: { r: 200, h: 178 } },
+      // 取景按拆到底时的实测包围盒给：水平最远的是四张窗花（沿各自法向外移
+      // 150 × 1.35 = 202.5 mm，实测半径 260），最高的是柱头角花、最低的是穗子
+      // （z ∈ [−72, 265]，相对目标 92 的最大偏离 173）。
+      // r 原先写 200，窄画幅上左右两张窗花整片被裁掉 —— 而这一步说的正是「一件不少」。
+      cam: { az: 48, el: 22, dist: 660, target: [0, 0, 92], fit: { r: 260, h: 178 } },
       cps: 3.9,
       narration: `我们把它拆开看一遍。
 最底下是底盘：四根木条穿成井字，中间横着一根中梁。
@@ -424,7 +437,7 @@ export function act4(ctx) {
       title: '过年该做的事',
       mood: 'night',
       bgm: 'BGM_C_FESTIVE_LOOP',
-      cam: { az: 50, el: 14, dist: 500, target: AIM_LANTERN, snap: true, fit: FIT_LANTERN },
+      cam: { az: 50, el: 14, dist: 500, target: AIM_LANTERN, fit: FIT_LANTERN },
       narration: `灯笼做好了。
 剩下的，是过年该做的四件事。`,
       async enter(c) {

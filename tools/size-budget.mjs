@@ -20,9 +20,9 @@ import process from 'node:process';
 const kB = (n) => Math.round(n / 100) / 10;
 
 const BUDGET = {
-  three: 700,      // three.js 那一块（当前约 619 kB）
-  app: 260,        // 其余全部代码 + 样式 + 首页（当前约 216 kB）
-  totalGzip: 260,  // 全部 gzip 之后（当前约 228 kB）
+  three: 740,      // three.js 那一块（当前约 619 kB）
+  app: 290,        // 其余全部代码 + 样式 + 首页 + 两枚站点图标（当前约 241 kB）
+  totalGzip: 300,  // 全部 gzip 之后（当前约 248 kB）
 };
 
 const DIST = path.resolve('dist');

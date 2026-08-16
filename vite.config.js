@@ -98,7 +98,7 @@ function cspPlugin() {
           "default-src 'self'",
           `script-src 'self' ${hashes.join(' ')}`.trim(),
           "style-src 'self'",
-          // data: 有两处用途：favicon，以及 --grain 那张噪点底纹
+          // 'self' 给两枚图标，data: 给 --grain 那张噪点底纹
           "img-src 'self' data:",
           "media-src 'self'",                 // 旁白与背景音乐
           "connect-src 'self'",               // 两份 manifest.json
