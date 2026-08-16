@@ -4,15 +4,14 @@
 
 **最有用的贡献**：修 bug、改错别字与拗口的文案、补无障碍、补浏览器兼容、报告某台设备上跑不动。
 
-**基本不会并的**：引入运行时依赖（`three` 之外）、换框架或加构建层、加新的互动模块与新的一幕。
-这些不是坏主意，只是会改变项目的形状，动手之前先开个 Issue 聊。
+**基本不会并的**：引入运行时依赖（`three` 之外）、换框架或加构建层、加新的互动模块与新的一幕 ——
+它们会改变项目的形状，动手之前先开个 Issue 聊。
 
 ---
 
 ## 先跑起来
 
-命令清单与环境要求见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，模块边界见 [ARCHITECTURE.md](docs/ARCHITECTURE.md)，
-跑不起来先翻 [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)。
+环境、命令、项目结构见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，其余技术文档都从那里索引。
 
 ## 提交之前
 
@@ -38,7 +37,7 @@ CI 上每个 PR 只跑 `check:code`，冒烟要合并进 `main` 之后才跑（[
 - **加一步、加一个模块**照 [ARCHITECTURE.md](docs/ARCHITECTURE.md) 里那两张清单走，别漏了 `cam.fit`。
 - **改样式先改令牌**，组件不直接写颜色和字号；文案按 [UI.md](UI.md) 的规矩写。
 - **旁白只有一处出处**：主线在步骤的 `narration` 字段，模块在 `src/modules/vo.js`。
-- **两份生成物别手改** —— `旁白解说稿.md` 出自 `npm run script`，README 的五张图出自 `npm run shots`。
+- **生成物别手改** —— 清单与重出命令见 [DEVELOPMENT.md](docs/DEVELOPMENT.md#生成物)。
 - **几何对不上以断言为准。** `src/core/verify.js` 是唯一会自己报错的规格，它和文档打架时改文档。
 
 ---
@@ -59,7 +58,7 @@ PR 描述照模板里那三栏填：改了什么、为什么、怎么验证的�
 
 ## 关于授权
 
-这个项目是双轨授权：代码 AGPL-3.0，内容与素材 CC BY-NC-SA 4.0，另有单独的商业授权（见 [COMMERCIAL.md](COMMERCIAL.md)）。
+这个项目是双轨授权，界线与商业条款见 [COMMERCIAL.md](COMMERCIAL.md)。
 
 **提交 PR 即表示**：你的贡献以同样的双轨条件发布，并且你同意版权人可以把它包含在另行商业授权的版本里。
 这是商业授权能成立的前提 —— 只要有一段贡献没有这个许可，整份授权就给不出去。

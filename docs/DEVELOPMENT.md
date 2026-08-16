@@ -1,8 +1,14 @@
 # 开发与维护
 
-跑起来、跑检查、发上线，都在这一份里。
-要改某件事该动哪个文件，见 [ARCHITECTURE.md](ARCHITECTURE.md)；为什么这么实现，见 [DESIGN.md](../DESIGN.md)；
-跑不起来或画面不对，查 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
+跑起来、跑检查、发上线，都在这一份里。这里也是技术文档的入口：
+
+| | |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 模块边界、`ctx`、一步长什么样、加一步要改哪几个文件 |
+| [DESIGN.md](../DESIGN.md) | 几何、主线、刀具、取景、音频为什么这么实现 |
+| [UI.md](../UI.md) | 界面设计语言：主题、令牌、组件、文案规则 |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | 跑不起来、画面不对、测试挂了，按症状查 |
+| [SECURITY.md](../SECURITY.md) · [COMMERCIAL.md](../COMMERCIAL.md) | 攻击面与响应头 · 双轨授权 |
 
 ---
 
@@ -39,8 +45,8 @@ npm run check      # check:code + smoke
 npx playwright install chromium
 ```
 
-冒烟测试的覆盖面见 [DESIGN.md §12](../DESIGN.md#12-验收)；CI 上两条作业各管一半、分开的理由见
-[ARCHITECTURE.md](ARCHITECTURE.md#检查)。
+`verify` 与 `smoke` 各证明什么见 [DESIGN.md §12](../DESIGN.md#12-验收)，
+CI 为什么把它们拆开挂在不同时机见 [ARCHITECTURE.md](ARCHITECTURE.md#检查)。
 
 ## 实现要点
 
@@ -57,8 +63,8 @@ npx playwright install chromium
 - **音效是实时合成的。** 二十记声音全部由 WebAudio 按物理模型现场算
   （[DESIGN.md §9](../DESIGN.md#9-音频)）。
 - **纹样是程序化的。** 万字纹与麻叶纹都由一组「二维线段 + 线宽」生成，再挤出成真实的镂空棂条。
-  同一份线段数据同时供给灯上的棂条、地面的光斑、海报的脚线与选纹样的缩略图 —— 用户选的纹样，四处永远是同一个。
-  README 首图里地上那片光斑不是贴图，是格心当聚光灯遮罩烘出来的。
+  同一份线段数据同时供给灯上的棂条、地面的光斑、海报的脚线与选纹样的缩略图 ——
+  用户选的纹样，四处永远是同一个。首图里地上那片光斑不是贴图，是格心当聚光灯遮罩烘出来的。
 
 ## 项目结构
 
@@ -79,8 +85,6 @@ art/          原画（不进产物）：站点图标就是从它生成的
 tools/        单元断言 · 几何验算 · 冒烟测试 · 体积门槛 · 重出截图 · 导出旁白 · 生成图标
 vite.config.js   构建配置、开发期两个中间件、生产 CSP 注入
 ```
-
-模块边界与依赖方向见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 构建产物 860 kB（gzip 248 kB），其中 three.js 单独一块 619 kB，其余全部加起来 241 kB；
 门槛写在 `tools/size-budget.mjs`，`npm run size` 越线即红。
@@ -107,7 +111,7 @@ python tools/make-icons.py   # 从 art/lantern-icon.png 生成两枚站点图标
 ## 部署
 
 纯静态产物，任何静态托管都能放，搁在子路径下（如 GitHub Pages 的 `/repo/`）也不用改配置。
-当前 Demo 在 Vercel：
+当前 Demo 在 Vercel，推到 `main` 即自动部署；也可以手动发一次：
 
 ```bash
 npm run build && npx vercel deploy --prod
