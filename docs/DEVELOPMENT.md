@@ -80,7 +80,7 @@ vite.config.js   构建配置、开发期两个中间件、生产 CSP 注入
 
 模块边界与依赖方向见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-构建产物 836 kB（gzip 229 kB），其中 three.js 单独一块 619 kB，其余全部代码加起来 217 kB；
+构建产物 844 kB（gzip 232 kB），其中 three.js 单独一块 619 kB，其余全部代码加起来 225 kB；
 门槛写在 `tools/size-budget.mjs`，`npm run size` 越线即红。
 产物里没有图片也没有字体：图标是内联 SVG 线稿，favicon 与那层纸纹是 data-URI SVG。
 

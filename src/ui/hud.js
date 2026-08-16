@@ -27,7 +27,8 @@ const GUIDE = [
   { k: ['more'], t: '深色、声音、字幕，都在右上角' },
   { k: ['X'], t: '没有卷或坞挡着时，按 X 把灯笼拆开、调透明，看看里面',
     touch: '右上角的「拆开看看」，把灯笼拆开、调透明', full: true },
-  { k: ['spark'], t: '不想自己动手，就选旁边的「帮我加工」「帮我装上」', full: true },
+  { k: ['spark'], t: '不想自己动手，就选旁边的「帮我加工」「帮我装上」；按下一步，也会替你做一段',
+    full: true },
 ];
 
 /**
@@ -117,6 +118,23 @@ export class HUD {
    * 灯笼就会被卡片压掉一截 —— 而这一步的全部意义正是"看这盏灯"。
    */
   #syncSafe() {
+    /*
+     * 先把坞的高度写下去，再去量位置。
+     *
+     * 底部那一摞（讲述、行动）据 --dock-h 整体上让，所以量必须排在它生效之后，
+     * 量到的才是让位之后的真实位置。
+     *
+     * 这一句也不能排在下面那道「安全区没变就不必往下走」的早退之后 ——
+     * 坞高与安全区是两件事：安全区取的是「底部那一摞」与「坞」两者的大者，
+     * 坞比那一摞矮时它根本不变。于是在 A1 这类没有任务按钮的步骤上按 X，
+     * 早退让 --dock-h 一直停在 0，「拆开看看」的两根滑杆就和旁白叠在一起。
+     */
+    const dockH = this.#dockHeight();
+    if (dockH !== this._dockH) {
+      this._dockH = dockH;
+      document.documentElement.style.setProperty('--dock-h', `${dockH}px`);
+    }
+
     const vh = innerHeight;
     // 用 getClientRects 判"有没有被画出来"：常驻界面是 fixed 定位，offsetParent 一律是 null
     const box = (el) => (el && !el.hidden && el.getClientRects().length ? el.getBoundingClientRect() : null);
@@ -134,8 +152,6 @@ export class HUD {
     if (next.top === this._safe.top && next.bottom === this._safe.bottom) return;
     this._safe = next;
     this.onSafeArea?.(next);
-    // 坞摊开时把讲述抬到它上面 —— 两层文字压在一起，谁都读不成
-    document.documentElement.style.setProperty('--dock-h', `${this.#dockHeight()}px`);
   }
 
   #dockHeight() {
@@ -158,7 +174,7 @@ export class HUD {
     this.el.chapters.innerHTML = byPhase.map((list, p) => `
       <div class="ch" data-p="${p}">
         <div class="ch-ticks">${list.map(({ i, s }) => `
-          <button class="tick" type="button" data-i="${i}"
+          <button class="tick" type="button" data-i="${i}" tabindex="${i ? -1 : 0}"
                   aria-label="第 ${i + 1} 步 ${s.title}"></button>`).join('')}
         </div>
         <span class="ch-nm">${PHASES[p]}</span>
@@ -176,6 +192,25 @@ export class HUD {
       const t = e.target.closest('.tick');
       if (t) this.onJump?.(+t.dataset.i);
     });
+    /*
+     * 十八格只占一个 Tab 位。
+     *
+     * 一格一个 Tab 位的话，键盘用户从页首走到「下一步」要按十九下 —— 而这一排
+     * 是导航，不是十八个各自独立的目标。所以走通行的做法：当前那一格 tabindex=0、
+     * 其余 −1，进来之后用左右键在格子间移动，Home / End 直达两头，回车跳过去。
+     * 引擎的翻页键在焦点落到控件上时本来就不接管，两边不打架。
+     */
+    this.el.chapters.addEventListener('keydown', (e) => {
+      if (!e.target.closest('.tick')) return;
+      const ticks = [...this.el.chapters.querySelectorAll('.tick')];
+      const at = ticks.indexOf(document.activeElement);
+      const to = { ArrowRight: at + 1, ArrowDown: at + 1, ArrowLeft: at - 1, ArrowUp: at - 1,
+        Home: 0, End: ticks.length - 1 }[e.key];
+      if (to === undefined) return;
+      e.preventDefault();
+      this.#focusTick(Math.max(0, Math.min(ticks.length - 1, to)));
+    });
+
     // 悬停与键盘焦点都要给出步名 —— 这一排格子只有 2px 高，看不出哪一格是哪一步
     for (const ev of ['pointerover', 'focusin']) {
       this.el.chapters.addEventListener(ev, (e) => {
@@ -188,6 +223,13 @@ export class HUD {
         if (e.target.closest('.tick')) this.#hideTip();
       });
     }
+  }
+
+  /** 把 Tab 位挪到第 n 格并落焦点 */
+  #focusTick(n) {
+    const ticks = [...this.el.chapters.querySelectorAll('.tick')];
+    ticks.forEach((t, i) => { t.tabIndex = i === n ? 0 : -1; });
+    ticks[n]?.focus();
   }
 
   #showTip(tick) {
@@ -222,6 +264,8 @@ export class HUD {
       const status = state === 'done' ? '已走过' : state === 'now' ? '当前' : '还没到';
       t.dataset.state = state;
       t.setAttribute('aria-label', `第 ${i + 1} 步 ${this.steps[i].title}，${status}`);
+      // Tab 进来时落在「现在这一步」上，而不是永远从第一格开始
+      t.tabIndex = state === 'now' ? 0 : -1;
       if (state === 'now') t.setAttribute('aria-current', 'step');
       else t.removeAttribute('aria-current');
     });

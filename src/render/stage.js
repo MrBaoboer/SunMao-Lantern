@@ -31,7 +31,37 @@ const BLOOM_FLOOR = 0.86;
 /** 背景与阈值之间留的余量：高通自己还有 0.01 的过渡宽度，留双倍 */
 const BLOOM_MARGIN = 0.02;
 
+/**
+ * 界面高度变多少才值得重新取景（像素）。
+ *
+ * 字幕一句一行、两行来回换，安全区就跟着差一行的高度。原先每变一次就重算一次机位 ——
+ * 于是画面每隔几秒轻轻挪一下：相机在飘，主光的目标点跟着飘，阴影贴图随之整体位移，
+ * 纸面上棂条的影子就会持续爬动。看上去正是「东西明明停着，却在轻微颤动」。
+ *
+ * 那点位移换不来任何取景上的好处：一行字不过占画面高度的百分之三。
+ * 门槛取一行半，坞这一级的变化（上百像素）照样重新取景。
+ */
+const REFRAME_MIN = 48;
+
+/** 手动缩放的下限与上限（毫米）。取景需要退得更远时，上限跟着让 —— 见 setRecommended() */
+const MIN_DIST = 90;
+const MAX_DIST = 1400;
+
+/** 换基调的过渡时长（秒）—— 与镜头转场同一个量级，两件事看起来是一次动作 */
+const MOOD_FADE = 0.8;
+
 const _luma = new THREE.Color();
+const _mixA = new THREE.Color();
+const _mixB = new THREE.Color();
+const _off = new THREE.Vector3();
+
+/**
+ * 进场斜坡的长度（秒）。
+ *
+ * 指数衰减在第一帧就是最快的 —— 起步那一下仍然读作「弹了一下」。
+ * 让速度在这段时间里从零涨到满，转场就有了起、有了收。
+ */
+const EASE_IN = 0.42;
 
 /**
  * 线性工作空间下的亮度 —— 与 LuminosityHighPassShader 里 `luminance()`
@@ -73,9 +103,21 @@ const MOODS = {
     studio: { env: 0.62, key: 2.05, fill: 0.55, rim: 0.95, amb: 0.38, bg: [0x2c251c, 0x110d0a], bloom: 0.17 },
     dusk:   { env: 0.28, key: 0.68, fill: 0.24, rim: 0.60, amb: 0.16, bg: [0x241b13, 0x0b0807], bloom: 0.25 },
   },
+  /*
+   * 浅色两档不要那圈光晕。
+   *
+   * 「主体背后一圈暖光晕、四周压暗」在暗场里是对的 —— 深色与夜色档的木头靠它
+   * 从背景里站出来。可浅色档反过来：实测 A2 主体区 ≈ 186、紧挨着的背景 ≈ 214，
+   * **背景本来就比主体亮**，而最亮的那一块恰恰落在灯笼正后方。
+   * 于是舞台中央糊着一片白 —— 作者说的「白色高亮蒙版」就是它。
+   * 原先中心 #faf6ec 几乎纯白，与糊在灯上的绵纸只差 4 级，四片格心整个融进背景。
+   *
+   * 所以浅色两档把中心与边缘的落差从二十七级压到六级：不再是光晕，
+   * 只剩一层极轻的暖度过渡，主体自己去撑对比。暗场那两档原样保留。
+   */
   light: {
-    craft:  { env: 0.72, key: 1.30, fill: 0.40, rim: 0.50, amb: 0.34, bg: [0xf6f1e6, 0xd8cdb6], bloom: 0.04 },
-    studio: { env: 0.82, key: 1.45, fill: 0.46, rim: 0.55, amb: 0.40, bg: [0xfaf6ec, 0xdfd5bf], bloom: 0.05 },
+    craft:  { env: 0.72, key: 1.30, fill: 0.40, rim: 0.50, amb: 0.34, bg: [0xe2d8c2, 0xdcd2ba], bloom: 0.04 },
+    studio: { env: 0.82, key: 1.45, fill: 0.46, rim: 0.55, amb: 0.40, bg: [0xe6dcc6, 0xe0d6be], bloom: 0.05 },
     dusk:   { env: 0.52, key: 0.95, fill: 0.30, rim: 0.62, amb: 0.24, bg: [0xe6d9c1, 0xb8a789], bloom: 0.09 },
   },
   /** 夜色不跟主题走 —— 灯笼只有在暗处才亮得起来 */
@@ -198,7 +240,16 @@ export class Stage {
     pmrem.dispose();
 
     // ── 相机 ──
-    this.camera = new THREE.PerspectiveCamera(38, 1, 1, 4000);
+    /*
+     * 近裁面 2 而不是 1 —— 深度精度与 near 成正比，翻一倍就是白拿的一倍余量。
+     * D4 在窄画幅上要退到一千七之外，那里 near=1 的分辨力只剩约 0.17 mm，
+     * 而这盏灯里到处是零点几毫米的贴合面。
+     *
+     * 不能再往上提：minDistance 量的是相机到**目标**的距离，而灯笼本身有两百毫米宽 ——
+     * 拉到最近时相机其实已经探进灯笼里了。实测全片最紧的一处是手机上的 D5，
+     * 最近的几何离相机只有 7.2 mm（见 .shots/r14-near.mjs）。2 mm 留着 3.6 倍余量。
+     */
+    this.camera = new THREE.PerspectiveCamera(38, 1, 2, 4000);
     this.camera.position.set(300, -330, 210);
 
     // ── 三点布光（§11.2 主线暖调，主光色温 4500K）──
@@ -243,8 +294,8 @@ export class Stage {
     controls.enableDamping = true;
     controls.dampingFactor = 0.075;
     controls.target.copy(FOCUS);
-    controls.minDistance = 90;
-    controls.maxDistance = 1400;
+    controls.minDistance = MIN_DIST;
+    controls.maxDistance = MAX_DIST;
     controls.enablePan = false;
     controls.rotateSpeed = 0.8;
     controls.zoomSpeed = 0.9;
@@ -253,9 +304,16 @@ export class Stage {
     /** 界面遮住的上下边（像素）—— 取景按剩下的那块画面算，见 setSafeArea() */
     this.safe = { top: 0, bottom: 0 };
 
-    // 每步的推荐机位。userTook 一旦为真，相机就交给用户，不再自己走
-    this.recommend = { pos: this.camera.position.clone(), target: FOCUS.clone(), enabled: true };
+    // 每步的推荐机位。userTook 一旦为真，相机就交给用户，不再自己走。
+    // 除了终点位置，另存一份**球坐标**：转场按方位角/仰角/距离各自插值，
+    // 相机因此始终沿着一条绕着主体的弧走，见 update()
+    this.recommend = {
+      pos: this.camera.position.clone(), target: FOCUS.clone(), enabled: true,
+      az: 0, el: 0, dist: this.camera.position.length(),
+    };
     this.userTook = false;
+    /** 转场的进场斜坡：0→1，见 update() */
+    this._blend = 1;
     controls.addEventListener('start', () => { this.userTook = true; });
 
     // ── 后期：仅高光溢出（灯焰、辉光），阈值调高以免木料泛白 ──
@@ -310,20 +368,31 @@ export class Stage {
   setSafeArea({ top = 0, bottom = 0 }) {
     if (this.safe.top === top && this.safe.bottom === bottom) return;
     this.safe = { top, bottom };
-    // 动手的时候不重新取景。字幕一句句换，每句行数不同，安全区跟着变 ——
-    // 于是推荐机位每隔几秒挪一点，手上正在对位的画面就一直在缓慢地飘。
+    // 动手的时候一律不重新取景 —— 手上正在对位，画面不能自己飘。
     // 记下新的安全区留给下一步用，这一步的机位保持进来时的样子。
     if (this.held) return;
+    // 小变化不动机位（见 REFRAME_MIN）。比的是**上一次真正据以取景的那一组**，
+    // 不是上一帧 —— 否则一行一行地慢慢涨，每次都不到门槛，加起来却早过了
+    const was = this._framedSafe || { top: 0, bottom: 0 };
+    if (Math.abs(top - was.top) < REFRAME_MIN && Math.abs(bottom - was.bottom) < REFRAME_MIN) return;
     if (this._lastFrame) this.setRecommended(this._lastFrame, { keepUser: true });
   }
 
-  /** 画面中真正可用的那一块：高度占比与中心相对整幅的偏移 */
+  /**
+   * 画面中真正可用的那一块：高度占比与中心相对整幅的偏移。
+   *
+   * 下限 0.62：界面再厚也不能把主体挤成一枚邮票。撑到这一档时**上下等量**地撑开，
+   * 占比与中心因此同出一带 —— 两者若各算各的（高度设了下限、中心却按未设限的真实
+   * 安全区算），多出来的那一截就全部溢向下方，正好压在旁白上。上方只有一条细进度尺，
+   * 让它往上溢一半，代价小得多。
+   */
   #viewport() {
     const h = this.canvas.clientHeight || innerHeight || 1;
-    // 下限 0.62：界面再厚也不能把主体挤成一枚邮票；但保底放得太低，
-    // 主体会大面积压进底部旁白与卡片的文字区，字和木纹叠在一起谁都读不清
-    const free = Math.max(h * 0.62, h - this.safe.top - this.safe.bottom);
-    return { frac: free / h, lift: (this.safe.bottom - this.safe.top) / (2.4 * h) };
+    let { top, bottom } = this.safe;
+    const grow = (h * 0.62 - (h - top - bottom)) / 2;
+    if (grow > 0) { top = Math.max(0, top - grow); bottom = Math.max(0, bottom - grow); }
+    const free = h - top - bottom;
+    return { frac: free / h, lift: (bottom - top) / (2 * h) };
   }
 
   /**
@@ -359,9 +428,14 @@ export class Stage {
   setRecommended(o = {}, { keepUser = false } = {}) {
     const { az = 45, el = 22, dist = 420, target = FOCUS, ease = 1.0, fit } = o;
     this._lastFrame = { ...o, target };
+    this._framedSafe = { ...this.safe };   // 这一次取景据的是哪一组安全区
     const t = target.clone();
 
     const d = fit ? Math.max(dist, this.fitDistance(fit) * 1.06) : dist;
+    // 轨道控制会在 update() 里把相机距离夹进 [minDistance, maxDistance]，
+    // 推荐机位也不例外 —— 窄画幅上 D4 那种大跨度需要退到一千七，被 1400 夹住
+    // 就等于取景声明作废，两侧当场裁掉。缩放上限因此至少要容得下这一步的取景。
+    this.controls.maxDistance = Math.max(MAX_DIST, d * 1.05);
 
     // 底部的讲述与行动压掉了一截画面 —— 把主体整体抬起来，别让它坐在字上
     t.z -= 2 * d * Math.tan((this.camera.fov * Math.PI) / 360) * this.#viewport().lift;
@@ -372,17 +446,64 @@ export class Stage {
       t.y + d * Math.cos(er) * Math.sin(ar),
       t.z + d * Math.sin(er),
     );
+
+    /*
+     * 这是「一次新的转场」还是「同一个机位挪了一点」？
+     *
+     * 封面那圈自转每帧都下达一次新机位（每帧才 0.03°）。若每次都把进场斜坡按回零，
+     * 速度就永远涨不起来，相机会越落越远 —— 封面的灯于是几乎不转。
+     * 所以只有跨度够大才算新转场，小挪动接着原来的速度走。
+     */
+    const dAz = Math.abs(Math.atan2(Math.sin(ar - this.recommend.az), Math.cos(ar - this.recommend.az)));
+    const fresh = dAz > 0.02 || Math.abs(er - this.recommend.el) > 0.02
+      || Math.abs(d - this.recommend.dist) > 5 || this.recommend.target.distanceTo(t) > 5;
+
     this.recommend.pos.copy(p);
     this.recommend.target.copy(t);
-    if (!keepUser) this.userTook = false;
+    this.recommend.az = ar;
+    this.recommend.el = er;
+    this.recommend.dist = d;
+    if (!keepUser) {
+      this.userTook = false;
+      // keepUser 那一路（画幅变了、界面高了）每秒都在走，不该当成新转场
+      if (fresh) {
+        this._blend = 0;
+        // 这一次要跨过多少度 —— update() 据此把速率压一档
+        const c = this.#spherical();
+        this._span = Math.abs(Math.atan2(Math.sin(ar - c.az), Math.cos(ar - c.az))) * 180 / Math.PI;
+      }
+    }
     this.cameraEase = ease;
     this.key.target.position.copy(t);
   }
 
-  /** 立即跳到推荐机位（转场用） */
+  /** 相机此刻相对轨道目标的球坐标（Z 轴向上） */
+  #spherical() {
+    const o = _off.copy(this.camera.position).sub(this.controls.target);
+    const dist = Math.max(1e-4, o.length());
+    return { az: Math.atan2(o.y, o.x), el: Math.asin(Math.max(-1, Math.min(1, o.z / dist))), dist };
+  }
+
+  /** 相机已经走到位了吗（用户接管时恒为真）—— 冒烟据此判断这一步稳没稳 */
+  get camSettled() {
+    if (!this.recommend.enabled || this.userTook) return true;
+    const c = this.#spherical();
+    const daz = Math.atan2(Math.sin(this.recommend.az - c.az), Math.cos(this.recommend.az - c.az));
+    return Math.abs(daz) < 0.004 && Math.abs(this.recommend.el - c.el) < 0.004
+      && Math.abs(this.recommend.dist - c.dist) < 0.5
+      && this.controls.target.distanceTo(this.recommend.target) < 0.5;
+  }
+
+  /**
+   * 立即站到推荐机位。
+   *
+   * 主线的翻页**不用**它 —— 那里要的是一次转场，不是一次跳切。
+   * 留给三处真正另起一个场的地方：封面摆位、进互动模块、脚本拍图。
+   */
   snapToRecommended() {
     this.camera.position.copy(this.recommend.pos);
     this.controls.target.copy(this.recommend.target);
+    this._blend = 1;
     this.controls.update();
   }
 
@@ -406,10 +527,35 @@ export class Stage {
    * 想回到推荐机位，翻一步再翻回来即可（`setRecommended` 会清掉接管标记）。
    */
   update(dt) {
-    if (this.recommend.enabled && !this.userTook) {
-      const k = 1 - Math.pow(0.001, dt * (this.cameraEase ?? 1));
-      this.camera.position.lerp(this.recommend.pos, k);
-      this.controls.target.lerp(this.recommend.target, k);
+    const r = this.recommend;
+    if (r.enabled && !this.userTook) {
+      // 起：速度在 EASE_IN 秒里从零涨满（smoothstep）；收：指数衰减本来就自带
+      this._blend = Math.min(1, this._blend + dt / EASE_IN);
+      const b = this._blend * this._blend * (3 - 2 * this._blend);
+      // 摆得越大走得越从容：同一个速率下，绕过一百度和挪过十度都只花一秒 ——
+      // 前者读起来是甩镜头。按这一次要跨的角度把速率压一档，短跳仍然干脆
+      const k = 1 - Math.pow(0.001, dt * (this.cameraEase ?? 1) * b / (1 + (this._span ?? 0) / 110));
+
+      /*
+       * 按球坐标插值，不按位置插值。
+       *
+       * 两点之间直着插，走的是一条弦：方位角差得多的两步（B3 的 38° 到 C1 的 −84°
+       * 差 122°）相机会从主体中间穿过去，近处还会先怼上再退开。
+       * 分开插方位角、仰角与距离，相机就始终沿着一条绕着主体的弧走 ——
+       * 这也正是「转场」这件事在镜头语言里本来的样子。
+       */
+      const cur = this.#spherical();
+      const daz = Math.atan2(Math.sin(r.az - cur.az), Math.cos(r.az - cur.az));  // 走最短的那一边
+      const az = cur.az + daz * k;
+      const el = cur.el + (r.el - cur.el) * k;
+      const dist = cur.dist + (r.dist - cur.dist) * k;
+      this.controls.target.lerp(r.target, k);
+      const t = this.controls.target;
+      this.camera.position.set(
+        t.x + dist * Math.cos(el) * Math.cos(az),
+        t.y + dist * Math.cos(el) * Math.sin(az),
+        t.z + dist * Math.sin(el),
+      );
     }
     this.controls.update();
   }
@@ -423,6 +569,7 @@ export class Stage {
       this.timer.update();
       const dt = Math.min(this.timer.getDelta(), 0.05);
       const t = this.timer.getElapsed();
+      this.#stepMood(dt);
       this.update(dt);
       // 单个 updater 抛错不能连坐这一帧剩下的所有更新 —— 记录，继续走
       for (const u of this.updaters) {
@@ -442,27 +589,65 @@ export class Stage {
     this.setMood(this.moodName || 'craft');
   }
 
-  /** 环境亮度整体调节 */
+  /**
+   * 环境亮度整体调节。
+   *
+   * **换基调是渐变，不是硬切。** A1 的傍晚（bg 中心 #e6d9c1）到 A2 的工作台
+   * （#faf6ec）在浅色下差得一眼看得出来 —— 实测画面四角 197,185,160 → 217,213,203，
+   * 蓝通道差了 43。翻页那一下整块背景「啪」地换色，读起来就是接不上。
+   * 所以只登记目标值，由主循环每帧往那边走（见 #stepMood），约 0.8 s 到位。
+   *
+   * 不能用 tween/wait：那一套会被翻页的 cancelAll() 掐断，掐在半路基调就停在中间色。
+   * 界面要不要跟着变暗（onMood）仍然立刻通知 —— 字压在正在变暗的画面上更难读。
+   */
   setMood(mode) {
     const theme = this.theme || 'light';
     const preset = MOODS.fixed[mode] || MOODS[theme][mode] || MOODS[theme].craft;
     this.mood = preset;
     this.moodName = (MOODS.fixed[mode] || MOODS[theme][mode]) ? mode : 'craft';
-    this.scene.environmentIntensity = preset.env;
-    this.key.intensity = preset.key;
-    this.fill.intensity = preset.fill;
-    this.rim.intensity = preset.rim;
-    this.ambient.intensity = preset.amb;
+    this._moodTo = preset;
+    if (!this._moodAt) this._moodAt = { ...preset, bg: [...preset.bg] };  // 第一次：直接站定
+    // 地面是有无之分，插不了值 —— 要出现就立刻出现，要消失等走完再消失
+    if (preset.ground) this.ground.visible = true;
+    this.#applyMood();
+    this.onMood?.(this.moodName);
+  }
+
+  /** 把当前这一组基调值真正下发到光与背景上 */
+  #applyMood() {
+    const m = this._moodAt;
+    this.scene.environmentIntensity = m.env;
+    this.key.intensity = m.key;
+    this.fill.intensity = m.fill;
+    this.rim.intensity = m.rim;
+    this.ambient.intensity = m.amb;
     const u = this.backdrop.material.uniforms;
-    u.uInner.value.setHex(preset.bg[0]);
-    u.uOuter.value.setHex(preset.bg[1]);
-    this.ground.visible = !!preset.ground;
-    this.bloom.strength = preset.bloom;
+    u.uInner.value.setHex(m.bg[0]);
+    u.uOuter.value.setHex(m.bg[1]);
+    this.bloom.strength = m.bloom;
     // 背景永远压在高通门槛以下 —— 否则渐变会被从中间切出一个圆盘，
     // 模糊之后就是画面正中那枚白色光斑。见 BLOOM_FLOOR 的注释。
-    // 浅色的 craft(0.88) 与 studio(0.92) 正好越线，深色各档只有 0.01–0.02，不受影响。
-    this.bloom.threshold = Math.max(BLOOM_FLOOR, linearLuma(preset.bg[0]) + BLOOM_MARGIN);
-    this.onMood?.(this.moodName);
+    // 过渡途中也要守住，所以按**当前**这一组算，不是按目标那一组。
+    this.bloom.threshold = Math.max(BLOOM_FLOOR, linearLuma(m.bg[0]) + BLOOM_MARGIN);
+  }
+
+  /** 每帧朝目标基调走一步。走完之后才允许地面消失 */
+  #stepMood(dt) {
+    const to = this._moodTo, at = this._moodAt;
+    if (!to || !at) return;
+    const k = 1 - Math.pow(0.001, dt / MOOD_FADE);
+    let moving = false;
+    for (const key of ['env', 'key', 'fill', 'rim', 'amb', 'bloom']) {
+      if (Math.abs(to[key] - at[key]) > 1e-4) moving = true;
+      at[key] += (to[key] - at[key]) * k;
+    }
+    for (let i = 0; i < 2; i++) {
+      _mixA.setHex(at.bg[i]); _mixB.setHex(to.bg[i]);
+      if (_mixA.getHex() !== _mixB.getHex()) moving = true;
+      at.bg[i] = _mixA.lerp(_mixB, k).getHex();
+    }
+    if (moving) this.#applyMood();
+    else if (!to.ground && this.ground.visible) this.ground.visible = false;
   }
 
   dispose() {

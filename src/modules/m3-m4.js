@@ -229,15 +229,21 @@ function drawPoster(c) {
   if (dh > SLOT_H) { dh = SLOT_H; dw = dh * (sw / sh); }
   g.drawImage(shot, sx, sy, sw, sh, (W - dw) / 2, SLOT_Y + (SLOT_H - dh) / 2, dw, dh);
 
+  // 纹样脚线：整幅正好铺满六格（1080 / 6 = 180）。190 除不尽，右缘会切掉大半格。
+  // 位置也让开心愿那一行 —— 整张海报最该看清的就是那一句，不该垫着一层棂条
+  const TILE = W / 6;
   const tex = buildPatternTexture(c.state.patternId, 512);
   g.globalAlpha = 0.13;
-  for (let x = 0; x < W; x += 190) g.drawImage(tex.image, x, H - 440, 190, 190);
+  for (let i = 0; i < 6; i++) g.drawImage(tex.image, i * TILE, H - 450, TILE, TILE);
   g.globalAlpha = 1;
   tex.dispose();
 
+  // 字号跟着字数缩。「自己凑一句」拼出来是十七个字，固定 86px 有一千四百多宽，
+  // 而画布只有一千零八十 —— 两头都会被切掉
+  const wish = [...c.state.wishText];
   g.fillStyle = '#d3aa63';
-  g.font = `86px ${serif}`;
-  g.fillText(c.state.wishText, W / 2, H - 250);
+  g.font = `${Math.min(86, Math.floor((W - 160) / Math.max(1, wish.length)))}px ${serif}`;
+  g.fillText(c.state.wishText, W / 2, H - 150);
 
   g.font = '22px monospace';
   g.fillStyle = 'rgba(242,236,224,.36)';
@@ -347,7 +353,11 @@ export function openM4(c, onExit) {
     const link = document.createElement('a');
     link.href = c.stage.renderer.domElement.toDataURL('image/png');
     link.download = '榫卯灯笼.png';
+    // 必须先进文档再点。Firefox 不给游离节点上的 download 触发下载 ——
+    // 而 Firefox 113 在声明的浏览器基线之内（docs/DEVELOPMENT.md#环境）
+    document.body.appendChild(link);
     link.click();
+    link.remove();
     c.hud.toast('这一张已经存下来了', { gold: true });
   };
 

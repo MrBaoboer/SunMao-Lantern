@@ -20,7 +20,7 @@ export function act1(ctx) {
       title: '一盏灯，为一年收尾',
       mood: 'dusk',
       bgm: 'BGM_A_OPENING',
-      cam: { az: 62, el: 12, dist: 470, target: AIM_LANTERN, snap: true, fit: FIT_LANTERN },
+      cam: { az: 62, el: 12, dist: 470, target: AIM_LANTERN, fit: FIT_LANTERN },
       cps: 3.6,
       cue: { ico: 'drag', text: '拖动画面，换个角度看' },
       narration: `每到岁末，中国人会用一盏灯，为一年收尾。
@@ -52,7 +52,9 @@ export function act1(ctx) {
       title: '要做的就是它',
       mood: 'studio',
       bgm: 'BGM_B_CRAFT',
-      cam: { az: 40, el: 16, dist: 480, fit: { r: 230, h: 172 } },
+      // 与 A1 同一个机位家族：还是那盏灯，只是换了口气讲。
+      // 没有理由绕过去 —— 这一步的看点是它拆开又合回来，不是镜头
+      cam: { az: 68, el: 16, dist: 480, fit: { r: 230, h: 172 } },
       narration: `这就是我们要做的 —— 一盏榫卯灯笼。
 （气口）
 十三根木条，四片格心。
@@ -64,6 +66,16 @@ export function act1(ctx) {
         body: '它能被完整拆开，再装回去。',
       },
       async enter(c) {
+        // 每一步都得自己把台子摆好。上一步可能是 B1 —— 那一步把整盏灯藏了个干净，
+        // 从它翻回来时若只改亮度，画面上就一件东西也没有
+        c.lantern.attachAll();
+        c.lantern.showOnly(null);
+        c.lantern.allFinished();
+        for (const p of c.lantern.parts.values()) p.installed = true;
+        c.lantern.applyAssembly();
+        c.lantern.showPanels(true);
+        c.lantern.showDecor(true);
+        c.lantern.core.visible = true;
         c.lantern.setLit(0);
         const preview = async () => {
           await tween(1.2, (k) => c.lantern.setExplode(k, 'unified'), { ease: Ease.outCubic });
@@ -74,7 +86,8 @@ export function act1(ctx) {
           c.lantern.setExplode(0, 'unified');
         };
         c.hud.setAlts([{ label: '再拆一次', ico: 'refresh', onClick: preview }]);
-        wait(2.2).then(preview);
+        // 前摇给到 0.8 就够：这一步的看点是拆开那一下，不是等它开始
+        wait(0.8).then(preview);
       },
       exit(c) { c.lantern.setExplode(0, 'unified'); },
     },
@@ -87,7 +100,8 @@ export function act1(ctx) {
       // 左卯右榫，且要看得见卯眼。卯是自左端面向里挖的盲眼，开口朝 −X ——
       // 相机得站到 −X 那一侧才看得进去；同时方位角要落在 (90°, 180°) 里，
       // 屏幕右方才是 −X，凸出来的那根才在右边。
-      cam: { az: 128, el: 14, dist: 210, target: [0, 0, 96], snap: true, fit: { r: 82, h: 44 } },
+      // 120 而不是 128：往 A2 那边靠一点，进场就少绕八度。再往 90 靠孔就看成一条缝了
+      cam: { az: 120, el: 14, dist: 210, target: [0, 0, 96], fit: { r: 82, h: 44 } },
       cps: 3.6,
       // 画面随时可以被拖着转，所以指代一律按「长什么样」，不按左右
       cue: { ico: 'drag', text: '<em>拖动</em>凸出来的那一块，推进对面的孔里' },
@@ -161,6 +175,17 @@ export function act1(ctx) {
         // 咬合之后再讲解剖 —— 先有手感，再有名词。
         // 榫头这会儿已经整根进去了，所以把卯件调透，让它在里面看得见。
         const anatomy = async () => {
+          /*
+           * 咬合之后换一次机位 —— 这一下是有事要办的，不是为了动而动。
+           *
+           * 进场那个机位（az 120）是为了「看得进卯眼」定的，X 轴被压掉两成；
+           * 而榫的三个部位全排在 X 上，只跨 17 mm —— 三枚圆点于是叠成一坨，
+           * 谁指着谁根本看不出来。转到接近 90° 就把 X 完全摊开在屏幕上，
+           * 再推近一档、把目标挪到合拢后那一段的中心，三处才各就各位。
+           */
+          c.stage.setRecommended({
+            az: 96, el: 22, dist: 155, target: V(av(1.2), 0, Z + 4), fit: { r: 56, h: 30 },
+          });
           const bm = B.userData.mat;
           bm.transparent = true;
           bm.depthWrite = false;
@@ -179,9 +204,30 @@ export function act1(ctx) {
               engine.done();
             },
           });
-          spot(V(av(2.6), 0, Z), '头', '榫头', '伸出去、插进卯里的那一截');
-          spot(V(av(2.0), av(0.45), Z), '颊', '榫颊', '两侧的面，决定松紧');
-          spot(V(av(1.2), 0, Z + av(1.1)), '肩', '榫肩', '根部的台阶，把力传过去');
+          // 三处都在一根 18 mm 的榫头上，横着排开只够几十像素 —— 圆点会挨在一起。
+          // 所以「颊」钉在颊面偏下、「肩」钉在肩台偏上：三枚在屏幕上分成三个方向，
+          // 而每一枚仍然贴着它指的那个面
+          const dots = [
+            spot(V(av(2.6), 0, Z), '头', '榫头', '伸出去、插进卯里的那一截'),
+            spot(V(av(2.0), av(0.34), Z - av(0.42)), '颊', '榫颊', '两侧的面，决定松紧'),
+            spot(V(av(1.2), 0, Z + av(0.72)), '肩', '榫肩', '根部的台阶，把力传过去'),
+          ];
+          // 推进去只是这一步的前半段 —— 按「下一步」时一下点开一个部位。
+          //
+          // 按次序走，不能挑「现在没开的那一枚」：一次只摊开一张，点开第二枚时
+          // 第一枚会被自动收起，于是「没开的第一枚」永远在前两枚之间来回，第三枚一辈子轮不到。
+          // 已经自己点开过的那一枚跳过 —— 再点一下是收起，反倒不算数
+          let opened = 0;
+          const openOne = () => {
+            while (opened < dots.length) {
+              const d = dots[opened++];
+              if (d.active) continue;
+              d.el.click();
+              break;
+            }
+            if (opened < dots.length) engine.assist(openOne);
+          };
+          engine.assist(openOne);
         };
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },
@@ -192,7 +238,7 @@ export function act1(ctx) {
       id: 'B2', phase: 1,
       title: '直榫：穿过去，露一截',
       mood: 'craft',
-      cam: { az: 118, el: 14, dist: 200, target: [0, 0, 96], snap: true, fit: { r: 78, h: 40 } },
+      cam: { az: 112, el: 14, dist: 200, target: [0, 0, 96], fit: { r: 78, h: 40 } },
       cue: { ico: 'drag', text: '<em>拖动</em>带榫头的那根，把榫头推进孔里' },
       narration: `第一种，直榫 —— 最基础，也最常见。
 这盏灯用的是穿透的那一种，叫「透榫」。
@@ -248,6 +294,16 @@ export function act1(ctx) {
           A.position.x = SEATED;
           c.sfx.play('SNAP_IN');
           c.fx.ripples.emit(V(av(1.8), 0, Z), V(1, 0, 0));
+          /*
+           * 转到出头那一侧去。
+           *
+           * 进场机位站在 −X（为了看清榫头还没插进去的样子），而榫头是朝 +X 穿出来的 ——
+           * 「出头」这六毫米正好落在背面，一句「看，穿出来了」说完，画面上什么也没发生。
+           * 所以到位之后绕到 +X 这一侧，把合拢后的整根摆到画面中央，出头朝着人。
+           */
+          c.stage.setRecommended({
+            az: 48, el: 16, dist: 150, target: V(-av(0.55), 0, Z), fit: { r: 46, h: 22 },
+          });
           c.hud.toast('看，穿出来了', { gold: true });
           engine.done();
         };
@@ -263,7 +319,15 @@ export function act1(ctx) {
       id: 'B3', phase: 1,
       title: '夹榫：从上往下落',
       mood: 'craft',
-      cam: { az: 38, el: 28, dist: 190, target: [0, 0, 108], snap: true, fit: { r: 60, h: 52 } },
+      /*
+       * 两条槽沿 Y 走，方位角越接近 0 越正对着看 —— 14 比原先的 38 更正。
+       *
+       * 它同时是 B2（要站 −X 才看得见孔，az 112）与 C1（料沿 X 铺开，只能站 ±90°，
+       * 而 C2 又把它钉在 −84）之间唯一的一步。两头相隔一百六十多度，
+       * 无论 B3 站哪儿，这两跳的和都是定值 —— 能选的只有「怎么分」。
+       * 14 让四个方向（前翻、后翻各两跳）的最大一跳同时落到 98°，是峰值最小的那一档。
+       */
+      cam: { az: 14, el: 28, dist: 190, target: [0, 0, 108], fit: { r: 60, h: 52 } },
       cue: { ico: 'pull', text: '<em>向下拖动</em>，把叉口落进两条槽' },
       narration: `第二种，夹榫。
 这一回，不是一根插进另一根。
@@ -326,12 +390,10 @@ export function act1(ctx) {
           c.hud.toast('两声 —— 两个方向，同时锁住', { gold: true });
           engine.done();
         };
-        // 两侧各钉一枚向下的箭头 —— 这一步要的是「往下落」，
-        // 而叉口与槽都藏在两块料之间，光看画面看不出该往哪个方向使劲
+        // 一枚就够。原先在槽的两侧各钉一枚，读起来像「两处都要按」——
+        // 而这一步只有一个方向、一件要动的东西。默认那一枚正落在上面这根的正上方
         c.simpleDrag(D2, V(0, 0, -1), a(2.5) - d, Z, seat,
-          () => c.hud.toast('夹榫只能从上往下落 —— 竖着往下拖'), junk, {
-            arrows: [V(-av(1.3), 0, Z + av(2.4)), V(av(1.3), 0, Z + av(2.4))],
-          });
+          () => c.hud.toast('夹榫只能从上往下落 —— 竖着往下拖'), junk);
         c.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: seat }]);
       },
       exit(c) { junk.clear(); c.hud.clearSpots(); },

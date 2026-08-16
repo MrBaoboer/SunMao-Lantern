@@ -47,7 +47,7 @@ export function buildCornerBracket({ sx, sy }) {
   geo.translate(0, J5.TENON_T, 0);
   const g = new THREE.Group();
   const mesh = new THREE.Mesh(geo, makeWoodMaterial({
-    grainAxis: 0, center: new THREE.Vector3(0, 0, 0), tone: 0.22,
+    grainAxis: 0, seed: new THREE.Vector3(sx * x0, sy * C.INNER_FACE, zTop), tone: 0.22,
   }));
   mesh.castShadow = true;
   g.add(mesh);

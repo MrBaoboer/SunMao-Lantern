@@ -41,15 +41,43 @@ const WOOD_COMMON = /* glsl */ `
     for(int i=0;i<4;i++){ s += amp*vnoise(p); p *= 2.03; amp *= 0.5; }
     return s;
   }
+  /*
+   * 带足迹的 fbm —— 程序化纹理的抗锯齿。
+   *
+   * 贴图有 mipmap，程序化花纹没有：某一层噪声的格子一旦细过一个像素，
+   * 采到的就是随机相位，镜头一动整片木头就沸腾。所以逐层判断：
+   * 这一层的格子还比一个像素大就照常取样，细过去就退回它自己的均值 0.5。
+   * 退的是均值而不是零，所以远处的木头只是变平，不会变色、也不会变暗。
+   *
+   * lod = 一个像素在**这次调用的输入空间**里覆盖多少（= 世界毫米 × 该次的取样倍率）。
+   */
+  float fbmF(vec3 p, float lod){
+    float s = 0.0, amp = 0.5, sc = 1.0;
+    for(int i=0;i<4;i++){
+      float w = 1.0 - smoothstep(0.5, 1.2, lod*sc);
+      s += amp*mix(0.5, vnoise(p), w);
+      p *= 2.03; amp *= 0.5; sc *= 2.03;
+    }
+    return s;
+  }
 `;
 
 /**
  * 木料材质。
+ *
+ * 年轮与纹理**在构件自己的坐标系里算**，不是世界坐标。这一条是要害：
+ * 按世界坐标算的话，料一被拖动、离位陈列或爆炸拆开，纹理就在木头里流过去 ——
+ * 手里推着一块木头，木头上的花纹自己在跑。转过的构件更糟：顺纹方向按世界轴取，
+ * 一根横过来摆的料会变成横纹。
+ *
+ * 每根料仍要长得不一样，但那不能靠位置：`seed` 只搅动噪声的取样点，
+ * 年轮中心始终落在构件自己的中心上。
+ *
  * @param {object} o
- * @param {0|1|2} o.grainAxis 顺纹方向（0=X,1=Y,2=Z）—— 木纹沿构件长轴
- * @param {THREE.Vector3} o.center 构件中心（世界坐标），年轮以此为心
+ * @param {0|1|2} o.grainAxis 顺纹方向（0=X,1=Y,2=Z）—— 构件自己坐标系里的长轴
+ * @param {THREE.Vector3} o.seed 这一根的纹理种子（取构件的基准位即可，全程不变）
  */
-export function makeWoodMaterial({ grainAxis = 0, center = new THREE.Vector3(), tone = 0 } = {}) {
+export function makeWoodMaterial({ grainAxis = 0, seed = new THREE.Vector3(), tone = 0 } = {}) {
   const mat = new THREE.MeshStandardMaterial({
     color: 0xa9743f,     // MAT_WOOD_MAIN 暖木
     roughness: 0.62,
@@ -58,7 +86,7 @@ export function makeWoodMaterial({ grainAxis = 0, center = new THREE.Vector3(), 
 
   mat.userData.uniforms = {
     uGrainAxis: { value: grainAxis },
-    uCenter: { value: center.clone() },
+    uSeed: { value: seed.clone().multiplyScalar(0.11) },
     uCutMix: { value: 1.0 },      // 新切面显现程度（加工动画用 0→1）
     uHighlight: { value: new THREE.Color(0x000000) },
     uHighlightAmt: { value: 0.0 },
@@ -75,12 +103,14 @@ export function makeWoodMaterial({ grainAxis = 0, center = new THREE.Vector3(), 
         #include <common>
         attribute float aCut;
         varying float vCut;
-        varying vec3 vWPos;
+        varying vec3 vGrain;
       `)
       .replace('#include <begin_vertex>', `
         #include <begin_vertex>
         vCut = aCut;
-        vWPos = (modelMatrix * vec4(position, 1.0)).xyz;
+        // 构件自己的坐标系 —— 几何在 solidToGeometry 里已经按毛坯中心归过位，
+        // 所以这里的原点就是这根料的中心，年轮之心
+        vGrain = position;
       `);
 
     shader.fragmentShader = shader.fragmentShader
@@ -88,9 +118,9 @@ export function makeWoodMaterial({ grainAxis = 0, center = new THREE.Vector3(), 
         #include <common>
         ${WOOD_COMMON}
         varying float vCut;
-        varying vec3 vWPos;
+        varying vec3 vGrain;
         uniform int   uGrainAxis;
-        uniform vec3  uCenter;
+        uniform vec3  uSeed;
         uniform float uCutMix;
         uniform vec3  uHighlight;
         uniform float uHighlightAmt;
@@ -100,7 +130,7 @@ export function makeWoodMaterial({ grainAxis = 0, center = new THREE.Vector3(), 
       .replace('#include <color_fragment>', `
         #include <color_fragment>
         {
-          vec3 p = vWPos - uCenter;
+          vec3 p = vGrain;
           // 分离顺纹方向与横纹平面
           float along;
           vec2  cross2;
@@ -108,16 +138,31 @@ export function makeWoodMaterial({ grainAxis = 0, center = new THREE.Vector3(), 
           else if (uGrainAxis == 1) { along = p.y; cross2 = p.xz; }
           else                      { along = p.z; cross2 = p.xy; }
 
+          /*
+           * 一个像素在这根料自己的坐标系里覆盖多少毫米。
+           *
+           * 这一个数决定下面三层花纹各自还画不画得动。不按它收敛的话，
+           * 拖着画面转的时候整片木头都在沸腾 —— 尤其是掠射角上的立柱与棂条，
+           * 一个像素能横跨好几个毫米，采到的纯是随机相位。
+           * 三毫米宽的棂条密密压在灯笼纸上，读出来就是「纸在抖」。
+           */
+          float fw = max(length(dFdx(p)), length(dFdy(p)));
+
           // 年轮：椭圆同心 + 沿长轴缓慢漂移，模拟真实锯切面。
           // 周期约 3 mm —— 12 mm 的方料截面上要能数出四五圈，梨木才「纹理细密」。
-          float wobble = fbm(vec3(cross2 * 0.42, along * 0.045)) * 2.4;
+          // uSeed 只挪噪声的取样点：十三根料各有各的花，年轮之心却一律在自己的中心上
+          float wobble = fbmF(vec3(cross2 * 0.42 + uSeed.xy, along * 0.045 + uSeed.z), fw * 0.42) * 2.4;
           float r = length(cross2 * vec2(1.0, 1.65)) * 1.55 + wobble + uTone * 9.0;
           float rings = 0.5 + 0.5 * sin(r * 1.05);
           rings = pow(rings, 1.5);
+          // 年轮本身也有频率（周期 2.3–3.9 mm）：一个像素跨过大半圈时退回它的均值。
+          // 0.42 是 pow(0.5+0.5·sin, 1.5) 的均值 —— 退成它，木头只是变平，不变色
+          rings = mix(0.42, rings, 1.0 - smoothstep(0.30, 0.95, fw));
 
           // 顺纹纤维：沿长轴强烈拉伸的细噪声
-          float fiber = fbm(vec3(cross2 * 3.0, along * 0.06));
-          float pores = smoothstep(0.60, 0.80, fbm(vec3(cross2 * 10.0, along * 0.35)));
+          float fiber = fbmF(vec3(cross2 * 3.0 + uSeed.yx, along * 0.06 + uSeed.z), fw * 3.0);
+          float pores = smoothstep(0.60, 0.80,
+            fbmF(vec3(cross2 * 10.0 + uSeed.xy, along * 0.35 + uSeed.z), fw * 10.0));
 
           // 年轮只占三成 —— 梨木「纹理细密」，靠的是细腻而非强对比。
           // 对比过强会让 12 mm 的方料看起来像瓦楞纸。
