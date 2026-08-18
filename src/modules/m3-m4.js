@@ -318,7 +318,7 @@ export function openM4(c, onExit) {
   c.hud.setBack(close);
 
   const hang = () => {
-    if (placed.length >= 6) { c.hud.toast('已经挂满六盏了。按「收起来」清空，再重新挂'); return; }
+    if (placed.length >= 6) { c.hud.toast('已经挂满六盏了。按「全部收起」清空，再重新挂'); return; }
     const clone = c.lantern.root.clone(true);
     // root 底下挂着内光与纹样聚光灯，clone(true) 会把它们一并复制。
     // 挂六盏就是多出六组光源：总辐照远超 stage.js 定下的曝光上限，画面糊成一片奶白；
