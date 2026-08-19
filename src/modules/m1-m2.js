@@ -2,7 +2,7 @@
  * 点灯 · 猜灯谜
  */
 
-import { V, a, C, Junk, buildNightSky, AIM_LANTERN, FIT_LANTERN } from '../steps/util.js';
+import { V, a, Junk, buildNightSky, AIM_LANTERN, FIT_LANTERN } from '../steps/util.js';
 import { playVO } from './vo.js';
 import { tween, Ease, wait } from '../util/tween.js';
 
@@ -22,7 +22,11 @@ export function openM1(c, onExit) {
   c.stage.setMood('night');
   c.bgm.play('BGM_C_LANTERN');
   junk.add(buildNightSky(c.stage.scene));
-  c.stage.setRecommended({ az: 55, el: 6, dist: 250, target: V(0, 0, C.LOWER_Z1 + 20), fit: { r: 72, h: 86 } });
+  // 凑近，但整盏灯都在画面里 —— 原先贴到只看灯脚，上沿正好切在顶框下面一线，
+  // 读出来是裁坏了，不是凑近了；点亮后 done() 再拉远一档，进退才成一对。
+  // h 带着坞的抬升余量：底部「按住点灯」那一摞会把主体往上顶约二十毫米，
+  // 不留这一份，柱头就顶出画面
+  c.stage.setRecommended({ az: 55, el: 8, dist: 300, target: V(...AIM_LANTERN), fit: { r: 78, h: 126 } });
   c.stage.snapToRecommended();
 
   let k = 0, holding = false, held = 0, lit = c.state.lit, need = 1.2, misses = 0;

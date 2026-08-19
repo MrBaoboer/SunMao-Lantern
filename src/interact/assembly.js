@@ -226,7 +226,7 @@ export class DragAssembly {
     const s = this.session;
     if (!s) return;
 
-    if (!a.moved) return; // 单纯点击 → 交给点击装配（降级路径）
+    if (!a.moved) return; // 只是点了一下，没有拖 —— 不算一次装配尝试
 
     const remain = (1 - a.u) * a.gap;
     /*

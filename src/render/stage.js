@@ -81,7 +81,7 @@ const EASE_IN = 0.42;
  *
  * bg 是一对：[中心, 边缘]。背景不是一块平色，而是一圈落在主体背后的光晕。
  *
- * bloom 这一列整体减半，为的是抵掉 three r185 的一处上游修正。
+ * bloom 这一列（深色与夜色的非零那几档）整体减半，为的是抵掉 three r185 的一处上游修正。
  *
  * r185 之前 UnrealBloomPass 的可分离高斯核没有归一化：每趟权重和只有
  * 0.60–0.66（核半径当成了 σ，于是在 1σ 处硬截断）。r185 改成 σ = r/3 并把
@@ -98,10 +98,20 @@ const MOODS = {
     studio: { env: 0.62, key: 2.05, fill: 0.55, rim: 0.95, amb: 0.38, bg: [0x2c251c, 0x110d0a], bloom: 0.17 },
     dusk:   { env: 0.28, key: 0.68, fill: 0.24, rim: 0.60, amb: 0.16, bg: [0x241b13, 0x0b0807], bloom: 0.25 },
   },
+  /*
+   * 浅色三档 bloom 一律 0 —— 那层「白色蒙版」的来源就是它。
+   *
+   * 键光下的绵纸是全场最亮的面，亮度贴着阈值（studio 档 0.943）往上冒：
+   * 走 composer 的档位上，纸面自己越线起辉，辉光糊回棂条与窗花 ——
+   * 真 GPU 实测 A2 约 1.8% 的像素被加亮最多 100 级，全部集中在纸面上，
+   * 直出路径同景清晰（低配档从来没有这层翳，就是这个原因）。
+   * 深色与夜色不受影响：那里的纸只有约三成亮度，越线的只有灯焰 —— 该亮的还亮。
+   * 这三档的 bloom 本来只有 0.04–0.09，除了这层翳没有任何可见贡献。
+   */
   light: {
-    craft:  { env: 0.72, key: 1.30, fill: 0.40, rim: 0.50, amb: 0.34, bg: [0xf6f1e6, 0xd8cdb6], bloom: 0.04 },
-    studio: { env: 0.82, key: 1.45, fill: 0.46, rim: 0.55, amb: 0.40, bg: [0xfaf6ec, 0xdfd5bf], bloom: 0.05 },
-    dusk:   { env: 0.52, key: 0.95, fill: 0.30, rim: 0.62, amb: 0.24, bg: [0xe6d9c1, 0xb8a789], bloom: 0.09 },
+    craft:  { env: 0.72, key: 1.30, fill: 0.40, rim: 0.50, amb: 0.34, bg: [0xf6f1e6, 0xd8cdb6], bloom: 0 },
+    studio: { env: 0.82, key: 1.45, fill: 0.46, rim: 0.55, amb: 0.40, bg: [0xfaf6ec, 0xdfd5bf], bloom: 0 },
+    dusk:   { env: 0.52, key: 0.95, fill: 0.30, rim: 0.62, amb: 0.24, bg: [0xe6d9c1, 0xb8a789], bloom: 0 },
   },
   /** 夜色不跟主题走 —— 灯笼只有在暗处才亮得起来 */
   fixed: {

@@ -137,11 +137,17 @@ if (want('unlit')) {
   await ctx.close();
 }
 
+// 软件渲染下转场耗时不定，固定睡眠会拍到相机还在半路的那一帧 —— 等真实条件
+const settled = async (page) => {
+  await page.waitForFunction(() => window.__ctx.stage.camSettled, null, { timeout: 60000 });
+  await page.waitForTimeout(600);
+};
+
 // ── craft：拖凿子在顺枨顶面开榫槽 ─────────────────────────
 if (want('craft')) {
   const { ctx, page } = await open({ width: 1200, height: 800 });
   await page.evaluate(() => window.__engine.goToStep('C2'));
-  await page.waitForTimeout(2600);
+  await settled(page);
   await shot(page, 'craft');
   await ctx.close();
 }
@@ -150,8 +156,9 @@ if (want('craft')) {
 if (want('exploded')) {
   const { ctx, page } = await open({ width: 1200, height: 800 });
   await page.evaluate(() => window.__engine.goToStep('D4'));
-  // D4 进场自带一段 3 秒的展开补间，等它走完再拍
-  await page.waitForTimeout(6000);
+  // D4 进场自带一段 3 秒的展开补间，等它真的摊到底再拍
+  await page.waitForFunction(() => window.__ctx.lantern.explodeT >= 1, null, { timeout: 90000 });
+  await settled(page);
   await shot(page, 'exploded');
   await ctx.close();
 }
@@ -160,7 +167,7 @@ if (want('exploded')) {
 if (want('mobile')) {
   const { ctx, page } = await open({ width: 390, height: 844, isMobile: true });
   await page.evaluate(() => window.__engine.goToStep('A1'));
-  await page.waitForTimeout(3000);
+  await settled(page);
   await shot(page, 'mobile');
   await ctx.close();
 }
