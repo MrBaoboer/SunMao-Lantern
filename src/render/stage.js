@@ -60,12 +60,29 @@ function linearLuma(hex) {
 }
 
 /**
- * 进场斜坡的长度（秒）。
+ * 转场：定长的一段弧，不是无限逼近。
  *
- * 指数衰减在第一帧就是最快的 —— 起步那一下仍然读作「弹了一下」。
- * 让速度在这段时间里从零涨到满，转场就有了起、有了收。
+ * 指数追赶的毛病治不完：前半程把大部分路一口气走掉（起步那一下读作「甩」），
+ * 后半程按比例缩小、永远差一点（收尾读作「飘着不落地」）。
+ * 改成一段有明确时长的缓动 —— 速度从零起、到中段最高、再落回零，
+ * 走到 t = 1 就**精确坐在**推荐机位上。跨度越大给的时间越长，
+ * 短跳干脆、长绕从容，两头都不甩。
  */
-const EASE_IN = 0.42;
+const TRANS_MIN = 0.9;
+const TRANS_MAX = 2.2;
+
+/** 首尾一二阶导都为零的缓动 —— 全程没有任何一个「顿」点 */
+const glide = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+
+/**
+ * 基调切换的渐变时长（秒）。
+ *
+ * 翻页时相机是转过去的，光和背景却瞬间换掉，亮度一格跳变（A2 对 A1
+ * 背景差四十多级）—— 画面在走、灯光在跳，两件事对不上。
+ * 与相机同步渐变过去；实现纪律见 #stepMood()：快照两端、显式落点，
+ * 副作用（地面）只挂在「真正到位」那一步上。
+ */
+const MOOD_FADE = 0.7;
 
 /**
  * 场景基调预设。
@@ -271,8 +288,9 @@ export class Stage {
     this.scene.add(this.ambient);
 
     // ── 地面（接收柔和接触阴影；巡礼/点灯场景用）──
+    // 常开透明：它要跟着基调渐变淡入淡出，而 transparent 一翻就重编译着色器
     const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x14110e, roughness: 0.92, metalness: 0.0,
+      color: 0x14110e, roughness: 0.92, metalness: 0.0, transparent: true,
     });
     this.ground = new THREE.Mesh(new THREE.CircleGeometry(900, 64), groundMat);
     // 沉在灯脚之下：灯笼是挂着的，穗子要有地方垂（见 decor.js 的 buildTassel）。
@@ -305,9 +323,11 @@ export class Stage {
       az: 0, el: 0, dist: this.camera.position.length(),
     };
     this.userTook = false;
-    /** 转场的进场斜坡：0→1，见 update() */
-    this._blend = 1;
-    controls.addEventListener('start', () => { this.userTook = true; });
+    /** 正在走的转场：{ az0, el0, d0, tgt0, t, dur }，终点永远现读 recommend */
+    this._trans = null;
+    /** 正在走的基调渐变，见 setMood() / #stepMood() */
+    this._moodFade = null;
+    controls.addEventListener('start', () => { this.userTook = true; this._trans = null; });
 
     // ── 后期：仅高光溢出（灯焰、辉光），阈值调高以免木料泛白 ──
     this.composer = new EffectComposer(renderer);
@@ -410,6 +430,7 @@ export class Stage {
    * @param {number} [o.dist] 相机到目标的距离（毫米），宽画幅下的取景意图
    * @param {{r:number,h?:number}} [o.fit] 这一步必须完整看到的范围。
    *   画幅装不下时把相机往后拉 —— 只会拉远，不会拉近，宽屏上的取景意图原样保留。
+   * @param {number} [o.ease] 转场时长的倍率：>1 加快，<1 放慢（点灯后的拉远用 0.55）。
    */
   /**
    * @param {{keepUser?:boolean}} [mode] keepUser：只是拿旧声明重算一遍距离
@@ -443,9 +464,9 @@ export class Stage {
     /*
      * 这是「一次新的转场」还是「同一个机位挪了一点」？
      *
-     * 封面那圈自转每帧都下达一次新机位（每帧才 0.03°）。若每次都把进场斜坡按回零，
-     * 速度就永远涨不起来，相机会越落越远 —— 封面的灯于是几乎不转。
-     * 所以只有跨度够大才算新转场，小挪动接着原来的速度走。
+     * 封面那圈自转每帧都下达一次新机位（每帧才 0.03°）。每次都另起一段转场的话，
+     * 缓动永远停在起步段，相机会越落越远 —— 封面的灯于是几乎不转。
+     * 所以只有跨度够大才算新转场，小挪动交给微跟随。
      */
     const dAz = Math.abs(Math.atan2(Math.sin(ar - this.recommend.az), Math.cos(ar - this.recommend.az)));
     const fresh = dAz > 0.02 || Math.abs(er - this.recommend.el) > 0.02
@@ -458,15 +479,24 @@ export class Stage {
     this.recommend.dist = d;
     if (!keepUser) {
       this.userTook = false;
-      // keepUser 那一路（画幅变了、界面高了）每秒都在走，不该当成新转场
+      // keepUser 那一路（画幅变了、界面高了）每秒都在走，不该当成新转场；
+      // 封面自转每帧只挪百分之几度，也走不到这里 —— 都交给 update() 的微跟随
       if (fresh) {
-        this._blend = 0;
-        // 这一次要跨过多少度 —— update() 据此把速率压一档
         const c = this.#spherical();
-        this._span = Math.abs(Math.atan2(Math.sin(ar - c.az), Math.cos(ar - c.az))) * 180 / Math.PI;
+        // 这一次要跨多远：环绕、俯仰、推轨、目标平移，取观感上最大的那一项。
+        // 推轨与平移换算成「等效度数」—— 距离改一半约等于绕过 30°
+        const daz = Math.abs(Math.atan2(Math.sin(ar - c.az), Math.cos(ar - c.az))) * 180 / Math.PI;
+        const del = Math.abs(er - c.el) * 180 / Math.PI;
+        const dolly = Math.abs(d - c.dist) / Math.max(d, c.dist) * 60;
+        const pan = (this.controls.target.distanceTo(t) / Math.max(1, d)) * 57;
+        const span = Math.max(Math.hypot(daz, del), dolly, pan);
+        this._trans = {
+          az0: c.az, el0: c.el, d0: c.dist, tgt0: this.controls.target.clone(),
+          t: 0,
+          dur: Math.min(TRANS_MAX, TRANS_MIN + span / 75) / (ease || 1),
+        };
       }
     }
-    this.cameraEase = ease;
     this.key.target.position.copy(t);
   }
 
@@ -480,6 +510,7 @@ export class Stage {
   /** 相机已经走到位了吗（用户接管时恒为真）—— 冒烟据此判断这一步稳没稳 */
   get camSettled() {
     if (!this.recommend.enabled || this.userTook) return true;
+    if (this._trans) return false;
     const c = this.#spherical();
     const daz = Math.atan2(Math.sin(this.recommend.az - c.az), Math.cos(this.recommend.az - c.az));
     return Math.abs(daz) < 0.004 && Math.abs(this.recommend.el - c.el) < 0.004
@@ -496,7 +527,7 @@ export class Stage {
   snapToRecommended() {
     this.camera.position.copy(this.recommend.pos);
     this.controls.target.copy(this.recommend.target);
-    this._blend = 1;
+    this._trans = null;
     this.controls.update();
   }
 
@@ -520,35 +551,49 @@ export class Stage {
    * 想回到推荐机位，翻一步再翻回来即可（`setRecommended` 会清掉接管标记）。
    */
   update(dt) {
+    this.#stepMood(dt);
     const r = this.recommend;
     if (r.enabled && !this.userTook) {
-      // 起：速度在 EASE_IN 秒里从零涨满（smoothstep）；收：指数衰减本来就自带
-      this._blend = Math.min(1, this._blend + dt / EASE_IN);
-      const b = this._blend * this._blend * (3 - 2 * this._blend);
-      // 摆得越大走得越从容：同一个速率下，绕过一百度和挪过十度都只花一秒 ——
-      // 前者读起来是甩镜头。按这一次要跨的角度把速率压一档，短跳仍然干脆
-      const k = 1 - Math.pow(0.001, dt * (this.cameraEase ?? 1) * b / (1 + (this._span ?? 0) / 110));
-
       /*
        * 按球坐标插值，不按位置插值。
        *
-       * 两点之间直着插，走的是一条弦：方位角差得多的两步（B3 的 38° 到 C1 的 −84°
-       * 差 122°）相机会从主体中间穿过去，近处还会先怼上再退开。
-       * 分开插方位角、仰角与距离，相机就始终沿着一条绕着主体的弧走 ——
-       * 这也正是「转场」这件事在镜头语言里本来的样子。
+       * 两点之间直着插，走的是一条弦：方位角差得多的两步相机会从主体中间
+       * 穿过去，近处还会先怼上再退开。分开插方位角、仰角与距离，
+       * 相机始终沿着一条绕着主体的弧走 —— 这正是转场在镜头语言里本来的样子。
        */
-      const cur = this.#spherical();
-      const daz = Math.atan2(Math.sin(r.az - cur.az), Math.cos(r.az - cur.az));  // 走最短的那一边
-      const az = cur.az + daz * k;
-      const el = cur.el + (r.el - cur.el) * k;
-      const dist = cur.dist + (r.dist - cur.dist) * k;
-      this.controls.target.lerp(r.target, k);
       const t = this.controls.target;
-      this.camera.position.set(
-        t.x + dist * Math.cos(el) * Math.cos(az),
-        t.y + dist * Math.cos(el) * Math.sin(az),
-        t.z + dist * Math.sin(el),
-      );
+      if (this._trans) {
+        // 一段定长的弧：起点是下达那一刻的实况快照，终点现读 recommend ——
+        // 途中画幅重排把终点挪了几毫米，也顺着同一段缓动被带过去
+        const tr = this._trans;
+        tr.t = Math.min(1, tr.t + dt / tr.dur);
+        const e = glide(tr.t);
+        const daz = Math.atan2(Math.sin(r.az - tr.az0), Math.cos(r.az - tr.az0));  // 最短的那一边
+        const az = tr.az0 + daz * e;
+        const el = tr.el0 + (r.el - tr.el0) * e;
+        const dist = tr.d0 + (r.dist - tr.d0) * e;
+        t.lerpVectors(tr.tgt0, r.target, e);
+        this.camera.position.set(
+          t.x + dist * Math.cos(el) * Math.cos(az),
+          t.y + dist * Math.cos(el) * Math.sin(az),
+          t.z + dist * Math.sin(el),
+        );
+        if (tr.t >= 1) this._trans = null;   // glide(1) = 1：已精确坐在机位上
+      } else {
+        // 微跟随：封面自转、取景随画幅重算这类小挪动，临界阻尼地贴上去
+        const k = 1 - Math.pow(0.001, dt * 2.2);
+        const cur = this.#spherical();
+        const daz = Math.atan2(Math.sin(r.az - cur.az), Math.cos(r.az - cur.az));
+        const az = cur.az + daz * k;
+        const el = cur.el + (r.el - cur.el) * k;
+        const dist = cur.dist + (r.dist - cur.dist) * k;
+        t.lerp(r.target, k);
+        this.camera.position.set(
+          t.x + dist * Math.cos(el) * Math.cos(az),
+          t.y + dist * Math.cos(el) * Math.sin(az),
+          t.z + dist * Math.sin(el),
+        );
+      }
     }
     this.controls.update();
   }
@@ -581,27 +626,89 @@ export class Stage {
     this.setMood(this.moodName || 'craft');
   }
 
-  /** 环境亮度整体调节 */
-  setMood(mode) {
+  /**
+   * 环境基调。默认在 MOOD_FADE 秒里渐变过去 —— 翻页时相机是转过去的，
+   * 光与背景也得跟着走，不能一格跳变。`snap` 为真立即切换：
+   * 互动模块是硬切进另一个场的，光跟着镜头一刀换掉才对。
+   *
+   * 阈值那一列的纪律不变：背景永远压在高通门槛以下（见 BLOOM_FLOOR），
+   * 两端都满足「阈值 ≥ 背景亮度 + 余量」，线性插值途中也就处处满足。
+   */
+  setMood(mode, { snap = false } = {}) {
     const theme = this.theme || 'light';
     const preset = MOODS.fixed[mode] || MOODS[theme][mode] || MOODS[theme].craft;
     this.mood = preset;
     this.moodName = (MOODS.fixed[mode] || MOODS[theme][mode]) ? mode : 'craft';
-    this.scene.environmentIntensity = preset.env;
-    this.key.intensity = preset.key;
-    this.fill.intensity = preset.fill;
-    this.rim.intensity = preset.rim;
-    this.ambient.intensity = preset.amb;
-    const u = this.backdrop.material.uniforms;
-    u.uInner.value.setHex(preset.bg[0]);
-    u.uOuter.value.setHex(preset.bg[1]);
-    this.ground.visible = !!preset.ground;
-    this.bloom.strength = preset.bloom;
-    // 背景永远压在高通门槛以下 —— 否则渐变会被从中间切出一个圆盘，
-    // 模糊之后就是画面正中那枚白色光斑。见 BLOOM_FLOOR 的注释。
-    // 浅色的 craft(0.88) 与 studio(0.92) 正好越线，深色各档只有 0.01–0.02，不受影响。
-    this.bloom.threshold = Math.max(BLOOM_FLOOR, linearLuma(preset.bg[0]) + BLOOM_MARGIN);
+    const to = {
+      env: preset.env, key: preset.key, fill: preset.fill, rim: preset.rim, amb: preset.amb,
+      bgIn: new THREE.Color(preset.bg[0]), bgOut: new THREE.Color(preset.bg[1]),
+      bloom: preset.bloom,
+      threshold: Math.max(BLOOM_FLOOR, linearLuma(preset.bg[0]) + BLOOM_MARGIN),
+      ground: !!preset.ground,
+    };
+    if (snap || !this._moodReady) {
+      this._moodReady = true;
+      this._moodFade = null;
+      this.#applyMood(to, 1);
+      this.ground.visible = to.ground;
+      this.ground.material.opacity = 1;
+    } else {
+      this._moodFade = { from: this.#moodLive(), to, t: 0 };
+      if (to.ground) this.ground.visible = true;   // 淡入交给透明度
+    }
     this.onMood?.(this.moodName);
+  }
+
+  /** 此刻画面上真实生效的那一组值 —— 渐变中途换目标，也从这里接着走 */
+  #moodLive() {
+    const u = this.backdrop.material.uniforms;
+    return {
+      env: this.scene.environmentIntensity,
+      key: this.key.intensity, fill: this.fill.intensity,
+      rim: this.rim.intensity, amb: this.ambient.intensity,
+      bgIn: u.uInner.value.clone(), bgOut: u.uOuter.value.clone(),
+      bloom: this.bloom.strength, threshold: this.bloom.threshold,
+      groundK: this.ground.visible ? this.ground.material.opacity : 0,
+    };
+  }
+
+  /** 把 from → v 之间 k 处的那一组值写到场上（k = 1 即原样写 v） */
+  #applyMood(v, k, from = v) {
+    const mix = (a, b) => a + (b - a) * k;
+    this.scene.environmentIntensity = mix(from.env, v.env);
+    this.key.intensity = mix(from.key, v.key);
+    this.fill.intensity = mix(from.fill, v.fill);
+    this.rim.intensity = mix(from.rim, v.rim);
+    this.ambient.intensity = mix(from.amb, v.amb);
+    const u = this.backdrop.material.uniforms;
+    u.uInner.value.lerpColors(from.bgIn, v.bgIn, k);
+    u.uOuter.value.lerpColors(from.bgOut, v.bgOut, k);
+    this.bloom.strength = mix(from.bloom, v.bloom);
+    this.bloom.threshold = mix(from.threshold, v.threshold);
+  }
+
+  /**
+   * 基调渐变每帧走一步。三条纪律（上一版就是在这儿栽的）：
+   *   · 两端做快照、按显式的 t 插值 —— 不在现值上逐帧指数逼近，
+   *     颜色每帧被量化回 8 位，最后一步永远迈不过去；
+   *   · t 到 1 把目标逐项**原样写死**，不认「足够接近」；
+   *   · 副作用（收地面）只挂在这一步上 —— 于是它一定发生。
+   */
+  #stepMood(dt) {
+    const f = this._moodFade;
+    if (!f) return;
+    f.t = Math.min(1, f.t + dt / MOOD_FADE);
+    const e = f.t * f.t * (3 - 2 * f.t);
+    this.#applyMood(f.to, e, f.from);
+    const gk = f.from.groundK + ((f.to.ground ? 1 : 0) - f.from.groundK) * e;
+    this.ground.material.opacity = gk;
+    this.ground.visible = gk > 0.002;
+    if (f.t >= 1) {
+      this.#applyMood(f.to, 1);
+      this.ground.visible = f.to.ground;
+      this.ground.material.opacity = 1;
+      this._moodFade = null;
+    }
   }
 
   dispose() {

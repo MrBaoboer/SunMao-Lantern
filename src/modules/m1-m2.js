@@ -19,7 +19,7 @@ const level = (c) => Math.min(1.4, 1 + c.state.riddleScore * 0.08);
 export function openM1(c, onExit) {
   junk.scene = c.stage.scene;
   junk.clear();
-  c.stage.setMood('night');
+  c.stage.setMood('night', { snap: true });   // 硬切进另一个场，光跟着镜头一刀换
   c.bgm.play('BGM_C_LANTERN');
   junk.add(buildNightSky(c.stage.scene));
   // 凑近，但整盏灯都在画面里 —— 原先贴到只看灯脚，上沿正好切在顶框下面一线，
@@ -71,13 +71,18 @@ export function openM1(c, onExit) {
         if (closed) return;
         lit = true;
         c.state.lit = true;
+        // 点亮那一刻就把「成」记上 —— 后面的拉远、辉光与旁白都是余韵，
+        // 人在余韵里按返回不该丢掉这件事：否则回到四门页，灯亮着、印却没盖，
+        // 片尾也永远凑不齐四件
+        c.state.modulesDone = { ...c.state.modulesDone, M1: true };
         c.sfx.stopLoop('FLAME_IGNITE');
         c.sfx.play('LIGHT_BLOOM');
         c.sfx.loop('FLAME_LOOP');
         fire.hidden = true;
         ring.style.display = 'none';
         tip.textContent = '';
-        c.stage.setRecommended({ az: 55, el: 10, dist: 470, target: V(...AIM_LANTERN), ease: 2.2, fit: FIT_LANTERN });
+        // ease < 1 = 放慢：灯亮起来这一下值得一次从容的拉远，约两秒收进全灯
+        c.stage.setRecommended({ az: 55, el: 10, dist: 470, target: V(...AIM_LANTERN), ease: 0.55, fit: FIT_LANTERN });
         await tween(0.9, (t) => {
           c.lantern.setLit(level(c) * (0.3 + 0.7 * t));
           c.lantern.root.position.z = a(0.5) * Math.sin(t * Math.PI) * 0.6;
@@ -91,7 +96,6 @@ export function openM1(c, onExit) {
         playVO(c, 'M1');
         tools.hidden = false;
         again.hidden = false;
-        c.state.modulesDone = { ...c.state.modulesDone, M1: true };
       };
 
       const start = () => {
@@ -166,18 +170,17 @@ export function openM1(c, onExit) {
 // ══════════════════════════════════════════════════════════
 // 猜灯谜
 //   答错不扣分、不阻断、不重来，也不用红色。
-//   前四题是流传已久的民间谜面，最后一题留给刚学的东西。
+//
+//   五道谜全部指回这一课：你做的灯、你放的芯、你拉的锯、
+//   你合的龙、你推的榫 —— 谜底不在天边，就在手边。
+//   物谜与字谜混排（灯谜本来就以字谜为正宗），难度递进，
+//   最后一题留给刚学的东西。
 // ══════════════════════════════════════════════════════════
 const RIDDLES = [
   {
-    face: '麻屋子，红帐子\n里面住着一个白胖子', tag: '打一食物',
-    key: '花生', opts: ['花生', '核桃', '石榴', '荔枝'],
-    why: '麻屋子是外壳，红帐子是那层红衣，白胖子就是果仁。',
-  },
-  {
-    face: '千条线，万条线\n落到水里看不见', tag: '打一自然现象',
-    key: '雨', opts: ['雪', '雨', '雾', '风'],
-    why: '雨丝落进水里就没了踪影。',
+    face: '薄薄一张纸，包住一团火\n白天静悄悄，夜里满脸红', tag: '打一物',
+    key: '灯笼', opts: ['火盆', '烟花', '灯笼', '香炉'],
+    why: '都说纸包不住火，灯笼偏偏包住了 —— 诀窍你知道：火在中间，纸离得远。',
   },
   {
     face: '身子矮矮，肚里有火\n越烧越短，烧完就没', tag: '打一日用物',
@@ -185,9 +188,15 @@ const RIDDLES = [
     why: '就是你刚放进灯笼里的那一根。',
   },
   {
-    face: '有面没有口，有脚没有手\n四只脚站着，自己不会走', tag: '打一家具',
-    key: '桌子', opts: ['凳子', '桌子', '柜子', '床'],
-    why: '「面」和「脚」都是木工的说法。',
+    face: '满口小铁牙，专咬硬木头\n来回拉几趟，吐出白雪花', tag: '打一件工具',
+    key: '锯', opts: ['凿', '锯', '斧', '刨'],
+    why: '吐出来的「雪花」是锯末。切榫头那一步，你来回拉的就是它。',
+  },
+  {
+    // 四个选项都是「人 / 木」加「口」拼出来的字 —— 拆错哪一笔都有地方去
+    face: '一、人、口\n三笔拼一字', tag: '打一字',
+    key: '合', opts: ['囚', '杏', '合', '呆'],
+    why: '「人」字下面一横一口，拼出来是「合」。四根柱子一起推到底，木匠管那一下叫合龙 —— 你推过。',
   },
   {
     face: '不用一钉，不用一胶\n一凹一凸，两木咬牢', tag: '打一木作工艺',
@@ -200,7 +209,7 @@ const RIDDLES = [
 export function openM2(c, onExit) {
   junk.scene = c.stage.scene;
   junk.clear();
-  c.stage.setMood('night');
+  c.stage.setMood('night', { snap: true });   // 硬切进另一个场，光跟着镜头一刀换
   c.bgm.play('BGM_C_FAIR');
   junk.add(buildNightSky(c.stage.scene));
   c.stage.setRecommended({ az: 40, el: 10, dist: 640, target: V(90, 0, 96), fit: { r: 190, h: 172 } });

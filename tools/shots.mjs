@@ -91,7 +91,7 @@ async function finished(page, o) {
     // 开场那一步在远处撒了一圈「灯河」光点精灵，会在画面边角留下橙色斑
     c.stage.scene.traverse((s) => { if (s.isSprite) s.visible = false; });
     c.hud.setTheme('dark');
-    c.stage.setMood(o.mood);
+    c.stage.setMood(o.mood, { snap: true });
 
     c.lantern.attachAll();
     c.lantern.showOnly(null);

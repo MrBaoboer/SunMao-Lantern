@@ -203,15 +203,20 @@ async function main() {
       outroShown = true;
       (async () => {
         playVO(ctx, state.lit ? 'OUTRO' : 'OUTRO-dark');
-        await sleep(7500);
+        // 与旁白对齐：按语速推算，两版末句「新年快乐」都起于十秒出头 ——
+        // 卡在这一刻升起来，写下来的祝福和念出来的祝福同时到
+        await sleep(10300);
         // 这几秒里用户可能又进了别的模块 —— 片尾不该盖到人家头上
         if (hubToken !== myToken) return;
         hud.sheet({
           label: '片尾',
           body: `<div class="finale">
-            <div class="ln">13 根木条</div><div class="ln">0 颗钉子</div><div class="ln">7000 年</div>
+            <div class="ln">十三根木条</div>
+            <div class="ln">七千年手艺</div>
+            <div class="ln">一盏亲手做的灯</div>
+            <div class="ln seal-ln">新年快乐</div>
           </div>`,
-          actions: [{ label: '知道了', kind: 'primary', on: () => ctx.openHub() }],
+          actions: [{ label: '回到灯前', kind: 'primary', on: () => ctx.openHub() }],
           onEsc: () => ctx.openHub(),
           onMount: (o) => {
             o.querySelectorAll('.ln').forEach((el, i) => {
@@ -384,7 +389,7 @@ async function main() {
   lantern.showDecor(true);
   lantern.core.visible = true;
   lantern.setLit(0);
-  stage.setMood('dusk');
+  stage.setMood('dusk', { snap: true });   // 还压在加载封面底下，没有可看的渐变
 
   // 封面的灯退得远一些、转得慢一些：它是题字背后的一层影，不是主体。
   // 要求减少动效时就摆在那儿不转 —— 这是一段一直不停的运动，CSS 管不到
