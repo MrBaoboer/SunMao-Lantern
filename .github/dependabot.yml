@@ -1,0 +1,42 @@
+# 依赖升级交给 dependabot：每月一次，每个生态捆成一条 PR —— CI 绿了点一下就能合，
+# 不必逐个包审。安全更新不等月、随时来，同样只捆一条。
+#
+# 做不到「全部并成一条」：分组只在单个 package-ecosystem 内生效，跨生态没有合并的写法。
+# 所以最多两条 —— npm 一条、GitHub Actions 一条，而 action 常年不动，多半只有前者。
+#
+# 一处要留神：three 也在这一组里。它是唯一进产物的依赖，`check:code` 绿了不算数，
+# 还得在真机上把十八步走一遍。差异里出现 three 时，别只看 CI 那盏绿灯。
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    # 例行升级永远只占一个位；安全更新不计入这个上限
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: 依赖
+    groups:
+      npm:
+        applies-to: version-updates
+        patterns: ['*']
+      npm-security:
+        applies-to: security-updates
+        patterns: ['*']
+
+  # ci.yml 里那四个 action。它们只影响 CI，红了当场就知道，碰不到线上那盏灯。
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: CI
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns: ['*']
+      actions-security:
+        applies-to: security-updates
+        patterns: ['*']
