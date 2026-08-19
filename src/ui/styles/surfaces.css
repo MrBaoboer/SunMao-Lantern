@@ -299,6 +299,8 @@
   letter-spacing: var(--ls-vast); text-indent: var(--ls-vast);
   line-height: 2.4; color: var(--text);
 }
+/* 收尾那句祝福描金 —— 全片「金只落在当下唯一重要的东西上」的最后一次 */
+.finale .seal-ln { color: var(--accent); }
 
 /* ═══════════════ 窄屏 ═══════════════ */
 

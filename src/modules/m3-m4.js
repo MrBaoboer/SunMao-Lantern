@@ -38,7 +38,7 @@ const COMBO = [
 export function openM3(c, onExit) {
   junk.scene = c.stage.scene;
   junk.clear();
-  c.stage.setMood('night');
+  c.stage.setMood('night', { snap: true });   // 硬切进另一个场，光跟着镜头一刀换
   c.bgm.play('BGM_C_WISH');
   junk.add(buildNightSky(c.stage.scene));
   c.stage.setRecommended({ az: 52, el: 8, dist: 330, target: V(...AIM_LANTERN), fit: FIT_LANTERN });
@@ -292,7 +292,7 @@ export function openM4(c, onExit) {
   junk.scene = c.stage.scene;
   junk.clear();
   c.bgm.stop();
-  c.stage.setMood('night');
+  c.stage.setMood('night', { snap: true });   // 硬切进另一个场，光跟着镜头一刀换
   junk.add(buildNightSky(c.stage.scene));
 
   // 天球的极轴必须转到 +Z。SphereGeometry 的两极天生在 ±Y，而本项目是 Z 轴向上
