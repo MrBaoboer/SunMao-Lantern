@@ -215,8 +215,9 @@ CI 把这两半拆开，挂在不同的时机：
 
 `test` 与 `size` 的实现在 `tools/unit.test.mjs`（零依赖）与 `tools/size-budget.mjs`。
 
-版本升级挂在 `.github/dependabot.yml`，每月一次：构建与检查用的五个捆成一个 PR，
-`three` 单开 —— 它是唯一进产物的依赖，`check:code` 绿了不算数，还得在真机上走一遍。
+版本升级挂在 `.github/dependabot.yml`，每月一次，每个生态捆成一条 PR（分组不跨生态，
+所以最多 npm 与 GitHub Actions 各一条）。`three` 也在里头 —— 它是唯一进产物的依赖，
+差异里出现它时 `check:code` 绿了不算数，还得在真机上走一遍。
 
 CI 上的冒烟**不加 `--shots`** —— 三十六张软件渲染截图要好几分钟，而绿的跑次没人看。
 脚本只在某一步刚记下问题时截那一张，失败时 `.shots/smoke/` 作为 artifact 上传。
