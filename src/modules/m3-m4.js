@@ -327,12 +327,14 @@ export function openM4(c, onExit) {
     const lights = [];
     clone.traverse((o) => { if (o.isLight) lights.push(o); });
     for (const l of lights) l.removeFromParent();
-    // 挂在镜头正对的方向附近（±30°）—— 文案承诺「转一转视角，找个位置」，
-    // 全随机方位会把灯挂到镜头背后去
+    // 挂在镜头对面那半边，但避开正中一条带：正中是主灯，挂在那儿就是
+    // 一摞影子叠在它身后。左右轮着挂、离轴至少十六度，六盏才摊得开；
+    // 偏角上限收在画幅以内 —— 全随机方位会把灯挂到镜头背后去
     const cam = c.stage.camera.position;
-    const th = Math.atan2(cam.y, cam.x) + Math.PI + (Math.random() - 0.5) * 1.1;
-    const r = 280 + Math.random() * 440;
-    clone.position.set(Math.cos(th) * r, Math.sin(th) * r, 40 + Math.random() * 280);
+    const side = placed.length % 2 ? -1 : 1;
+    const th = Math.atan2(cam.y, cam.x) + Math.PI + side * (0.28 + Math.random() * 0.5);
+    const r = 320 + Math.random() * 400;
+    clone.position.set(Math.cos(th) * r, Math.sin(th) * r, 60 + Math.random() * 260);
     clone.scale.setScalar(0.7 + Math.random() * 0.5);
     clone.userData.phase = Math.random() * 6;
     c.stage.scene.add(clone);

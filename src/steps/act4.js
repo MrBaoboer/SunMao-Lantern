@@ -138,13 +138,20 @@ export function act4(ctx) {
         c.lantern.showPanels(true);
         c.lantern.showDecor(false);
         c.lantern.core.visible = false;
-        for (const id of PANELS) c.lantern.parts.get(id).installed = false;
+        // 只摆当下要装的这一片。待装位在框内侧 24 mm（板是从里面顶进槽的），
+        // 四片一起摆出来会在四个角上互相穿插 —— 木板穿过木板，画面先自己失真了
+        for (const [i, id] of PANELS.entries()) {
+          const p = c.lantern.parts.get(id);
+          p.installed = false;
+          p.mesh.visible = i === 0;
+        }
         c.lantern.applyAssembly();
 
         let seated = 0;
         const install = async (pid, guided) => {
           const p = c.lantern.parts.get(pid);
           const g = p.mesh;
+          g.visible = true;              // 轮到它了才现身
           const home = p.home.clone();
           const out = new THREE.Vector3(...p.placement.outward);
           const tilt = (J4.TILT_DEG * Math.PI) / 180;
@@ -203,6 +210,8 @@ export function act4(ctx) {
       },
       exit(c) {
         junk.clear(); c.lantern.setSection(null, false);
+        // 没轮到的那几片还藏着 —— 一并交还
+        c.lantern.showPanels(true);
         for (const id of PANELS) c.lantern.parts.get(id).installed = true;
         c.lantern.applyAssembly();
       },
