@@ -426,7 +426,11 @@ async function main() {
   coverAct.querySelector('#cv-go').focus();
 
   coverAct.querySelector('#cv-go').addEventListener('click', enter);
-  coverAct.querySelector('#cv-help').addEventListener('click', () => hud.guide({ full: true }));
+  // 在封面上把完整版读过一遍，进场就不再放精简版 —— 同一份内容不该连讲两次
+  coverAct.querySelector('#cv-help').addEventListener('click', () => hud.guide({
+    full: true,
+    onClose: () => { state.primed = true; },
+  }));
 }
 
 main().catch((e) => {

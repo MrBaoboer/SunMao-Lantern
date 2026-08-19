@@ -166,6 +166,7 @@ export class Engine {
       ctx.hud.setTask(null);
       ctx.hud.setCue('');
       ctx.hud.setNarration('');
+      ctx.hud.clearTransient();
       ctx.hud.quiet(false);
       ctx.hud.closeOverlays();        // 两层一起收 —— 上一步的坞不留给下一步
       ctx.exitInspect?.();            // 「拆开看看」开着就翻页，灯笼会永久停在半透的爆炸态

@@ -109,6 +109,12 @@ scene.traverse((o) => { if (o.isSprite) o.visible = false; });
 光加多了 —— `src/render/stage.js` 的 `MOODS` 里，四路光的总辐照只留了约三成余量，越过就被 ACES 推平。
 想让画面更亮，改 `bg`（背景那一对颜色）与 `bloom`，别整体上调光，见 [DESIGN.md §7](../DESIGN.md#7-画面曝光与背景)。
 
+### 浅色模式下整盏灯像蒙了一层白纱
+
+浅色三档（craft / studio / dusk）的 `bloom` 被改成了非零。键光下的绵纸亮度贴着高通阈值，
+走 composer 的档位上纸面会自己越线起辉，辉光糊回棂条与窗花 —— 低配档走直出，所以从来没有这层白。
+把 `src/render/stage.js` 里 `MOODS.light` 各档的 `bloom` 改回 0 即可；深色与夜色的溢出留给灯焰，不在此列。
+
 ### 浅色模式下画面正中浮着一枚白色圆斑
 
 改过 `stage.js` 的 `MOODS` 里某一档的 `bg[0]`（背景中心色），而且改亮了。

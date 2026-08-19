@@ -420,6 +420,9 @@ export class Lantern {
         const v = p.home.clone().sub(center);
         if (v.lengthSq() < 1) v.set(0, 0, 1);
         v.normalize();
+        // 竖向压到七成：画幅是横的，等比外扩会让顶层角花顶穿章节栏、
+        // 穗子坠出下缘，而左右方向明明还有一倍余地
+        v.z *= 0.72;
         move(p.mesh, p.home, v, 0.8 * p.home.distanceTo(center) + 40);
       } else {
         // S31：严格沿各自装配方向的反方向移出（非径向外扩）

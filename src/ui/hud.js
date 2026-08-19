@@ -316,6 +316,18 @@ export class HUD {
     this._toastTimer = setTimeout(() => { e.hidden = true; }, dur);
   }
 
+  /**
+   * 上一步的余音：完成的短提示还挂着、右箭头还亮着提醒 —— 都是说给上一步听的。
+   * 做完一步紧接着翻页时，它们会盖在下一步的开场上（「合龙了」压在选花纹上），
+   * 引擎每翻一步收一次。
+   */
+  clearTransient() {
+    clearTimeout(this._toastTimer);
+    this.el.toast.hidden = true;
+    clearTimeout(this._readyT);
+    this.el.next.classList.remove('ready');
+  }
+
   // ══════════════ 工艺笔记 ══════════════
 
   /** @param {null | {title?:string, spec?:Array<[string,string]>, body?:string, foot?:string}} n */
