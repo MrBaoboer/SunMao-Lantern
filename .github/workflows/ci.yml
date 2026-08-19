@@ -58,7 +58,7 @@ jobs:
       # 浏览器内核单独缓存：一次下载约 170 MB，命中时这一步几秒就过
       - name: 取 Playwright 内核缓存
         id: pw-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}

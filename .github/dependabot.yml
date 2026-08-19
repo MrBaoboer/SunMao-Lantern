@@ -1,0 +1,31 @@
+# 依赖升级交给 dependabot，两条规矩：
+#   · 每月一次 —— 统共六个依赖，按周开 PR 只是噪音；
+#   · three 单独开一个 PR。它是唯一进产物的依赖，`check:code` 绿了不算数，
+#     还得在真机上把十八步走一遍；其余五个只在构建与检查里露面，捆成一个 PR 就行。
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: 依赖
+    groups:
+      # 通配减去 three —— 落单的那个自己开 PR
+      toolchain:
+        patterns: ['*']
+        exclude-patterns: ['three']
+
+  # ci.yml 里那四个 action。同样每月一次、捆成一个 PR ——
+  # 它们只影响 CI，红了当场就知道，碰不到线上那盏灯。
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: CI
+    groups:
+      actions:
+        patterns: ['*']

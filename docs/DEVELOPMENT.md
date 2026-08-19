@@ -14,7 +14,8 @@
 
 ## 环境
 
-**Node** 22.13+ 或 24+（`package.json` 的 `engines`）。
+**Node** 22.13+ 或 24.x（`package.json` 的 `engines`）。上界是闭的 —— Vercel 按这一行挑构建用的
+Node，写成 `>=` 会让它在新的大版本上架时自己跳过去，而 CI 只验声明的这两个。
 
 **浏览器**需要 WebGL 2（three 0.185 的渲染器只申请 `webgl2` 上下文，没有降级）与 ES2022，
 建议按 Chrome / Edge 111+、Safari 16.4+、Firefox 113+ 这条保守基线。
