@@ -248,7 +248,7 @@ async function walk(vp) {
         const V3 = c.stage.camera.position.constructor;      // THREE.Vector3
         const edge = new V3(0, 0, -1).applyQuaternion(c.mach.tool.quaternion).normalize();
         const attack = c.mach.job.faceNormal.clone().normalize();
-        // 探面的目标：空的话刀就直接坐在走刀线上（= 埋进料里），见 DESIGN.md §4
+        // 探面的目标：空的话刀就直接坐在走刀线上（= 埋进料里），见 docs/DESIGN.md §4
         tool = {
           kind: c.mach.tool.userData.kind, dot: edge.dot(attack),
           rides: c.mach.job.rideMeshes?.length ?? 0,

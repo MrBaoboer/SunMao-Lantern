@@ -95,7 +95,7 @@ export function resetRun() {
 /**
  * ★M3 隐私红线：编号为**本地生成的随机码**，不含任何用户标识、不可反查，
  * 不上传、不请求姓名手机号、不登录。海报以文字呈现编号，不做二维码
- * （接真 QR 需引入唯一的外部依赖，留待产品定稿 URL 后加，见 DESIGN.md 差异表）。
+ * （接真 QR 需引入唯一的外部依赖，留待产品定稿 URL 后加，见 docs/DESIGN.md §10）。
  */
 export function makePosterNo(year = new Date().getFullYear()) {
   const chars = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ';

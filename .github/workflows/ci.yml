@@ -1,6 +1,6 @@
 # 两条作业挂在不同的时机：`toolchain`（纯 Node，二三十秒）每个 PR 都跑，按 engines
 # 声明的两头 22.13 与 24 各跑一遍；`e2e`（无头浏览器，十几分钟）只在合并进 main
-# 之后跑，或手动触发。这样拆的理由见 docs/ARCHITECTURE.md#检查。
+# 之后跑，或手动触发。这样拆的理由见 docs/DEVELOPMENT.md#检查。
 name: check
 
 on:
