@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| [DESIGN.md](DESIGN.md) | 几何、主线、刀具、取景、音频为什么这么实现 |
+| [DESIGN.md](DESIGN.md) | 几何、主线、刀具、取景、画面、音频为什么这么实现 |
 | [UI.md](UI.md) | 界面设计语言：主题、令牌、组件、文案 |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | 跑不起来、画面不对、测试挂了，按症状查 |
 | [SECURITY.md](../SECURITY.md) · [COMMERCIAL.md](../COMMERCIAL.md) | 攻击面与响应头 · 双轨授权 |
@@ -13,11 +13,10 @@
 
 ## 环境
 
-- **Node** 22.13+ 或 24（`package.json` 的 `engines`）。上界是闭的：Vercel 按这一行挑构建用的 Node，
-  CI 只验声明的这两个版本。
+- **Node** 22.13+ 或 24（`package.json` 的 `engines`，上界是闭的：Vercel 按这一行挑构建用的 Node，CI 只验这两个版本）。
 - **浏览器**需要 WebGL 2 与 ES2022。基线：Chrome / Edge 111+、Safari 16.4+、Firefox 113+。
-  移动设备与低配机自动减配（抗锯齿、阴影、后期），配色不变。
-  WebGL 上下文被系统回收时（移动端切后台常见）等一次 `webglcontextrestored`，原地接着走。
+  移动设备与低配机自动减配（离屏抗锯齿、阴影、后期），配色不变。
+  WebGL 上下文被系统回收时（移动端切后台常见），封面回来等一次 `webglcontextrestored`，原地接着走。
 
 ## 命令
 
@@ -28,8 +27,9 @@ npm run dev        # 开发服务器 → http://localhost:5173
 
 ```bash
 npm run build      # 静态产物 → dist/
+npm run preview    # 本地起 dist/
 npm run lint       # ESLint
-npm test           # 单元断言：模数守卫、CSG 内核、补间取消语义
+npm test           # 单元测试：模数守卫、CSG 内核、补间取消语义
 npm run verify     # 几何闭合验算（Node 端，不需要浏览器）
 npm run size       # 产物体积门槛
 npm run smoke      # 冒烟测试：真实浏览器走完十八步与四个模块
@@ -56,17 +56,17 @@ src/
   steps/      act1 / act3 / act4 十八步主线 · util 步骤共用工具
   modules/    m1-m2 点灯与灯谜 · m3-m4 心愿与挂灯 · vo 模块旁白与片尾
   util/       tween 补间与调度
-  main.js     唯一的装配处 · styles.css 样式入口
+  main.js     唯一的装配处 · styles.css 样式入口 · devshot.js 开发期拍图助手（不进产物）
 public/       原样进产物：站点图标两枚 · audio/{bgm,vo} 音频挂载口
 art/          原画（不进产物），站点图标由它生成
-tools/        单元断言 · 几何验算 · 冒烟测试 · 体积门槛 · 重出截图 · 导出旁白 · 生成图标
-vite.config.js   构建配置、开发期两个中间件、生产 CSP 注入
+tools/        单元测试 · 几何验算 · 冒烟测试 · 体积门槛 · 重出截图 · 导出旁白 · 生成图标
+vite.config.js   构建配置、开发期两个接口、生产 CSP 注入
 ```
 
 产物约 870 kB（gzip 约 250 kB）：three.js 单独一块 619 kB，其余全部 247 kB。
 门槛写在 `tools/size-budget.mjs`（740 / 290 / 300 kB），`npm run size` 越线即红。
 产物里没有字体，图片只有两枚站点图标 PNG（合计 16 kB）；界面图标是内联 SVG，纸纹是 data-URI SVG。
-仓库不含音频，旁白与背景音乐留了挂载口，没有音频时字幕照常走完（[DESIGN.md §9](DESIGN.md#9-音频)）。
+仓库不含音频，旁白与背景音乐留了挂载口，没有音频时字幕照常走完（[DESIGN.md §8](DESIGN.md#8-音频)）。
 
 ---
 
@@ -97,7 +97,7 @@ modules/    做完之后的四件事
 
 | 键 | 是什么 | 常用的 |
 |---|---|---|
-| `stage` | 舞台 | `setRecommended({az,el,dist,fit})` · `setMood()` · `hold()` · `updaters` |
+| `stage` | 舞台 | `setRecommended({az,el,dist,target,fit})` · `setMood()` · `hold()` · `updaters` |
 | `lantern` | 装配体 | `setOps()` · `addOp()` · `showOnly()` · `setExplode()` · `setSection()` · `setLit()` |
 | `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `sheet()` · `dock()` · `addSpot()` · `hideOverlay()` / `closeOverlays()` |
 | `drag` | 单自由度装配 | `begin({parts,…})` · `seat(id)` · `autoSeatAll()` |
@@ -122,7 +122,7 @@ modules/    做完之后的四件事
   cue: { ico: 'drag', text: '<em>拖动横枨</em>，套住两个榫头' },
   narration: `两根横枨套上去……`,   // 字幕与配音共用
   note: { title: '出头', spec: [...], body: '…' },
-  task: { label: '明白了，开工', onClick(c, engine) { … } },  // 需要动手时才有
+  task: { label: '明白了，开工', onClick(c, engine) { … } },  // 静态声明；也可以在 enter() 里 hud.setTask()
   async enter(c, engine) { … },     // 铺开这一步
   exit(c) { … },                    // 收掉这一步自己造的东西
 }
@@ -130,16 +130,16 @@ modules/    做完之后的四件事
 
 - **`cam.fit` 不能省。** 它声明「必须完整看到多大一块」，相机据此在窄画幅上自动后退；省掉它手机上就裁边。
   取值见 `steps/util.js` 的 `FIT_*`。
-- **`cam` 只是下达机位**，翻页时相机自己绕过去。真要另起一个场（互动模块、封面、脚本拍图）才叫 `stage.snapToRecommended()`。
+- **`cam` 只是下达机位**，翻页时相机自己绕过去。真要另起一个场（互动模块、封面、拍图脚本）才叫 `stage.snapToRecommended()`。
 - **`enter()` 必须自己把台子摆全。** 顶上的格子能跳到任何一步，箭头能往回翻，谁在前面是不定的。
-  要整盏灯就 `attachAll()` + `showOnly(null)` + `allFinished()` + 装板与装饰；只要台面上几根就 `only()` 与 `detach()`。
+  要整盏灯就 `attachAll()` + `showOnly(null)` + `allFinished()` + 装板与装饰；只要台面上几根就 `showOnly(ids)` 与 `detach()`。
   少一句的后果是画面空掉，正着走看不出来，`npm run smoke` 倒着再走一遍就是为了抓它。
 - **`enter()` 抛错不卡人。** 引擎记日志、置 `taskDone`、弹一句说明；翻页与顶上的格子不经过 `enter()`，一定走得通。
 - **需要动手的步骤，「下一步」先用来做活儿**：一下按键做一段（走刀一趟 `mach.autoRun()`、装一件 `drag.seat(id)`、
   按一下任务按钮，或步骤登记的 `engine.assist(fn)`），做完最后一段、步骤 `done()` 之后才翻页。
-  段与段之间的空当里那一下不作废：`#waitLeg` 等下一段起来就做，五秒等不到才认这一步做完。规矩本身见 [UI.md](UI.md#五条规矩)。
+  段与段之间的空当里那一下不作废：`#waitLeg` 等下一段起来就做，约五秒等不到才认这一步做完。规矩本身见 [UI.md](UI.md#五条规矩)。
 
-引擎 `go()` 的顺序：`cancelAll()` → 停旁白 → `prev.exit()` → 取消拖拽与加工 → 清标注、笔记、任务、提示 →
+引擎 `go()` 的顺序：`cancelAll()` → 停旁白 → `prev.exit()` → 取消拖拽与加工 → 清箭头、标注、笔记、任务、提示、字幕与短提示 →
 `closeOverlays()`（两层一起收）→ `ctx.exitInspect?.()` → 清高亮、剖切与灯火 → `stage.hold(false)` → 铺开新一步 → `enter()`。
 
 `exitInspect` 是「拆开看看」注册在 `ctx` 上的复位钩子。少了它，开着「拆开看看」翻页时坞被收掉，
@@ -163,14 +163,14 @@ lantern.js   13 件木构件 + 4 片格心 + 装饰件；管 ops（做到哪道�
 改一道工序只需 `lantern.addOp(id, OP.TENON)`，几何当场重建，切面自动变亮。加工动画不需要美术出图，也不会与几何失同步。
 
 **走刀去料**走同一条管线，把工序拆成连续量：给 `mach.begin()` 加 `carve: { parts: ['LB-A1'], tag: OP.BEAM_SLOT }`，
-刀的位置与进度就交给 `lantern.carve()` → `buildPart(id, ops, carve)`。三条判定见 [DESIGN.md §4](DESIGN.md#料要跟着刀走)，
+刀的位置与进度就交给 `lantern.carve()` → `buildPart(id, ops, carve)`。判定见 [DESIGN.md §4](DESIGN.md#料要跟着刀走)，
 `verify.js` 的 `[CARVE]` 钉住最容易错的那条。刀够不着的部分（另一根枨、另一个端头）由 `onDone` 里的 `addOp()` 补上。
 
 ## 状态
 
 `core/state.js` 是一个 Proxy，字段分两类：
 
-- **`PREFS` 偏好**：深色、声音、字幕、旁白朗读、是否看过「怎么操作」。落 `localStorage`，跨会话保留。
+- **`PREFS` 偏好**：主题、声音、字幕、旁白朗读、是否看过「怎么操作」。落 `localStorage`，跨会话保留。
 - **`RUN` 进度**：纹样、点亮与亮度、灯谜得分、愿望与海报编号、模块完成情况。纯内存，每次打开从头开始。
 
 `load()` 只从存档取 `PREFS` 的键，旧存档里多出来的字段自然被忽略；写入侧同样只挑 `PREFS`。
@@ -197,7 +197,7 @@ export function openM5(c, onExit) {
 ```
 
 在 `main.js` 的 `DOORS` 里加一项，旁白写进 `modules/vo.js`。模块内的长异步链要用自己的 `closed` 标志守卫：
-它们的 `wait`/`tween` 不经过引擎的 `cancelAll()`。
+它们的 `wait`/`tween` 不经过引擎的 `cancelAll()`。完成的登记要发生在事成那一刻，余韵动画与旁白不是完成条件。
 
 ---
 
@@ -207,7 +207,7 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 `three` 单独切一个 chunk（比其余代码加起来还大）。分包按 Vite 8 的 rolldown 写：`build.rolldownOptions`，
 分组用 `output.codeSplitting.groups` 按模块 id 匹配。
 
-开发期两个中间件（`apply: 'serve'`，不进生产构建）：
+开发期两个接口（`apply: 'serve'`，不进生产构建）：
 
 - `POST /__shot`：页面把 canvas 的 dataURL 发过来，写到 `.shots/`；
 - `POST /__manifest`：页面把运行时的真实步骤数据导出，供 `tools/make-script.mjs` 排版配音稿。
@@ -232,7 +232,7 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 - **`smoke`** 证明这些几何真的能在页面上跑起来：十八步全部可达、每一步画面里确实有东西（可见且落在画幅内的网格 ≥ 2）、
   控制台无报错、无 HTTP 4xx/5xx、相机距离正常、刀具刃口朝着工件、加工与装配的降级路径走得完、
   需要动手的一步按「下一步」是一下做一段、C6 一键六道工序、M1–M4 各走一遍、深浅两套主题都真的换过去。
-  1440×900 与 390×844（真实移动 UA，低配档）各走一遍，桌面画幅再倒着走一遍。
+  1440×900 与 390×844（真实移动 UA，低配档）各走一遍，桌面画幅再倒着走一遍，四个模块只在桌面画幅走。
 
 CI（`.github/workflows/ci.yml`）把两半拆开：
 
@@ -246,7 +246,7 @@ CI 上的冒烟不加 `--shots`：三十六张软件渲染截图要好几分钟�
 依赖升级挂在 `.github/dependabot.yml`，每月一次，每个生态一条 PR。`three` 是唯一进产物的依赖，
 差异里出现它时 `check:code` 绿了不算数，还得在真机上走一遍。
 
-ESLint 用扁平配置，只开 `recommended`。两处放宽：`caughtErrors: 'none'`（隐私模式读 `localStorage`、解码失败之类的空 `catch` 是有意的），
+ESLint 用扁平配置，只开 `recommended`。放宽的只有：`no-console` 关掉，`caughtErrors: 'none'`（隐私模式读 `localStorage`、解码失败之类的空 `catch` 是有意的），
 以及 `tools/make-script.mjs` 里放行全角空格（排中文的排版字符）。
 
 ## 生成物
@@ -259,7 +259,7 @@ npm run script               # 从源码导出旁白 → 旁白解说稿.md
 python tools/make-icons.py   # 从 art/lantern-icon.png 生成两枚站点图标 → public/
 ```
 
-图标那条要 Python 3 与 Pillow，所以没做成 npm 脚本，也不进 `npm run check`：原画一年也未必改一次，
+图标那条要 Python 3、Pillow 与 numpy，所以没做成 npm 脚本，也不进 `npm run check`：原画一年也未必改一次，
 不值得为它给工具链添一个 Python 依赖。取景、圆角与调色板的取舍写在脚本头部。
 
 旁白只有一处出处：主线在步骤的 `narration` 字段，模块在 `src/modules/vo.js`；
