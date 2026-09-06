@@ -4,9 +4,9 @@
 
 **纯客户端静态站点：没有后端、没有账号、没有数据库，不收集任何个人信息。**
 
-- 业务代码里唯一的 `fetch` 是读自己 `public/` 下的两份音频清单；产物不向任何外部域名发请求。
+- 生产代码里只有两处 `fetch`，读的都是自己 `public/` 下的音频清单；产物不向任何外部域名发请求。
 - 没有埋点、没有 Cookie、没有第三方脚本。
-- `localStorage` 里只有五项偏好（深色、声音、字幕、旁白朗读、是否看过操作说明）。进度、灯谜得分、写下的愿望不落盘。
+- `localStorage` 里只有五项偏好（主题、声音、字幕、旁白朗读、是否看过操作说明）。进度、灯谜得分、写下的愿望不落盘。
 - 海报在本机 Canvas 合成，编号是 `crypto` 生成的随机码，不含用户标识，不可反查。
 - 首页带 CSP（`default-src 'self'`，脚本只放行自身与构建时现算的内联脚本 sha256），
   托管侧另配 `X-Content-Type-Options`、`Referrer-Policy`、`Cross-Origin-Opener-Policy` 与一份只做减法的 `Permissions-Policy`。

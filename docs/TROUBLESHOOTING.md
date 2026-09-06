@@ -103,7 +103,7 @@ scene.traverse((o) => { if (o.isSprite) o.visible = false; });
 
 ```js
 __ctx.stage.bloom.threshold        // 浅色 studio 约 0.94，craft 约 0.90
-__ctx.stage.bloom.enabled = false  // 关掉这一道 pass，异常随之消失即可确认
+__ctx.stage.bloom.enabled = false  // 只跳过这一道 pass，异常随之消失即可确认
 ```
 
 ### 刀具看着是反的 / 歪的
@@ -115,7 +115,7 @@ __ctx.stage.bloom.enabled = false  // 关掉这一道 pass，异常随之消失�
 
 不掉料：这一步的 `mach.begin()` 漏了 `carve`，或者 `carve.tag` 与 `onDone` 里 `addOp()` 的工序对不上。没有 `carve` 就退回老行为，走完几刀之后整道工序一次性开出来。
 
-刀没去过的地方也没了，分两种（三层判据见 [DESIGN.md §4](DESIGN.md#料要跟着刀走)）：
+刀没去过的地方也没了，分两种（判定见 [DESIGN.md §4](DESIGN.md#料要跟着刀走)）：
 
 - **同一趟刀里，别处的料也掉了。** 第一层判错了。检查这一步的 `faceNormal` 是不是与走刀方向垂直，两者指同一个轴时这一层就失效。
 - **下一趟刀刚下去，那一处就已经成形了。** 走完的那几趟被 `carveFinish()` 记宽了。`verify.js` 的 `[CARVE]` 钉的就是这件事，改动这条路径后先跑 `npm run verify`。
@@ -259,7 +259,7 @@ npm run smoke -- --url http://localhost:5173
 npm run smoke -- --shots
 ```
 
-开发服务器不要边跑边改：Vite 的热替换会在中途重载页面，测试随即报「Execution context was destroyed」，那是热替换，不是产品缺陷。
+开发服务器不要边跑边改：Vite 的热替换会在中途重载页面，Playwright 随即报「Execution context was destroyed」，那是热替换，不是产品缺陷。
 
 ### `npm run verify` 有断言失败
 
