@@ -291,8 +291,7 @@ export function makeSimpleDrag(ctx) {
     addEventListener('pointermove', onMove);
     addEventListener('pointerup', onUp);
 
-    // 该往哪儿拖：一枚呼吸的小箭头。默认钉在构件后方，
-    // 步骤可以自己给一组位置（夹榫那一步要在槽的两侧各来一枚）
+    // 该往哪儿拖：一枚呼吸的小箭头。默认钉在构件后方，步骤可以自己给一组位置
     const spots = opt.arrows || [obj.position.clone().addScaledVector(d, -14)];
     ctx.guides.set(spots.map((p) => ({ pos: p.clone(), dir: d.clone() })));
     // 动手的步骤一开始就把机位钉死，手上对位时画面不会自己漂

@@ -478,8 +478,12 @@ export class HUD {
       const i = bs.indexOf(document.activeElement);
       bs[(i + (e.key === 'ArrowDown' ? 1 : bs.length - 1)) % bs.length]?.focus();
     });
+    // 焦点落回开关按钮的那一次不算「移出」：按钮在 pointerdown 时就会夺焦，
+    // 这里先收掉，随后的 click 又把菜单打开，等于第二下永远关不掉
     m.addEventListener('focusout', (e) => {
-      if (this._menu === m && !m.contains(e.relatedTarget)) this.closeMenu();
+      if (this._menu !== m || m.contains(e.relatedTarget)) return;
+      if (e.relatedTarget === this.el.menu) return;
+      this.closeMenu();
     });
 
     m.addEventListener('click', (e) => {
@@ -503,8 +507,11 @@ export class HUD {
       if (b.dataset.k === 'restart') this.onRestart?.();
     });
 
-    // 点到菜单以外才收起 —— 点在菜单自己身上不能收，否则开关根本按不动
-    this._away = (e) => { if (!m.contains(e.target)) this.closeMenu(); };
+    // 点到菜单以外才收起 —— 点在菜单自己身上不能收，否则开关根本按不动；
+    // 开关按钮也算「以内」：它的 click 自会 toggle，这里先收掉就成了收完又开
+    this._away = (e) => {
+      if (!m.contains(e.target) && !this.el.menu.contains(e.target)) this.closeMenu();
+    };
     addEventListener('pointerdown', this._away, true);
   }
 
@@ -750,7 +757,7 @@ export class HUD {
    * `aria-label` 走标题；三处没有标题的卷（落笔、海报、片尾）自己传 label ——
    * 一个没有名字的 dialog，读屏只会报一句「对话框」。
    */
-  sheet({ eyebrow, title, lede, body, actions = [], veil = true, label, top, onMount, onEsc } = {}) {
+  sheet({ eyebrow, title, lede, body, actions = [], veil = true, label, top, onMount, onEsc, onGone } = {}) {
     const name = label || title || eyebrow;
     const html = `<div class="sheet scroll" role="dialog" aria-modal="true"
       ${name ? `aria-label="${name.replace(/<[^>]+>/g, '')}"` : ''}>
@@ -761,20 +768,20 @@ export class HUD {
       ${actions.length ? `<div class="sheet-act">${actions.map(actionHTML).join('')}</div>` : ''}
     </div>`;
     return this.showOverlay(html, {
-      veil, onEsc, top,
+      veil, onEsc, onGone, top,
       onMount: (o) => { bindActions(o, actions); onMount?.(o); },
     });
   }
 
   /** 坞：停在底部的一排控件，画面完整让出来 */
-  dock({ body, actions = [], hint, top, onMount, onEsc } = {}) {
+  dock({ body, actions = [], hint, top, onMount, onEsc, onGone } = {}) {
     const html = `<div class="dock">
       ${body || ''}
       ${actions.length ? `<div class="dock-row">${actions.map(actionHTML).join('')}</div>` : ''}
       ${hint ? `<p class="dock-hint">${hint}</p>` : ''}
     </div>`;
     return this.showOverlay(html, {
-      veil: false, onEsc, top,
+      veil: false, onEsc, onGone, top,
       onMount: (o) => { bindActions(o, actions); onMount?.(o); },
     });
   }
