@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { tween, Ease, wait } from '../util/tween.js';
 import { J3 } from '../core/modulus.js';
-import { isPrimaryPointer, setRayFromEvent, makeDragPlane, haptic } from './pointer.js';
+import { isPrimaryPointer, setRayFromEvent, makeDragPlane } from './pointer.js';
 
 export class DragAssembly {
   /** @param {{stage:any, lantern:any, hud:any, sfx:any}} ctx */
@@ -199,11 +199,10 @@ export class DragAssembly {
       this.ctx.lantern.highlight(a.partId, 0xc8a063, 0.14);
     }
 
-    // 楔紧段的听觉与触觉提示
+    // 楔紧段的听觉与提示
     if (s.wedge && u > 1 - J3.WEDGE_LEN / a.gap && !a.wedgeFired) {
       a.wedgeFired = true;
       this.ctx.sfx.play('WEDGE_TIGHT', { gain: 0.7 });
-      haptic(10, this.ctx.state);
       this.ctx.hud.setCue('最后一点会紧，推到底');
     }
   }
@@ -289,7 +288,6 @@ export class DragAssembly {
       const pitch = (s.pitchBase ?? 0) + (s.seated - 1) * 2;
       if (s.double) this.ctx.sfx.playDouble(s.seatSfx, { pitch });
       else this.ctx.sfx.play(s.seatSfx, { pitch });
-      haptic(s.wedge ? 22 : 14, this.ctx.state);
     }
     s.onSeat?.(partId, s.seated, s.total);
 

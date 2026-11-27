@@ -6,7 +6,7 @@ import { PALETTE, makeWoodMaterial } from '../render/materials.js';
 import { Solid, box } from '../core/boxcsg.js';
 import { solidToGeometry, grainAxisOf, edgeLines } from '../render/geometry.js';
 import { tween } from '../util/tween.js';
-import { isPrimaryPointer, setRayFromEvent, makeDragPlane, haptic } from '../interact/pointer.js';
+import { isPrimaryPointer, setRayFromEvent, makeDragPlane } from '../interact/pointer.js';
 
 export { box, edgeLines };
 
@@ -269,7 +269,6 @@ export function makeSimpleDrag(ctx) {
       if (u > 0.88) {
         drag = null; seated = true;
         ctx.guides.clear();
-        haptic(14, ctx.state);
         onSeat?.();
       }
     };
@@ -326,11 +325,15 @@ export class Junk {
   add(...o) { this.items.push(...o); return o[0]; }
   clear() {
     for (const o of this.items) {
-      if (o.dispose) { o.dispose(); continue; }
-      this.scene.remove(o);
+      // Three.js r187 起 Object3D 原型新增了仅派发事件的 dispose() ——
+      // 必须排除 Object3D，否则教学木块、虚线框、幻影体与全景天球都会跳过 scene.remove，
+      // 残留在场景里层层堆叠并泄漏显存。
+      if (!o.isObject3D && typeof o.dispose === 'function') { o.dispose(); continue; }
+      if (o.parent) o.parent.remove(o);
+      else this.scene?.remove(o);
       // 必须递归：教学件是 Group，网格挂在组下、描边又挂在网格下，
       // 只看传进来这一层等于一件都没释放。
-      // 共用真灯笼几何的克隆体（M4 的挂灯）不能走这条路，它们自带 dispose。
+      // 共用真灯笼几何的克隆体（M4 的挂灯）不能走这条路，它们以普通清理对象自带 dispose。
       o.traverse?.((n) => {
         n.geometry?.dispose?.();
         const ms = Array.isArray(n.material) ? n.material : n.material ? [n.material] : [];

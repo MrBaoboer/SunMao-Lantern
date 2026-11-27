@@ -329,12 +329,7 @@ export class Stage {
     this._trans = null;
     /** 正在走的基调渐变，见 setMood() / #stepMood() */
     this._moodFade = null;
-    controls.addEventListener('start', () => {
-      const was = this.userTook;
-      this.userTook = true;
-      this._trans = null;
-      if (!was) this.onUserOrbit?.(true);
-    });
+    controls.addEventListener('start', () => { this.userTook = true; this._trans = null; });
 
     // ── 后期：仅高光溢出（灯焰、辉光），阈值调高以免木料泛白 ──
     this.composer = new EffectComposer(renderer);
@@ -485,12 +480,10 @@ export class Stage {
     this.recommend.el = er;
     this.recommend.dist = d;
     if (!keepUser) {
-      const was = this.userTook;
       this.userTook = false;
-      if (was) this.onUserOrbit?.(false);
       // keepUser 那一路（画幅变了、界面高了）每秒都在走，不该当成新转场；
       // 封面自转每帧只挪百分之几度，也走不到这里 —— 都交给 update() 的微跟随
-      if (fresh || was) {
+      if (fresh) {
         const c = this.#spherical();
         // 这一次要跨多远：环绕、俯仰、推轨、目标平移，取观感上最大的那一项。
         // 推轨与平移换算成「等效度数」—— 距离改一半约等于绕过 30°
@@ -507,13 +500,6 @@ export class Stage {
       }
     }
     this.key.target.position.copy(t);
-  }
-
-  /** 平滑回到当前步骤的推荐机位（不打断或重置本步动手进度） */
-  resetView() {
-    if (!this._lastFrame) return false;
-    this.setRecommended(this._lastFrame, { keepUser: false });
-    return true;
   }
 
   /** 相机此刻相对轨道目标的球坐标（Z 轴向上） */
@@ -595,8 +581,8 @@ export class Stage {
           t.z + dist * Math.sin(el),
         );
         if (tr.t >= 1) this._trans = null;   // glide(1) = 1：已精确坐在机位上
-      } else if (!this.camSettled) {
-        // 微跟随：封面自转、取景随画幅重算这类小挪动，临界阻尼地贴上去；已到位则跳过三角计算
+      } else {
+        // 微跟随：封面自转、取景随画幅重算这类小挪动，临界阻尼地贴上去
         const k = 1 - Math.pow(0.001, dt * 2.2);
         const cur = this.#spherical();
         const daz = Math.atan2(Math.sin(r.az - cur.az), Math.cos(r.az - cur.az));
@@ -621,14 +607,12 @@ export class Stage {
       if (!this.running) return;
       this._raf = requestAnimationFrame(loop);
       this.timer.update();
-      const rawDt = this.timer.getDelta();
-      const dt = Math.min(rawDt, 0.05);
-      const wallDt = Math.min(rawDt, 0.5);
+      const dt = Math.min(this.timer.getDelta(), 0.05);
       const t = this.timer.getElapsed();
       this.update(dt);
       // 单个 updater 抛错不能连坐这一帧剩下的所有更新 —— 记录，继续走
       for (const u of this.updaters) {
-        try { u(dt, t, wallDt); } catch (e) { console.error('[updater]', e); }
+        try { u(dt, t); } catch (e) { console.error('[updater]', e); }
       }
       if (this.bloomEnabled) this.composer.render();
       else this.renderer.render(this.scene, this.camera);

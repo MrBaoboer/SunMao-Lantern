@@ -96,26 +96,26 @@ function dedupe(segs) {
   return out;
 }
 
-// ── 万字纹（正交万字不断头）：基矢 (3,1) 与 (-1,3) 密铺 ──
-//     每个 卍 的中心十字长 2u、四臂顺时针折回 2u，相邻 卍 的钩端恰好首尾成直角相接，
-//     在 90° 正交棂条间留出连续回环的「万」字空腔，不会像等距密铺那样闭合退化成普通方格网。
+// ── 万字纹：卍 字连续铺陈，四臂钩转落在单元角点上，故相邻单元自然接续 ──
+//     「回环相连，没有起点也没有终点」= 万福不断头
 function wanziSegments() {
   const raw = [];
-  const u = 8.5;
-  const cx0 = (FIELD.x0 + FIELD.x1) / 2;
-  const cy0 = (FIELD.y0 + FIELD.y1) / 2;
-  const span = 4;
-  for (let i = -span; i <= span; i++) {
-    for (let j = -span; j <= span; j++) {
-      const x = cx0 + (3 * i - j) * u;
-      const y = cy0 + (i + 3 * j) * u;
+  const cell = 26;
+  const A = cell / 2;
+  const cols = Math.ceil((FIELD.x1 - FIELD.x0) / cell) + 1;
+  const rows = Math.ceil((FIELD.y1 - FIELD.y0) / cell) + 1;
+  const ox = (FIELD.x0 + FIELD.x1) / 2 - ((cols - 1) * cell) / 2;
+  const oy = (FIELD.y0 + FIELD.y1) / 2 - ((rows - 1) * cell) / 2;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = ox + c * cell, y = oy + r * cell;
       raw.push(
-        clipSeg(x - u, y, x + u, y),             // 中心横贯
-        clipSeg(x, y - u, x, y + u),             // 中心竖贯
-        clipSeg(x + u, y, x + u, y + 2 * u),     // 右臂向上折
-        clipSeg(x, y + u, x - 2 * u, y + u),     // 上臂向左折
-        clipSeg(x - u, y, x - u, y - 2 * u),     // 左臂向下折
-        clipSeg(x, y - u, x + 2 * u, y - u),     // 下臂向右折
+        clipSeg(x - A, y, x + A, y),        // 横贯
+        clipSeg(x, y - A, x, y + A),        // 竖贯
+        clipSeg(x + A, y, x + A, y + A),    // 四钩：顺时针转折
+        clipSeg(x - A, y, x - A, y - A),
+        clipSeg(x, y + A, x - A, y + A),
+        clipSeg(x, y - A, x + A, y - A),
       );
     }
   }

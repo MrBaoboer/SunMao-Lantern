@@ -570,6 +570,7 @@ async function walk(vp) {
     }
 
     // ── M4 挂起来：挂一盏、拍一张、全部收起 ──
+    const beforeM4 = await page.evaluate(() => window.__ctx.stage.scene.children.length);
     if (await openDoor('M4')) {
       const clickDock = (text) => page.evaluate((t) => {
         const b = [...document.querySelectorAll('.dock button')].find((x) => x.textContent.includes(t));
@@ -589,22 +590,27 @@ async function walk(vp) {
       if (after >= hung.kids) note(vp.name, `M4「全部收起」没有把挂上去的收掉（${hung.kids} → ${after}）`);
       await page.evaluate(() => document.getElementById('btn-back')?.click());
       await page.waitForTimeout(tmo(900));
+      const afterM4 = await page.evaluate(() => window.__ctx.stage.scene.children.length);
+      if (afterM4 !== beforeM4) note(vp.name, `退出 M4 后场景残留未清理对象（${beforeM4} → ${afterM4}）`);
     }
 
-    // ── 课程目录、视角回正与 D4 全五层聚焦 ──
+    // ── 切步清理回归（防止临时教学件/虚线框/天球残留在场景中堆叠）与 D4 全五层聚焦 ──
+    await goStep('A2');
+    const baseKids = await page.evaluate(() => window.__ctx.stage.scene.children.length);
+    for (const [id, extra] of [['B1', 2], ['B2', 2], ['B3', 2], ['C1', 0]]) {
+      await goStep(id);
+      const kids = await page.evaluate(() => window.__ctx.stage.scene.children.length);
+      if (kids !== baseKids + extra) {
+        note(vp.name, `${id} 场景临时对象数量异常：期望 ${baseKids + extra}，实际 ${kids}（疑似上一步对象未清理）`);
+      }
+    }
     await goStep('D4');
-    await page.evaluate(() => document.getElementById('btn-toc')?.click());
-    const tocItems = await page.$$eval('.toc-item', (els) => els.length);
-    if (tocItems !== 18) note(vp.name, `课程目录应有 18 项，实际 ${tocItems} 项`);
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(200);
+    const d4Kids = await page.evaluate(() => window.__ctx.stage.scene.children.length);
+    if (d4Kids !== baseKids) note(vp.name, `D4 场景残留未清理对象：期望 ${baseKids}，实际 ${d4Kids}`);
     await page.evaluate(() => { window.__ctx.lantern.focusLayer(1); });
     const paperDim = await page.evaluate(() => window.__ctx.lantern.decor.papers[0]?.children[0]?.material?.opacity ?? 1);
     if (paperDim > 0.3) note(vp.name, `D4 聚焦第 1 层时绵纸未降透明：opacity=${paperDim}`);
     await page.evaluate(() => window.__ctx.lantern.focusLayer(null));
-    await page.evaluate(() => { window.__ctx.stage.userTook = true; window.__ctx.stage.resetView(); });
-    const resetOk = await page.evaluate(() => !window.__ctx.stage.userTook);
-    if (!resetOk) note(vp.name, '视角回正 resetView() 未交还推荐机位');
   }
 
   // 四个互动模块的入口

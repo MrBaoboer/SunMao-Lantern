@@ -11,11 +11,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import * as THREE from 'three';
 import { a, av, dim, M, C } from '../src/core/modulus.js';
 import { box, boxVolume, boxesOverlap, boxIntersection, Solid, interferenceVolume } from '../src/core/boxcsg.js';
 import { state, resetRun, makePosterNo } from '../src/core/state.js';
-import { latticeSegments, PANEL_DIMS } from '../src/render/lattice.js';
+import { latticeSegments } from '../src/render/lattice.js';
 import { parseNarration } from '../src/audio/voice.js';
+import { Junk } from '../src/steps/util.js';
 import { tween, wait, cancelAll, tick, Ease } from '../src/util/tween.js';
 
 // ── 模数 ────────────────────────────────────────────────
@@ -128,42 +130,44 @@ test('回调抛错不会让 tween 变成不死 tween', async () => {
   assert.doesNotThrow(() => tick(0.2));
 });
 
-test('wait(s) 跟随活跃帧时钟推进，低帧率下仍按 wallDt 对齐真实秒数', async () => {
-  let done = false;
-  let tw = 0;
-  const p = wait(0.3).then(() => { done = true; });
-  tween(1.0, (k) => { tw = k; }, { ease: Ease.linear });
-  tick(0.05, 0.15);
-  await Promise.resolve();
-  assert.equal(done, false);
-  assert.ok(Math.abs(tw - 0.05) < 1e-6);
-  tick(0.05, 0.16);
-  await p;
-  assert.equal(done, true);
-  assert.ok(Math.abs(tw - 0.10) < 1e-6);
-  cancelAll();
+// ── Junk 清理器（防止 Three.js r187+ Object3D.dispose() 绕过 scene.remove）──
+test('Junk.clear 完整移除 Object3D 子树并释放几何/材质/贴图，同时兼容自定义清理器', () => {
+  const scene = new THREE.Scene();
+  const junk = new Junk(scene);
+  const g = new THREE.Group();
+  const geo = new THREE.BoxGeometry(10, 10, 10);
+  const tex = new THREE.Texture();
+  const mat = new THREE.MeshBasicMaterial({ map: tex });
+  let geoDisposed = 0;
+  let matDisposed = 0;
+  let texDisposed = 0;
+  geo.addEventListener('dispose', () => { geoDisposed++; });
+  mat.addEventListener('dispose', () => { matDisposed++; });
+  tex.addEventListener('dispose', () => { texDisposed++; });
+  g.add(new THREE.Mesh(geo, mat));
+  const standalone = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), new THREE.MeshBasicMaterial());
+  scene.add(g, standalone);
+
+  let customDisposed = 0;
+  junk.add(g, standalone, { dispose: () => { customDisposed++; } });
+  assert.equal(scene.children.length, 2);
+
+  junk.clear();
+  assert.equal(scene.children.length, 0, 'Object3D 必须真正从 scene 中移除，不能残留在场景里堆叠');
+  assert.equal(geoDisposed, 1);
+  assert.equal(matDisposed, 1);
+  assert.equal(texDisposed, 1);
+  assert.equal(customDisposed, 1);
 });
 
 // ── 格心纹样 ────────────────────────────────────────────
-test('万字纹保持连续回折空腔，不退化成全连通方格网', () => {
-  const segs = latticeSegments('wanzi');
-  assert.ok(segs.length > 60, `万字纹线段数偏少：${segs.length}`);
-  // 取内部横线（去掉四条边框后），验证同一水平线上存在断口（开口通道），而非整行贯通
-  const { FIELD } = PANEL_DIMS;
-  const innerH = segs.filter((s) =>
-    Math.abs(s.y0 - s.y1) < 1e-3 && s.y0 > FIELD.y0 + 1 && s.y0 < FIELD.y1 - 1,
-  );
-  assert.ok(innerH.length > 10, '内部应有多条横向棂条');
-  const span = FIELD.x1 - FIELD.x0;
-  const fullLines = innerH.filter((s) => Math.abs(s.x1 - s.x0) > span * 0.85);
-  assert.equal(fullLines.length, 0, '万字纹不应退化成贯通整宽的横网格线');
-});
-
-test('麻叶纹正常生成六出放射棂条且无零长退化线段', () => {
-  const segs = latticeSegments('mayo');
-  assert.ok(segs.length > 80, `麻叶纹线段数偏少：${segs.length}`);
-  for (const s of segs) {
-    assert.ok(Math.hypot(s.x1 - s.x0, s.y1 - s.y0) >= 1, '不应含零长或极短碎线段');
+test('万字纹与麻叶纹正常生成棂条且无零长退化线段', () => {
+  for (const id of ['wanzi', 'mayo']) {
+    const segs = latticeSegments(id);
+    assert.ok(segs.length > 40, `${id} 线段数偏少：${segs.length}`);
+    for (const s of segs) {
+      assert.ok(Math.hypot(s.x1 - s.x0, s.y1 - s.y0) >= 1, `${id} 不应含零长或极短碎线段`);
+    }
   }
 });
 

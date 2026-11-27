@@ -341,21 +341,13 @@ async function main() {
   };
 
   addEventListener('keydown', (e) => {
+    if (e.key !== 'x' && e.key !== 'X') return;
+    // Ctrl/Cmd+X 是剪切，不该顺手把灯笼拆开；封面还没退场时也不该
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (!cover.hidden && !cover.classList.contains('gone')) return;
     if (e.target instanceof Element
       && e.target.closest('input, select, textarea')) return;
-    if (e.key === 'x' || e.key === 'X') {
-      if (inspecting || !hud.overlayOpen) hud.onInspect();
-    } else if (e.key === 'r' || e.key === 'R') {
-      if (!hud.modalOpen && stage.resetView()) hud.toast('视角已回正', { dur: 1200 });
-    }
-  });
-
-  // 双击画布空白处平滑回正视角（不重置本步进度）
-  stage.canvas.addEventListener('dblclick', () => {
-    if (!entered || hud.modalOpen || !stage.userTook) return;
-    if (stage.resetView()) hud.toast('视角已回正', { dur: 1200 });
+    if (inspecting || !hud.overlayOpen) hud.onInspect();
   });
 
   // 上下文找回来了：已进入主线就原地接着走；若还没点进封面则恢复入口，不把人困在无控件画面
@@ -383,9 +375,6 @@ async function main() {
 
   // 界面占掉的上下两条边交给三维 —— 灯笼据此让位与退远
   hud.onSafeArea = (safe) => stage.setSafeArea(safe);
-  stage.onUserOrbit = (on) => hud.setResetCam(on);
-  hud.onResetCam = () => stage.resetView();
-  hud.onReplay = () => { if (engine.replayNarration()) hud.toast('再说一遍', { dur: 1400 }); };
 
   hud.onSound = (v) => { SFX.setEnabled(v); bgm.setEnabled(v); };
   hud.onTheme = (v) => stage.setTheme(v);
@@ -405,8 +394,8 @@ async function main() {
   hud.setTone(stage.moodName === 'night' ? 'dark' : null);
 
   // ── 主循环 ──
-  stage.updaters.add((dt, t, wallDt) => {
-    tickTweens(dt, wallDt);
+  stage.updaters.add((dt, t) => {
+    tickTweens(dt);
     lantern.update(dt, t);
     fx.chips.update(dt);
     fx.ripples.update(dt);

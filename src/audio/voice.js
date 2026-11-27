@@ -109,7 +109,6 @@ export class VoiceTrack {
    */
   play(stepId, text, o = {}) {
     this.stop();
-    this._last = { stepId, text, o };
     const gen = this.gen;
     const lines = parseNarration(text, o.cps ?? BASE_CPS);
     if (!lines.length) { o.onDone?.(); return; }
@@ -152,14 +151,6 @@ export class VoiceTrack {
     } else {
       runCaptions(1);
     }
-  }
-
-  /** 重播当前这一段旁白（不重置当前步骤进度） */
-  replay() {
-    if (!this._last) return false;
-    const { stepId, text, o } = this._last;
-    this.play(stepId, text, o);
-    return true;
   }
 
   /** 仅走字幕（静默点：S30 巡礼段严禁补录任何旁白） */

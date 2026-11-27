@@ -26,14 +26,14 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
 /** 四章 */
 export const PHASES = ['开场', '认识榫卯', '做骨架', '装点年味'];
 
-/** 怎么操作。前四条是第一次进来就该知道的，后三条留给完整版。touch 是触屏机型的替换句 */
+/** 怎么操作。前四条是第一次进来就该知道的，后两条留给完整版。touch 是触屏机型的替换句 */
 const GUIDE = [
   { k: ['back', 'forward'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用',
-    touch: '点底部两侧箭头，翻到上一步、下一步' },
-  { k: ['drag'], t: '按住画面拖，换个角度看；滚轮缩放。转偏了按 <em>R</em> 或双击画面回正',
-    touch: '按住画面拖，换个角度看；双指缩放。转偏了双击画面或点右上角回正' },
-  { k: ['layers'], t: '顶上一格就是一步，点一下直接跳过去；点步骤名可打开完整目录' },
-  { k: ['more'], t: '深色、声音、字幕与重播旁白，都在右上角' },
+    touch: '点两侧箭头，翻到上一步、下一步' },
+  { k: ['drag'], t: '按住画面拖，换个角度看；滚轮缩放。转到哪儿就停在哪儿',
+    touch: '按住画面拖，换个角度看；双指开合缩放。转到哪儿就停在哪儿' },
+  { k: ['layers'], t: '顶上一格就是一步，点一下直接跳过去' },
+  { k: ['more'], t: '深色、声音、字幕，都在右上角' },
   { k: ['X'], t: '没有卷或坞挡着时，按 X 把灯笼拆开、调透明，看看里面',
     touch: '右上角的「拆开看看」，把灯笼拆开、调透明', full: true },
   { k: ['spark'], t: '不想自己动手，就选旁边的「帮我加工」「帮我装上」；按下一步，也会替你做一段',
@@ -71,9 +71,7 @@ export class HUD {
   constructor(state) {
     this.state = state;
     this.el = {
-      topbar: $('topbar'), chapters: $('chapters'),
-      toc: $('btn-toc'), stepno: $('stepno'), phasenm: $('phasenm'), steptitle: $('steptitle'),
-      resetCam: $('btn-reset-cam'),
+      topbar: $('topbar'), chapters: $('chapters'), stepno: $('stepno'), steptitle: $('steptitle'),
       prev: $('nav-prev'), next: $('nav-next'),
       note: $('note'), noteTab: $('note-tab'), toast: $('toast'), srStep: $('sr-step'),
       bottom: $('bottom'), cue: $('cue'), narration: $('narration'),
@@ -92,19 +90,15 @@ export class HUD {
     this._base = null;
     this._top = null;
     this.steps = [];
-    this._currentIndex = -1;
     this._safe = { top: 0, bottom: 0 };
 
     this.el.menu.innerHTML = icon('more');
-    this.el.resetCam.innerHTML = icon('aim');
     this.el.prev.innerHTML = icon('back');
     this.el.next.innerHTML = icon('forward');
 
     this.el.prev.addEventListener('click', () => this.onPrev?.());
     this.el.next.addEventListener('click', () => this.onNext?.());
     this.el.task.addEventListener('click', () => this.onTask?.());
-    this.el.resetCam.addEventListener('click', () => this.onResetCam?.());
-    this.el.toc.addEventListener('click', () => this.openCatalog());
     this.el.menu.addEventListener('click', (e) => { e.stopPropagation(); this.toggleMenu(); });
     this.el.noteTab.addEventListener('click', () => this.toggleNote());
     this.el.back.innerHTML = `${icon('back')}<span>返回</span>`;
@@ -264,53 +258,13 @@ export class HUD {
 
   #hideTip() { this._tip?.remove(); this._tip = null; }
 
-  /** 按需显隐「回正视角」按钮：仅在用户转走视角后出现，用完即走 */
-  setResetCam(on) {
-    this.el.resetCam.hidden = !on;
-  }
-
-  /** 四幕十八步目录卷：移动端与桌面端都能一步直达任意步骤 */
-  openCatalog() {
-    if (!this.steps.length) return;
-    const byPhase = PHASES.map(() => []);
-    this.steps.forEach((s, i) => byPhase[s.phase ?? 0].push({ i, s }));
-    const cur = this._currentIndex;
-    this.sheet({
-      top: true,
-      title: '课程目录',
-      lede: '四幕十八步，点任意一步直接跳过去',
-      body: `<div class="toc">${byPhase.map((list, p) => `
-        <div class="toc-grp">
-          <div class="toc-hd">${esc(PHASES[p])}</div>
-          <div class="toc-list">${list.map(({ i, s }) => `
-            <button class="toc-item" type="button" data-i="${i}"
-                    ${i === cur ? 'aria-current="step"' : ''}>
-              <b>${String(i + 1).padStart(2, '0')}</b>
-              <span>${esc(s.title)}</span>
-            </button>`).join('')}</div>
-        </div>`).join('')}</div>`,
-      actions: [{ label: '合上', kind: 'primary', on: () => this.hideOverlay() }],
-      onEsc: () => this.hideOverlay(),
-      onMount: (o) => {
-        o.querySelectorAll('.toc-item').forEach((b) => b.addEventListener('click', () => {
-          const idx = +b.dataset.i;
-          this.hideOverlay();
-          this.onJump?.(idx);
-        }));
-      },
-    });
-  }
-
   /** 高亮当前所在的章与步 */
   setStep(index, total, title) {
-    this._currentIndex = index;
-    const phase = this.steps[index]?.phase ?? 0;
     this.el.stepno.textContent = index >= 0 ? `${String(index + 1).padStart(2, '0')}／${total}` : '';
-    this.el.phasenm.textContent = index >= 0 ? PHASES[phase] || '' : '';
     this.el.steptitle.textContent = title || '';
     // 顶部那两行是视觉上的「走到哪了」，读屏看不见它变化 —— 单独报一句。
     // 字幕关掉时这是唯一的翻页信号
-    this.el.srStep.textContent = index >= 0 ? `第 ${index + 1} 步，共 ${total} 步：${PHASES[phase] || ''}，${title || ''}` : '';
+    this.el.srStep.textContent = index >= 0 ? `第 ${index + 1} 步，共 ${total} 步：${title || ''}` : '';
     // 格子的三种状态只有颜色高低之分，读屏读不出来 —— 名字里带上状态，
     // 当下那一格再挂 aria-current
     this.el.chapters.querySelectorAll('.tick').forEach((t) => {
@@ -324,6 +278,7 @@ export class HUD {
       if (state === 'now') t.setAttribute('aria-current', 'step');
       else t.removeAttribute('aria-current');
     });
+    const phase = this.steps[index]?.phase ?? 0;
     this.el.chapters.querySelectorAll('.ch').forEach((ch) => {
       const p = +ch.dataset.p;
       ch.dataset.on = p === phase ? '1' : '0';
@@ -504,7 +459,6 @@ export class HUD {
     // 开关照旧存下选择，但得说一句为什么现在没反应
     const forced = this._tone === 'dark';
     m.innerHTML = `<button role="menuitem" data-k="help">${icon('book')}<span>怎么操作</span></button>`
-      + `<button role="menuitem" data-k="toc">${icon('layers')}<span>课程目录</span></button>`
       + '<div class="sep"></div>'
       + toggles.map((t) => {
         const on = read(t);
@@ -515,7 +469,6 @@ export class HUD {
           : row;
       }).join('')
       + '<div class="sep"></div>'
-      + `<button role="menuitem" data-k="replay">${icon('voice')}<span>重播旁白</span></button>`
       + `<button role="menuitem" data-k="inspect">${icon('cube')}<span>拆开看看</span></button>`
       + `<button role="menuitem" data-k="check">${icon('ruler')}<span>尺寸对照</span></button>`
       + '<div class="sep"></div>'
@@ -560,8 +513,6 @@ export class HUD {
       }
       this.closeMenu();
       if (b.dataset.k === 'help') this.guide({ full: true });
-      if (b.dataset.k === 'toc') this.openCatalog();
-      if (b.dataset.k === 'replay') this.onReplay?.();
       if (b.dataset.k === 'inspect') this.onInspect?.();
       if (b.dataset.k === 'check') this.onCheck?.();
       if (b.dataset.k === 'restart') this.onRestart?.();

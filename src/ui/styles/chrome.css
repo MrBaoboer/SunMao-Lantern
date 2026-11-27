@@ -207,36 +207,20 @@
 
 .toprow {
   display: flex; align-items: center; justify-content: space-between;
-  gap: var(--s4); margin-top: var(--s3);
+  gap: var(--s5); margin-top: var(--s3);
 }
-.where {
-  pointer-events: auto;
-  display: inline-flex; align-items: baseline; gap: var(--s3); min-width: 0;
-  padding: 4px var(--s2) 4px 0; border-radius: var(--r-xs);
-  text-align: left;
-  transition: color var(--t-fast) var(--ease);
-}
-.where:hover .steptitle { color: var(--accent); }
-.where:active { opacity: 0.78; }
+.where { display: flex; align-items: baseline; gap: var(--s3); min-width: 0; }
 .stepno {
   font-family: var(--mono); font-size: var(--fs-mark);
   letter-spacing: var(--ls-tight); color: var(--text-2);
   flex: none;
-}
-/* 宽屏顶上有四章名字，这里不必重复；窄屏（≤900px）藏掉章节栏后在这里补显当前章名 */
-.phasenm {
-  display: none; flex: none;
-  font-size: var(--fs-mark); letter-spacing: var(--ls-base);
-  color: var(--accent);
 }
 .steptitle {
   font-family: var(--serif); font-weight: 400;
   font-size: var(--fs-tiny); letter-spacing: var(--ls-wide);
   color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  transition: color var(--t-fast) var(--ease);
 }
-.top-tools { display: flex; align-items: center; gap: var(--s1); flex: none; }
 
 /* ═══════════════ 两侧翻页 ═══════════════ */
 
@@ -263,7 +247,6 @@
   .nav-prev:hover:not(:disabled) .ico { transform: translateX(-3px); }
   .nav-next:hover:not(:disabled) .ico { transform: translateX(3px); }
 }
-.nav:active:not(:disabled) { transform: translateY(var(--nav-y)) scale(0.94); }
 /* 手机上这两枚是唯一的翻页入口，颜色不能只在悬停时才起来 */
 .nav:disabled { opacity: 0.18; }
 #topbar[data-quiet="1"] ~ .nav { opacity: 0; pointer-events: none; }
@@ -396,7 +379,7 @@
   transition: opacity var(--t-base) var(--ease);
 }
 .cue:empty { opacity: 0; }
-.cue .ico { width: 14px; height: 14px; color: var(--accent-mid); }
+.cue .ico { width: 14px; height: 14px; color: var(--accent-soft); }
 .cue em { font-style: normal; color: var(--accent); }
 .cue b { font-family: var(--mono); font-weight: 400; color: var(--text-2); }
 
@@ -433,7 +416,6 @@
 
 @media (max-width: 900px) {
   .ch-nm { display: none; }
-  .phasenm { display: inline; }
   .chapters { gap: var(--s3); }
   .note { width: min(248px, 44vw); padding: var(--s4); }
 }

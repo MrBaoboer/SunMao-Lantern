@@ -1,9 +1,8 @@
 /**
- * 1 自由度指针投影与触觉微反馈共用工具
+ * 1 自由度指针投影共用工具
  *
  * 装配拖拽、拖刀加工与教学件拖拽原先各自复制了同一套 NDC 换算、
- * 视向对齐拖拽平面构造与指针守卫。收口到这里之后，多指隔离、主按键守卫
- * 与移动端微触觉全片一次生效。
+ * 视向对齐拖拽平面构造与指针守卫。收口到这里之后，多指隔离与主按键守卫全片一次生效。
  */
 
 import * as THREE from 'three';
@@ -35,14 +34,4 @@ export function makeDragPlane(camera, axisDir, point) {
   }
   n.normalize();
   return new THREE.Plane().setFromNormalAndCoplanarPoint(n, point);
-}
-
-/** 渐进增强的移动端触觉微脉冲（静音、桌面或不支持时静默跳过） */
-export function haptic(ms, state) {
-  if (state && !state.sound) return;
-  try {
-    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-      navigator.vibrate(ms);
-    }
-  } catch { /* 不支持或被浏览器策略拦截时静默 */ }
 }

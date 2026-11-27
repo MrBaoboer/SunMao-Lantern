@@ -251,17 +251,6 @@ export function act4(ctx) {
 （气口）
 中梁底下挂个中国结，接一串红流苏。
 最后放灯芯 —— 它就坐在中梁上。`,
-      segments: [
-        `该给灯笼糊「皮」了。
-里面糊一层绵纸，外面贴上红纸窗花。`,
-        `四个角，各嵌一个祥云牙子。
-看着是朵云，其实在撑着这个角 ——
-有它在，方框就不容易歪。`,
-        `顶上再装龙纹角花，扣住四个柱头。
-角花一扣，柱子就再也退不出来了。`,
-        `中梁底下挂个中国结，接一串红流苏。
-最后放灯芯 —— 它就坐在中梁上。`,
-      ],
       note: {
         title: '上的是哪一道锁',
         spec: [['角花外挡边', '向外出挑 2 毫米'], ['角花压舌', '落进顶面浅槽']],
@@ -308,7 +297,6 @@ export function act4(ctx) {
           {
             label: '装祥云牙子',
             run: async () => {
-              engine.say(1);
               for (const [i, b] of c.lantern.decor.brackets.entries()) {
                 b.visible = true;
                 const home = b.position.clone();
@@ -324,7 +312,6 @@ export function act4(ctx) {
           {
             label: '装龙纹角花',
             run: async () => {
-              engine.say(2);
               for (const [i, p] of c.lantern.decor.plates.entries()) {
                 p.visible = true;
                 const home = p.position.clone();
@@ -346,7 +333,6 @@ export function act4(ctx) {
           {
             label: '挂结与流苏',
             run: async () => {
-              engine.say(3);
               c.lantern.knot.visible = true;
               c.lantern.tassel.visible = true;
               c.sfx.play('KNOT_SWING');
@@ -417,13 +403,6 @@ export function act4(ctx) {
         c.lantern.showDecor(true);
         c.lantern.core.visible = true;
 
-        const LAYER_DESC = {
-          1: '底盘 <b>5</b> 件：两顺枨、两横枨与中梁，托起整盏灯与灯芯',
-          2: '上面的框 <b>4</b> 件：中部不开槽，底面留深槽，顶面留角花压槽',
-          3: '立柱 <b>4</b> 根：两处细颈扣入柱窝，柱身柱脚上下夹紧框子',
-          4: '格心与纸 <b>12</b> 件：外窗花、中棂格、内绵纸，三层错落透光',
-          5: '装饰与灯芯 <b>11</b> 件：牙子撑角、角花锁柱，结穗与灯芯收尾',
-        };
         let animId = 0;
 
         // 坞压得越矮，灯笼在画面里就越大 —— 这一步要看的正是那三十六件东西
@@ -441,12 +420,10 @@ export function act4(ctx) {
               b.setAttribute('aria-pressed', String(c.lantern.layerFocus === +b.dataset.l));
               b.addEventListener('click', () => {
                 const on = b.getAttribute('aria-pressed') === 'false';
-                const id = on ? +b.dataset.l : null;
                 o.querySelectorAll('.layer').forEach((x) => x.setAttribute('aria-pressed', 'false'));
                 b.setAttribute('aria-pressed', String(on));
-                c.lantern.focusLayer(id);
+                c.lantern.focusLayer(on ? +b.dataset.l : null);
                 c.lantern.setExplode(c.lantern.explodeT, 'layered');
-                c.hud.setCue(id ? LAYER_DESC[id] : '点一层，单看那一层', id ? null : 'tap');
                 c.sfx.play('UI_TAP');
               });
             });

@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { tween, Ease, wait } from '../util/tween.js';
 import { makeGoldMaterial } from '../render/materials.js';
-import { isPrimaryPointer, setRayFromEvent, makeDragPlane, haptic } from './pointer.js';
+import { isPrimaryPointer, setRayFromEvent, makeDragPlane } from './pointer.js';
 
 /**
  * 把一条二维轮廓立起来做成刀身。
@@ -557,7 +557,6 @@ export class Machining {
 
     // 音高随刀数升高
     this.ctx.sfx.play(j.sfx || 'CHISEL_STROKE', { pitch: (j.stroke - 1) * 1.5 });
-    haptic(10, this.ctx.state);
     // 木屑
     const p = this.tool.position.clone();
     this.ctx.fx.chips.emit(p, j.chipDir || new THREE.Vector3(0, 0, 1));

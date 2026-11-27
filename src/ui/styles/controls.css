@@ -22,7 +22,7 @@
 
 .btn-primary { background: var(--accent); color: var(--on-accent); font-weight: 500; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-lift); transform: translateY(-1px); }
-.btn-primary:active:not(:disabled) { transform: scale(0.97); }
+.btn-primary:active:not(:disabled) { transform: translateY(0); }
 .btn-primary:disabled { background: none; color: var(--text-4); box-shadow: var(--hair); }
 
 .btn-quiet {
@@ -31,17 +31,15 @@
   box-shadow: var(--hair);
 }
 .btn-quiet:hover:not(:disabled) { color: var(--text); box-shadow: var(--hair-gold); }
-.btn-quiet:active:not(:disabled) { transform: scale(0.97); }
 
 /* 次要行动一律是无框文字，永远不与主行动争夺注意力 */
 .btn-text {
   padding: 12px var(--s4);
   font-size: var(--fs-tiny); letter-spacing: var(--ls-base);
   color: var(--text-3);
-  transition: color var(--t-base) var(--ease), opacity var(--t-fast) var(--ease);
+  transition: color var(--t-base) var(--ease);
 }
 .btn-text:hover:not(:disabled) { color: var(--text); }
-.btn-text:active:not(:disabled) { opacity: 0.65; }
 
 /* 图标按钮。视觉 38px，命中区借 ::after 扩到 46px */
 .icon-btn {
@@ -50,12 +48,11 @@
   display: grid; place-items: center;
   width: 38px; height: 38px; border-radius: var(--r-full);
   color: var(--text-3);
-  transition: color var(--t-base) var(--ease), background var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
+  transition: color var(--t-base) var(--ease), background var(--t-base) var(--ease);
 }
 .icon-btn::after { content: ''; position: absolute; inset: -4px; border-radius: inherit; }
 .icon-btn .ico { width: 18px; height: 18px; }
 .icon-btn:hover:not(:disabled) { color: var(--text); background: var(--shade); }
-.icon-btn:active:not(:disabled) { transform: scale(0.93); }
 .icon-btn:disabled { opacity: 0.24; }
 
 /* ═══════════════ 滑杆 ═══════════════ */

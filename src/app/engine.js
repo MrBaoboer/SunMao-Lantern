@@ -202,13 +202,9 @@ export class Engine {
       if (s.note) ctx.hud.setNote(s.note);
       if (s.cue) ctx.hud.setCue(s.cue.text, s.cue.ico);
 
-      // 旁白与画面同时开始，谁也不等谁。
-      // 多阶段动手步骤声明了 segments 时：若有整步配音文件仍播整条；否则先播首段，
-      // 后续段落由步骤在真正切到下一工件/下一项装饰时通过 engine.say() 同步触发。
+      // 旁白与画面同时开始，谁也不等谁
       if (s.narration) {
-        const useSeg = s.segments?.length && !(ctx.state.voice && ctx.voice.available.has(s.id));
-        const text = useSeg ? s.segments[0] : s.narration;
-        ctx.voice.play(useSeg ? `${s.id}-1` : s.id, text, { cps: s.cps ?? 4.0, lyric: !!s.lyric });
+        ctx.voice.play(s.id, s.narration, { cps: s.cps ?? 4.0, lyric: !!s.lyric });
       }
       if (s.enter) await s.enter(ctx, this);
     } catch (e) {
@@ -225,21 +221,6 @@ export class Engine {
     } finally {
       if (this._goSeq === seq) this.busy = false;
     }
-  }
-
-  /** 多阶段步骤切换到第 n 段（从 1 开始）时触发对应旁白，整步配音开启时不打断原音频 */
-  say(segIndex) {
-    const s = this.current;
-    if (!s?.segments?.[segIndex]) return;
-    if (this.ctx.state.voice && this.ctx.voice.available.has(s.id)) return;
-    this.ctx.voice.play(`${s.id}-${segIndex + 1}`, s.segments[segIndex], {
-      cps: s.cps ?? 4.0, lyric: !!s.lyric,
-    });
-  }
-
-  /** 重播当前这一步/这一段的旁白 */
-  replayNarration() {
-    return this.ctx.voice.replay();
   }
 
   /** 任务做完了：收起任务按钮，让右边那枚箭头亮一下 —— 这之后「下一步」就直接翻页 */
