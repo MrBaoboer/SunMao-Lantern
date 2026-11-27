@@ -122,6 +122,14 @@ export function act3(ctx) {
 再做中梁：两头截短，各开一个叉口，正好卡住榫舌。
 两头的下半截再各切掉一块，露出一个平面。
 这叫承重面 —— 叉口负责咬住，它负责托住。`,
+      segments: [
+        `先从两根顺枨开始。枨，chéng，就是框子上的横木。
+顶面凿两条平行的槽。
+中间留下的那一条不能削 —— 那是榫舌。`,
+        `再做中梁：两头截短，各开一个叉口，正好卡住榫舌。
+两头的下半截再各切掉一块，露出一个平面。
+这叫承重面 —— 叉口负责咬住，它负责托住。`,
+      ],
       note: {
         title: '槽为什么开在顶面',
         spec: [['槽宽', '料厚的 1/3'], ['槽深', '到一半']],
@@ -142,6 +150,7 @@ export function act3(ctx) {
 
         // ── 第二段：中梁 ──
         const beam = () => {
+          engine.say(1);
           junk.clear();
           only(c, ['LB-C1']);
           c.lantern.setOps('LB-C1', 'blank');
@@ -282,10 +291,17 @@ export function act3(ctx) {
         for (const id of ['LB-A1', 'LB-A2']) c.lantern.parts.get(id).installed = true;
         c.lantern.applyAssembly();
 
+        let peeking = false;
         const peek = async () => {
-          c.lantern.setSection(['LB-A1'], true);
-          await wait(2.4);
-          c.lantern.setSection(null, false);
+          if (peeking) return;
+          peeking = true;
+          try {
+            c.lantern.setSection(['LB-A1'], true);
+            await wait(2.4);
+            c.lantern.setSection(null, false);
+          } finally {
+            peeking = false;
+          }
         };
 
         c.drag.begin({
@@ -331,6 +347,15 @@ export function act3(ctx) {
 一，凿两个透眼。孔要凿穿，榫头才能整根穿出去。
 二，外侧凿两个方口 —— 那是柱子的窝。
 三，顶面刨一条又长又浅的装板槽，格心最后插在这儿。`,
+      segments: [
+        `四个端头，各锯出一个榫头。
+榫头不开在正中间，要往里偏一点 ——
+外侧留出的那一半，是给柱子的。`,
+        `再拿两根短料做横枨，三道活。
+一，凿两个透眼。孔要凿穿，榫头才能整根穿出去。
+二，外侧凿两个方口 —— 那是柱子的窝。
+三，顶面刨一条又长又浅的装板槽，格心最后插在这儿。`,
+      ],
       note: {
         title: '榫头为什么不居中',
         spec: [['内侧肩', '2 毫米'], ['榫头厚', '4 毫米'], ['外侧肩', '6 毫米']],
@@ -351,6 +376,7 @@ export function act3(ctx) {
 
         // ── 第二段：横枨三道工序 ──
         const rails = () => {
+          engine.say(1);
           junk.clear();
           c.hud.clearSpots();
           only(c, ['LB-B1', 'LB-B2']);

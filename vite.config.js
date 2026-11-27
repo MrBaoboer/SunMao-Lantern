@@ -7,6 +7,20 @@ import { createHash } from 'node:crypto';
  * 仅开发期使用的截图中转：页面把 canvas 的 dataURL POST 过来，写到 .shots/。
  * 用于在无法直接截屏的环境里做视觉校验。生产构建不包含此插件。
  */
+function readBody(req, maxBytes, cb) {
+  let body = '';
+  let size = 0;
+  let aborted = false;
+  req.on('data', (c) => {
+    if (aborted) return;
+    size += c.length;
+    if (size > maxBytes) { aborted = true; req.destroy(); return; }
+    body += c;
+  });
+  req.on('end', () => { if (!aborted) cb(null, body); });
+  req.on('error', (e) => { if (!aborted) cb(e); });
+}
+
 function shotPlugin() {
   return {
     name: 'sunmao-shot',
@@ -17,9 +31,8 @@ function shotPlugin() {
         // 跨站页面能对 localhost 发 no-cors POST —— 只收本站请求
         const site = req.headers['sec-fetch-site'];
         if (site && site !== 'same-origin' && site !== 'none') { res.statusCode = 403; return res.end(); }
-        let body = '';
-        req.on('data', (c) => { body += c; });
-        req.on('end', () => {
+        readBody(req, 16 * 1024 * 1024, (err, body) => {
+          if (err) { res.statusCode = 413; return res.end(); }
           try {
             const { name = 'shot', data } = JSON.parse(body);
             const b64 = data.slice(data.indexOf(',') + 1);
@@ -44,10 +57,10 @@ function shotPlugin() {
         if (req.method !== 'POST') { res.statusCode = 405; return res.end(); }
         const site = req.headers['sec-fetch-site'];
         if (site && site !== 'same-origin' && site !== 'none') { res.statusCode = 403; return res.end(); }
-        let body = '';
-        req.on('data', (c) => { body += c; });
-        req.on('end', () => {
+        readBody(req, 1024 * 1024, (err, body) => {
+          if (err) { res.statusCode = 413; return res.end(); }
           try {
+            JSON.parse(body);
             const dir = path.resolve(process.cwd(), 'tools');
             fs.mkdirSync(dir, { recursive: true });
             const file = path.join(dir, 'vo-manifest.json');
@@ -98,8 +111,8 @@ function cspPlugin() {
           "default-src 'self'",
           `script-src 'self' ${hashes.join(' ')}`.trim(),
           "style-src 'self'",
-          // 'self' 给两枚图标，data: 给 --grain 那张噪点底纹
-          "img-src 'self' data:",
+          // 'self' 给两枚图标，data: 给 --grain 底纹，blob: 给海报与拍照的本地导出图
+          "img-src 'self' data: blob:",
           "media-src 'self'",                 // 旁白与背景音乐
           "connect-src 'self'",               // 两份 manifest.json
           "font-src 'self'",

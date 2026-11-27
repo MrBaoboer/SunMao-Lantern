@@ -264,9 +264,37 @@
   box-shadow: var(--hair);
   transition: color var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
 }
-.layer b { font-family: var(--mono); font-weight: 400; font-size: var(--fs-mark); color: var(--text-4); }
+.layer b { font-family: var(--mono); font-weight: 400; font-size: var(--fs-mark); color: var(--text-3); }
 .layer:hover, .layer[aria-pressed="true"] { color: var(--accent); box-shadow: var(--hair-gold); }
-.layer[aria-pressed="true"] b { color: var(--accent-soft); }
+.layer[aria-pressed="true"] b { color: var(--accent); }
+
+/* ═══════════════ 课程目录 ═══════════════ */
+
+.toc { max-width: 560px; margin: 0 auto; text-align: left; }
+.toc-grp + .toc-grp { margin-top: var(--s5); }
+.toc-hd {
+  font-size: var(--fs-mark); letter-spacing: var(--ls-vast);
+  color: var(--text-3); margin-bottom: var(--s2);
+}
+.toc-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.toc-item {
+  display: flex; align-items: baseline; gap: var(--s2);
+  padding: 10px var(--s3); border-radius: var(--r-xs);
+  background: var(--surface); color: var(--text-2);
+  box-shadow: var(--hair);
+  font-size: var(--fs-tiny); letter-spacing: var(--ls-tight); text-align: left;
+  transition: color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+.toc-item b { font-family: var(--mono); font-weight: 400; font-size: var(--fs-mark); color: var(--text-3); flex: none; }
+.toc-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toc-item:hover { color: var(--text); box-shadow: var(--hair-gold); }
+.toc-item:active { transform: scale(0.98); }
+.toc-item[aria-current="step"] { color: var(--accent); background: var(--accent-faint); box-shadow: inset 0 0 0 1px var(--accent); }
+.toc-item[aria-current="step"] b { color: var(--accent); }
+
+@media (max-width: 680px) {
+  .toc-list { grid-template-columns: 1fr; }
+}
 
 /* ═══════════════ 书写与海报 ═══════════════ */
 

@@ -177,7 +177,6 @@ export function runVerification() {
     };
     if (!isSolidAt(ub, mid)) throw new Error('上枨框顺枨中部被加工了 —— 这正是原策划的 4 个废槽');
     // 两者网格必须不同
-    if (ub.volume() - (C.UPPER_Z0 - C.LOWER_Z0) === lb.volume()) { /* 体积不同即可 */ }
     const vUB = ub.volume(), vLB = lb.volume();
     if (vUB === vLB) throw new Error('UB-A 与 LB-A 体积相同，疑似复用同一网格');
     return `UB-A 中部实心 · UB-A ${vUB}mm³ ≠ LB-A ${vLB}mm³（上枨框另有底面深槽与角牙槽）`;

@@ -1,5 +1,5 @@
 # 两条作业挂在不同的时机：`toolchain`（纯 Node，二三十秒）每个 PR 都跑，按 engines
-# 声明的两头 22.13 与 24 各跑一遍；`e2e`（无头浏览器，十几分钟）只在合并进 main
+# 声明的 22.13 / 24 / 26 各跑一遍；`e2e`（无头浏览器，真实渲染走查）只在合并进 main
 # 之后跑，或手动触发。这样拆的理由见 docs/DEVELOPMENT.md#检查。
 name: check
 
@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22.13', '24']
+        node: ['22.13', '24', '26']
 
     steps:
       - uses: actions/checkout@v7
@@ -45,28 +45,34 @@ jobs:
     # PR 上不跑。合并进 main 之后跑一遍，或者在 Actions 页面手动触发
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
 
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '22.13'
+          node-version: '24'
           cache: npm
       - run: npm ci
 
-      # 浏览器内核单独缓存：一次下载约 170 MB，命中时这一步几秒就过
+      # 按 playwright 精确版本做缓存键，而不是整个 package-lock.json ——
+      # 否则 three/vite/eslint 一升级就会白白打穿浏览器内核缓存
+      - name: 读取 Playwright 版本
+        id: pw-ver
+        run: echo "version=$(node -p "require('./node_modules/playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # 浏览器内核单独缓存：命中时这一步几秒就过
       - name: 取 Playwright 内核缓存
         id: pw-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: pw-shell-${{ runner.os }}-${{ steps.pw-ver.outputs.version }}
 
       # 缓存命中也要跑 install-deps：系统库装在镜像里，不在缓存里
-      - run: npx playwright install-deps chromium
+      - run: npx playwright install-deps chromium-headless-shell
       - if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium
+        run: npx playwright install --only-shell chromium
 
       - run: npm run build
       # 走的是 CPU 软件渲染（SwiftShader）。慢，但整条主线确实跑得完 ——

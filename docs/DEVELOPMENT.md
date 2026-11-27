@@ -13,7 +13,7 @@
 
 ## 环境
 
-- **Node** 22.13+ 或 24（`package.json` 的 `engines`，上界是闭的：Vercel 按这一行挑构建用的 Node，CI 只验这两个版本）。
+- **Node** 22.13+、24 或 26（`package.json` 的 `engines`，Vercel 与 CI 据此选定构建与校验版本）。
 - **浏览器**需要 WebGL 2 与 ES2022。基线：Chrome / Edge 111+、Safari 16.4+、Firefox 113+。
   移动设备与低配机自动减配（离屏抗锯齿、阴影、后期），配色不变。
   WebGL 上下文被系统回收时（移动端切后台常见），封面回来等一次 `webglcontextrestored`，原地接着走。
@@ -49,7 +49,7 @@ npx playwright install chromium
 src/
   core/       modulus 模数体系 · boxcsg CSG 内核 · parts 构件参数 · verify 几何验算 · state 全局状态
   render/     stage 舞台与取景 · lantern 装配体 · materials · geometry · lattice 纹样 · decor · fx
-  interact/   assembly 单自由度约束装配 · machining 拖刀加工
+  interact/   assembly 单自由度约束装配 · machining 拖刀加工 · pointer 共用指针投影与触觉反馈
   audio/      sfx 合成音效 · voice 旁白字幕 · bgm 背景音乐
   ui/         hud 界面层 · icons · styles/{tokens,base,chrome,controls,surfaces}.css
   app/        engine 分步引擎
@@ -63,7 +63,7 @@ tools/        单元测试 · 几何验算 · 冒烟测试 · 体积门槛 · �
 vite.config.js   构建配置、开发期两个接口、生产 CSP 注入
 ```
 
-产物约 870 kB（gzip 约 250 kB）：three.js 单独一块 619 kB，其余全部 247 kB。
+产物约 895 kB（gzip 约 256 kB）：three.js 单独一块 634 kB，其余全部 261 kB。
 门槛写在 `tools/size-budget.mjs`（740 / 290 / 300 kB），`npm run size` 越线即红。
 产物里没有字体，图片只有两枚站点图标 PNG（合计 16 kB）；界面图标是内联 SVG，纸纹是 data-URI SVG。
 仓库不含音频，旁白与背景音乐留了挂载口，没有音频时字幕照常走完（[DESIGN.md §8](DESIGN.md#8-音频)）。
@@ -236,14 +236,13 @@ Vite，无框架，无 CSS 预处理器。`base: './'`，产物用相对路径�
 
 CI（`.github/workflows/ci.yml`）把两半拆开：
 
-- `check:code` 全是纯 Node 的活，对版本敏感，**每个 PR** 在 22.13 与 24 上各跑一遍，二三十秒。
-- `smoke` 是软件渲染的浏览器走查，十几分钟，**只在合并进 `main` 之后跑**（或手动触发），只跑 22.13。
-  它验的是同一个 Chromium 里的行为，按 Node 版本再跑一遍多验到的约等于零。
+- `check:code` 全是纯 Node 的活，对版本敏感，**每个 PR** 在 Node 22.13 / 24 / 26 上各跑一遍，二三十秒。
+- `smoke` 是软件渲染的浏览器走查，**只在合并进 `main` 之后跑**（或手动触发），跑在 Node 24 上，仅下载轻量 `chromium-headless-shell` 并按 Playwright 版本独立缓存。
 
 CI 上的冒烟不加 `--shots`：三十六张软件渲染截图要好几分钟，而绿的跑次没人看。脚本只在某一步刚记下问题时截那一张，
 失败时 `.shots/smoke/` 作为 artifact 上传。本地排查才用 `npm run smoke -- --shots`。
 
-依赖升级挂在 `.github/dependabot.yml`，每月一次，每个生态一条 PR。`three` 是唯一进产物的依赖，
+依赖升级挂在 `.github/dependabot.yml`，每周一检查一次，每个生态捆成一条 PR。`three` 是唯一进产物的依赖，
 差异里出现它时 `check:code` 绿了不算数，还得在真机上走一遍。
 
 ESLint 用扁平配置，只开 `recommended`。放宽的只有：`no-console` 关掉，`caughtErrors: 'none'`（隐私模式读 `localStorage`、解码失败之类的空 `catch` 是有意的），

@@ -78,7 +78,7 @@ if (!base) {
     process.exit(2);
   }
   const { preview } = await import('vite');
-  server = await preview({ preview: { port: 4173, strictPort: false } });
+  server = await preview({ preview: { host: '127.0.0.1', port: 4173, strictPort: false } });
   base = server.resolvedUrls.local[0];
 }
 console.log(`冒烟测试 · ${base}`);
@@ -226,7 +226,8 @@ async function walk(vp) {
     await page.waitForFunction(() => window.__ctx?.stage?.camSettled !== false,
       null, { timeout: tmo(20000) })
       .catch(() => note(vp.name, '这一步的转场二十秒内没有走完'));
-    await page.waitForTimeout(tmo(ms));
+    // 已等到 !busy 且 camSettled 后只需短暂缓冲，避免 CI 4x 倍率白白累加纯睡眠
+    await page.waitForTimeout(Math.min(ms * 2, tmo(ms)));
   };
 
   /** 走到第 i 步，把这一步该成立的都验一遍 */
@@ -366,10 +367,10 @@ async function walk(vp) {
     };
     // 上限只是跑飞时的兜底。C4 拆成一处一趟之后已有 6 趟，留足余量 ——
     // 撞上限会静默少跑几趟，看起来却像通过了
-    const runJobs = async (label, maxJobs = 12) => {
+    const runJobs = async (label, { maxJobs = 12, minJobs = 1 } = {}) => {
       let ran = 0;
       for (let n = 0; n < maxJobs; n++) {
-        const has = await page.waitForFunction(() => !!window.__ctx.mach.job, null, { timeout: tmo(6000) }).catch(() => null);
+        const has = await page.waitForFunction(() => !!window.__ctx.mach.job, null, { timeout: tmo(10000) }).catch(() => null);
         // 第一轮就没有任务 —— 这一步根本没起加工，是真失败；
         // 后面几轮没有 —— 工序走完了，正常收工。原先两种情况都是静默 return，
         // 于是这条断言对「加工整个坏掉」是看不见的（装配那边的 seatAll 一直会报）
@@ -386,6 +387,7 @@ async function walk(vp) {
         await page.waitForTimeout(tmo(220));
       }
       if (!ran) { note(vp.name, `${label}: 没有出现加工任务`); return; }
+      if (ran < minJobs) note(vp.name, `${label}: 应至少完成 ${minJobs} 道工序，实际只走了 ${ran} 道`);
       console.log(`    [${vp.name}] ${label} 加工完成 · ${ran} 道工序`);
     };
     const seatAll = async (label) => {
@@ -401,9 +403,9 @@ async function walk(vp) {
       console.log(`    [${vp.name}] ${label} 装配完成`);
     };
 
-    await goStep('C2'); await runJobs('C2');
+    await goStep('C2'); await runJobs('C2', { minJobs: 5 });
     await goStep('C3'); await seatAll('C3');
-    await goStep('C4'); await runJobs('C4');
+    await goStep('C4'); await runJobs('C4', { minJobs: 6 });
     await goStep('C5'); await seatAll('C5');
 
     // C6 整步原先一条断言都没有：它的任务按钮在 onClick 里跑六道工序再起一次装配，
@@ -415,7 +417,7 @@ async function walk(vp) {
       .catch(() => note(vp.name, 'C6: 一键六道工序之后没有起装配任务'));
     await seatAll('C6');
 
-    await goStep('C7'); await runJobs('C7');
+    await goStep('C7'); await runJobs('C7', { minJobs: 2 });
     await goStep('C8'); await seatAll('C8');
 
     // 六道工序走完，上枨框必须真的带上全部工序 —— 计数器走完不代表几何跟上了
@@ -588,6 +590,21 @@ async function walk(vp) {
       await page.evaluate(() => document.getElementById('btn-back')?.click());
       await page.waitForTimeout(tmo(900));
     }
+
+    // ── 课程目录、视角回正与 D4 全五层聚焦 ──
+    await goStep('D4');
+    await page.evaluate(() => document.getElementById('btn-toc')?.click());
+    const tocItems = await page.$$eval('.toc-item', (els) => els.length);
+    if (tocItems !== 18) note(vp.name, `课程目录应有 18 项，实际 ${tocItems} 项`);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => { window.__ctx.lantern.focusLayer(1); });
+    const paperDim = await page.evaluate(() => window.__ctx.lantern.decor.papers[0]?.children[0]?.material?.opacity ?? 1);
+    if (paperDim > 0.3) note(vp.name, `D4 聚焦第 1 层时绵纸未降透明：opacity=${paperDim}`);
+    await page.evaluate(() => window.__ctx.lantern.focusLayer(null));
+    await page.evaluate(() => { window.__ctx.stage.userTook = true; window.__ctx.stage.resetView(); });
+    const resetOk = await page.evaluate(() => !window.__ctx.stage.userTook);
+    if (!resetOk) note(vp.name, '视角回正 resetView() 未交还推荐机位');
   }
 
   // 四个互动模块的入口

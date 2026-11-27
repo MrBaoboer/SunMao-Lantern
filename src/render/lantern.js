@@ -438,8 +438,7 @@ export class Lantern {
       const n = g.userData.normal;
       const base = this.panelPlacements[i];
       const home = new THREE.Vector3(...base.pos).addScaledVector(n, -(J4.PANEL_T / 2 + 1.2));
-      const v = mode === 'unified' ? n.clone() : n.clone();
-      g.position.copy(home).addScaledVector(v, (mode === 'unified' ? 120 : panelDist(i) * 0.72) * t);
+      g.position.copy(home).addScaledVector(n, (mode === 'unified' ? 120 : panelDist(i) * 0.72) * t);
     });
     this.decor.cutpapers.forEach((g, i) => {
       const n = g.userData.normal;
@@ -489,16 +488,50 @@ export class Lantern {
     return byLayer[p.layer] ?? 90;
   }
 
-  /** 点亮某一层、其余降透明（S31 分层查看） */
+  /** 只在 transparent/depthWrite 真正翻转时才触发 needsUpdate，避免无谓重编译着色器 */
+  #setGhost(mat, ghost, opacity = 0.25) {
+    if (!mat) return;
+    const wantTrans = ghost;
+    const wantWrite = !ghost;
+    if (mat.transparent !== wantTrans || mat.depthWrite !== wantWrite) {
+      mat.transparent = wantTrans;
+      mat.depthWrite = wantWrite;
+      mat.needsUpdate = true;
+    }
+    mat.opacity = ghost ? opacity : 1;
+  }
+
+  /** 点亮某一层、其余降透明（D4 分层查看：完整覆盖全部五层 36 件） */
   focusLayer(layerId) {
     this.layerFocus = layerId;
     for (const p of this.parts.values()) {
       const on = !layerId || p.layer === layerId;
-      p.material.transparent = !on;
-      p.material.opacity = on ? 1 : 0.25;
-      p.material.depthWrite = on;
-      p.material.needsUpdate = true;
+      this.#setGhost(p.material, !on, 0.22);
     }
+    // 第 4 层同时包含四张绵纸与四张窗花
+    const onL4 = !layerId || layerId === 4;
+    const basePaperOp = 0.86 + (this.litLevel || 0) * 0.1;
+    for (const g of this.decor.papers) {
+      const mat = g.children[0]?.material;
+      if (mat) mat.opacity = onL4 ? basePaperOp : 0.14;
+    }
+    for (const g of this.decor.cutpapers) {
+      const mat = g.children[0]?.material;
+      this.#setGhost(mat, !onL4, 0.18);
+    }
+    // 第 5 层：牙子 ×4、角花 ×4、中国结、流苏、灯芯（排除火焰与光晕 billboard）
+    const onL5 = !layerId || layerId === 5;
+    const skip = new Set([this.core?.userData?.flameMat, this.core?.userData?.glowMat]);
+    const mats = new Set();
+    for (const obj of [...this.decor.brackets, ...this.decor.plates, this.knot, this.tassel, this.core]) {
+      obj?.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (!skip.has(m)) mats.add(m);
+        }
+      });
+    }
+    for (const mat of mats) this.#setGhost(mat, !onL5, 0.2);
   }
 
   // ══════════════════════════════════════════════
@@ -531,10 +564,7 @@ export class Lantern {
       const s = on && set.has(p.id);
       const ghost = on && !s && !keep.has(p.id);
       setSectionMode(p.material, s ? 1 : 0);
-      p.material.transparent = ghost;
-      p.material.opacity = ghost ? 0.25 : 1;
-      p.material.depthWrite = !ghost;
-      p.material.needsUpdate = true;
+      this.#setGhost(p.material, ghost, 0.25);
     }
   }
 

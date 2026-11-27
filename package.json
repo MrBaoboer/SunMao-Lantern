@@ -20,16 +20,16 @@
     "check": "npm run check:code && npm run smoke"
   },
   "engines": {
-    "node": "^22.13.0 || ^24.0.0"
+    "node": "^22.13.0 || ^24.0.0 || ^26.0.0"
   },
   "dependencies": {
-    "three": "^0.186.1"
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.13.0",
-    "globals": "^17.13.0",
-    "playwright": "^1.64.1",
-    "vite": "^8.3.5"
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "playwright": "^1.65.1",
+    "vite": "^8.4.0"
   }
 }

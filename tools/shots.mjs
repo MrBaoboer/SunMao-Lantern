@@ -36,7 +36,7 @@ if (!base) {
     process.exit(2);
   }
   const { preview } = await import('vite');
-  server = await preview({ preview: { port: 4180, strictPort: false } });
+  server = await preview({ preview: { host: '127.0.0.1', port: 4180, strictPort: false } });
   base = server.resolvedUrls.local[0];
 }
 

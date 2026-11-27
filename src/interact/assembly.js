@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { tween, Ease, wait } from '../util/tween.js';
 import { J3 } from '../core/modulus.js';
+import { isPrimaryPointer, setRayFromEvent, makeDragPlane, haptic } from './pointer.js';
 
 export class DragAssembly {
   /** @param {{stage:any, lantern:any, hud:any, sfx:any}} ctx */
@@ -82,6 +83,7 @@ export class DragAssembly {
   cancel() {
     this.active = null;
     this.session = null;
+    this.pointerId = null;
     // 翻页可能正好落在一次拖拽中间 —— 手指还按着就交还轨道控制，
     // 剩下半程照样会变成转镜头。留给 onUp
     if (!this.grabbed) this.ctx.stage.controls.enabled = true;
@@ -115,10 +117,7 @@ export class DragAssembly {
   }
 
   _pick(e) {
-    const rect = this.ctx.stage.canvas.getBoundingClientRect();
-    this.ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.ptr.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    this.ray.setFromCamera(this.ptr, this.ctx.stage.camera);
+    setRayFromEvent(this.ray, this.ptr, e, this.ctx.stage.canvas, this.ctx.stage.camera);
     const s = this.session;
     const meshes = [...s.pending].map((id) => {
       const p = this.ctx.lantern.parts.get(id);
@@ -133,7 +132,7 @@ export class DragAssembly {
 
   onDown(e) {
     const s = this.session;
-    if (!s || this.ctx.hud.overlayOpen) return;
+    if (!s || this.active || this.ctx.hud.overlayOpen || !isPrimaryPointer(e)) return;
     const hit = this._pick(e);
     if (!hit) return;
 
@@ -141,22 +140,16 @@ export class DragAssembly {
     const dir = new THREE.Vector3(...part.assembly.dir).normalize();
     const gap = part.assembly.gap;
 
-    // 拖拽平面：包含运动轴、且尽量正对相机
-    const camDir = new THREE.Vector3();
-    this.ctx.stage.camera.getWorldDirection(camDir);
-    let n = camDir.clone().addScaledVector(dir, -camDir.dot(dir));
-    if (n.lengthSq() < 1e-4) n.set(0, 0, 1).addScaledVector(dir, -dir.z);
-    n.normalize();
-
     this.active = {
       partId: hit.partId, part, dir, gap,
-      plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n, hit.point),
+      plane: makeDragPlane(this.ctx.stage.camera, dir, hit.point),
       grab: hit.point.clone(),
       u0: 0, u: 0,
       perpAccum: 0, alongAccum: 0,
       warned: false,
       moved: false,
     };
+    this.pointerId = e.pointerId;
     this.grabbed = true;
     this.ctx.stage.controls.enabled = false;
     e.preventDefault();
@@ -164,11 +157,8 @@ export class DragAssembly {
 
   onMove(e) {
     const a = this.active;
-    if (!a) return;
-    const rect = this.ctx.stage.canvas.getBoundingClientRect();
-    this.ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.ptr.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    this.ray.setFromCamera(this.ptr, this.ctx.stage.camera);
+    if (!a || (this.pointerId !== null && e.pointerId !== this.pointerId)) return;
+    setRayFromEvent(this.ray, this.ptr, e, this.ctx.stage.canvas, this.ctx.stage.camera);
     const P = new THREE.Vector3();
     if (!this.ray.ray.intersectPlane(a.plane, P)) return;
 
@@ -209,15 +199,18 @@ export class DragAssembly {
       this.ctx.lantern.highlight(a.partId, 0xc8a063, 0.14);
     }
 
-    // 楔紧段的听觉与提示
+    // 楔紧段的听觉与触觉提示
     if (s.wedge && u > 1 - J3.WEDGE_LEN / a.gap && !a.wedgeFired) {
       a.wedgeFired = true;
       this.ctx.sfx.play('WEDGE_TIGHT', { gain: 0.7 });
+      haptic(10, this.ctx.state);
       this.ctx.hud.setCue('最后一点会紧，推到底');
     }
   }
 
-  async onUp() {
+  async onUp(e) {
+    if (this.pointerId !== null && e && e.pointerId !== this.pointerId) return;
+    this.pointerId = null;
     // 松手才交还 —— 且必须排在提前 return 之前，拖歪那一路也要收得回来
     if (this.grabbed) { this.grabbed = false; this.ctx.stage.controls.enabled = true; }
     const a = this.active;
@@ -296,6 +289,7 @@ export class DragAssembly {
       const pitch = (s.pitchBase ?? 0) + (s.seated - 1) * 2;
       if (s.double) this.ctx.sfx.playDouble(s.seatSfx, { pitch });
       else this.ctx.sfx.play(s.seatSfx, { pitch });
+      haptic(s.wedge ? 22 : 14, this.ctx.state);
     }
     s.onSeat?.(partId, s.seated, s.total);
 

@@ -79,13 +79,20 @@ export function act1(ctx) {
         c.lantern.showDecor(true);
         c.lantern.core.visible = true;
         c.lantern.setLit(0);
+        let playing = false;
         const preview = async () => {
-          await tween(1.2, (k) => c.lantern.setExplode(k, 'unified'), { ease: Ease.outCubic });
-          c.sfx.play('WOOD_SLIDE', { gain: 0.5 });
-          await wait(1.0);
-          await tween(0.9, (k) => c.lantern.setExplode(1 - k, 'unified'), { ease: Ease.inOutCubic });
-          c.sfx.play('SNAP_IN');
-          c.lantern.setExplode(0, 'unified');
+          if (playing) return;
+          playing = true;
+          try {
+            await tween(1.2, (k) => c.lantern.setExplode(k, 'unified'), { ease: Ease.outCubic });
+            c.sfx.play('WOOD_SLIDE', { gain: 0.5 });
+            await wait(1.0);
+            await tween(0.9, (k) => c.lantern.setExplode(1 - k, 'unified'), { ease: Ease.inOutCubic });
+            c.sfx.play('SNAP_IN');
+            c.lantern.setExplode(0, 'unified');
+          } finally {
+            playing = false;
+          }
         };
         c.hud.setAlts([{ label: '再拆一次', ico: 'refresh', onClick: preview }]);
         // 前摇给到 0.8 就够：这一步的看点是拆开那一下，不是等它开始

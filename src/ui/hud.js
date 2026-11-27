@@ -14,17 +14,26 @@ import { icon } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
 
+/** 复用投射向量，避免每帧 updateSpots / Arrows.update 反复创建临时对象 */
+const _proj = new THREE.Vector3();
+const _proj2 = new THREE.Vector3();
+
+/** 纯文本 HTML 转义（防止文案或编号里混入尖括号与引号） */
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
+
 /** 四章 */
 export const PHASES = ['开场', '认识榫卯', '做骨架', '装点年味'];
 
-/** 怎么操作。前四条是第一次进来就该知道的，后两条留给完整版。touch 是触屏机型的替换句 */
+/** 怎么操作。前四条是第一次进来就该知道的，后三条留给完整版。touch 是触屏机型的替换句 */
 const GUIDE = [
   { k: ['back', 'forward'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用',
-    touch: '点两侧箭头，翻到上一步、下一步' },
-  { k: ['drag'], t: '按住画面拖，换个角度看；滚轮缩放。转到哪儿就停在哪儿',
-    touch: '按住画面拖，换个角度看；双指开合缩放。转到哪儿就停在哪儿' },
-  { k: ['layers'], t: '顶上一格就是一步，点一下直接跳过去' },
-  { k: ['more'], t: '深色、声音、字幕，都在右上角' },
+    touch: '点底部两侧箭头，翻到上一步、下一步' },
+  { k: ['drag'], t: '按住画面拖，换个角度看；滚轮缩放。转偏了按 <em>R</em> 或双击画面回正',
+    touch: '按住画面拖，换个角度看；双指缩放。转偏了双击画面或点右上角回正' },
+  { k: ['layers'], t: '顶上一格就是一步，点一下直接跳过去；点步骤名可打开完整目录' },
+  { k: ['more'], t: '深色、声音、字幕与重播旁白，都在右上角' },
   { k: ['X'], t: '没有卷或坞挡着时，按 X 把灯笼拆开、调透明，看看里面',
     touch: '右上角的「拆开看看」，把灯笼拆开、调透明', full: true },
   { k: ['spark'], t: '不想自己动手，就选旁边的「帮我加工」「帮我装上」；按下一步，也会替你做一段',
@@ -62,7 +71,9 @@ export class HUD {
   constructor(state) {
     this.state = state;
     this.el = {
-      topbar: $('topbar'), chapters: $('chapters'), stepno: $('stepno'), steptitle: $('steptitle'),
+      topbar: $('topbar'), chapters: $('chapters'),
+      toc: $('btn-toc'), stepno: $('stepno'), phasenm: $('phasenm'), steptitle: $('steptitle'),
+      resetCam: $('btn-reset-cam'),
       prev: $('nav-prev'), next: $('nav-next'),
       note: $('note'), noteTab: $('note-tab'), toast: $('toast'), srStep: $('sr-step'),
       bottom: $('bottom'), cue: $('cue'), narration: $('narration'),
@@ -81,15 +92,19 @@ export class HUD {
     this._base = null;
     this._top = null;
     this.steps = [];
+    this._currentIndex = -1;
     this._safe = { top: 0, bottom: 0 };
 
     this.el.menu.innerHTML = icon('more');
+    this.el.resetCam.innerHTML = icon('aim');
     this.el.prev.innerHTML = icon('back');
     this.el.next.innerHTML = icon('forward');
 
     this.el.prev.addEventListener('click', () => this.onPrev?.());
     this.el.next.addEventListener('click', () => this.onNext?.());
     this.el.task.addEventListener('click', () => this.onTask?.());
+    this.el.resetCam.addEventListener('click', () => this.onResetCam?.());
+    this.el.toc.addEventListener('click', () => this.openCatalog());
     this.el.menu.addEventListener('click', (e) => { e.stopPropagation(); this.toggleMenu(); });
     this.el.noteTab.addEventListener('click', () => this.toggleNote());
     this.el.back.innerHTML = `${icon('back')}<span>返回</span>`;
@@ -239,7 +254,7 @@ export class HUD {
     if (!s) return;
     const tip = document.createElement('div');
     tip.className = 'tick-tip';
-    tip.innerHTML = `<b>${String(i + 1).padStart(2, '0')}</b>${s.title}`;
+    tip.innerHTML = `<b>${String(i + 1).padStart(2, '0')}</b>${esc(s.title)}`;
     document.body.appendChild(tip);
     const r = tick.getBoundingClientRect();
     tip.style.left = `${Math.min(Math.max(r.left + r.width / 2, 80), innerWidth - 80)}px`;
@@ -249,13 +264,53 @@ export class HUD {
 
   #hideTip() { this._tip?.remove(); this._tip = null; }
 
+  /** 按需显隐「回正视角」按钮：仅在用户转走视角后出现，用完即走 */
+  setResetCam(on) {
+    this.el.resetCam.hidden = !on;
+  }
+
+  /** 四幕十八步目录卷：移动端与桌面端都能一步直达任意步骤 */
+  openCatalog() {
+    if (!this.steps.length) return;
+    const byPhase = PHASES.map(() => []);
+    this.steps.forEach((s, i) => byPhase[s.phase ?? 0].push({ i, s }));
+    const cur = this._currentIndex;
+    this.sheet({
+      top: true,
+      title: '课程目录',
+      lede: '四幕十八步，点任意一步直接跳过去',
+      body: `<div class="toc">${byPhase.map((list, p) => `
+        <div class="toc-grp">
+          <div class="toc-hd">${esc(PHASES[p])}</div>
+          <div class="toc-list">${list.map(({ i, s }) => `
+            <button class="toc-item" type="button" data-i="${i}"
+                    ${i === cur ? 'aria-current="step"' : ''}>
+              <b>${String(i + 1).padStart(2, '0')}</b>
+              <span>${esc(s.title)}</span>
+            </button>`).join('')}</div>
+        </div>`).join('')}</div>`,
+      actions: [{ label: '合上', kind: 'primary', on: () => this.hideOverlay() }],
+      onEsc: () => this.hideOverlay(),
+      onMount: (o) => {
+        o.querySelectorAll('.toc-item').forEach((b) => b.addEventListener('click', () => {
+          const idx = +b.dataset.i;
+          this.hideOverlay();
+          this.onJump?.(idx);
+        }));
+      },
+    });
+  }
+
   /** 高亮当前所在的章与步 */
   setStep(index, total, title) {
+    this._currentIndex = index;
+    const phase = this.steps[index]?.phase ?? 0;
     this.el.stepno.textContent = index >= 0 ? `${String(index + 1).padStart(2, '0')}／${total}` : '';
+    this.el.phasenm.textContent = index >= 0 ? PHASES[phase] || '' : '';
     this.el.steptitle.textContent = title || '';
     // 顶部那两行是视觉上的「走到哪了」，读屏看不见它变化 —— 单独报一句。
     // 字幕关掉时这是唯一的翻页信号
-    this.el.srStep.textContent = index >= 0 ? `第 ${index + 1} 步，共 ${total} 步：${title || ''}` : '';
+    this.el.srStep.textContent = index >= 0 ? `第 ${index + 1} 步，共 ${total} 步：${PHASES[phase] || ''}，${title || ''}` : '';
     // 格子的三种状态只有颜色高低之分，读屏读不出来 —— 名字里带上状态，
     // 当下那一格再挂 aria-current
     this.el.chapters.querySelectorAll('.tick').forEach((t) => {
@@ -269,7 +324,6 @@ export class HUD {
       if (state === 'now') t.setAttribute('aria-current', 'step');
       else t.removeAttribute('aria-current');
     });
-    const phase = this.steps[index]?.phase ?? 0;
     this.el.chapters.querySelectorAll('.ch').forEach((ch) => {
       const p = +ch.dataset.p;
       ch.dataset.on = p === phase ? '1' : '0';
@@ -450,6 +504,7 @@ export class HUD {
     // 开关照旧存下选择，但得说一句为什么现在没反应
     const forced = this._tone === 'dark';
     m.innerHTML = `<button role="menuitem" data-k="help">${icon('book')}<span>怎么操作</span></button>`
+      + `<button role="menuitem" data-k="toc">${icon('layers')}<span>课程目录</span></button>`
       + '<div class="sep"></div>'
       + toggles.map((t) => {
         const on = read(t);
@@ -460,6 +515,7 @@ export class HUD {
           : row;
       }).join('')
       + '<div class="sep"></div>'
+      + `<button role="menuitem" data-k="replay">${icon('voice')}<span>重播旁白</span></button>`
       + `<button role="menuitem" data-k="inspect">${icon('cube')}<span>拆开看看</span></button>`
       + `<button role="menuitem" data-k="check">${icon('ruler')}<span>尺寸对照</span></button>`
       + '<div class="sep"></div>'
@@ -470,13 +526,15 @@ export class HUD {
     this.el.menu.setAttribute('aria-expanded', 'true');
     m.querySelector('button')?.focus();
 
-    // 键盘：上下移焦；Tab 移出菜单即收起 —— 菜单不该悬在已失焦的页面上
+    // 键盘：上下与 Home/End 移焦；Tab 移出菜单即收起 —— 菜单不该悬在已失焦的页面上
     m.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
       e.preventDefault();
       const bs = [...m.querySelectorAll('button')];
       const i = bs.indexOf(document.activeElement);
-      bs[(i + (e.key === 'ArrowDown' ? 1 : bs.length - 1)) % bs.length]?.focus();
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? bs.length - 1
+        : (i + (e.key === 'ArrowDown' ? 1 : bs.length - 1)) % bs.length;
+      bs[next]?.focus();
     });
     // 焦点落回开关按钮的那一次不算「移出」：按钮在 pointerdown 时就会夺焦，
     // 这里先收掉，随后的 click 又把菜单打开，等于第二下永远关不掉
@@ -502,6 +560,8 @@ export class HUD {
       }
       this.closeMenu();
       if (b.dataset.k === 'help') this.guide({ full: true });
+      if (b.dataset.k === 'toc') this.openCatalog();
+      if (b.dataset.k === 'replay') this.onReplay?.();
       if (b.dataset.k === 'inspect') this.onInspect?.();
       if (b.dataset.k === 'check') this.onCheck?.();
       if (b.dataset.k === 'restart') this.onRestart?.();
@@ -646,23 +706,36 @@ export class HUD {
      */
     const ceil = this._safe.top + 8;
     const floor = innerHeight - this._safe.bottom - 8;
-    const v = new THREE.Vector3();
     for (const s of this.spots) {
-      v.copy(s.pos).project(camera);
-      const x = (v.x * 0.5 + 0.5) * innerWidth;
-      const y = (-v.y * 0.5 + 0.5) * innerHeight;
-      const behind = v.z > 1 || y < ceil || y > floor;
-      s.el.style.display = behind ? 'none' : '';
-      s.lb.style.display = behind || !s.active ? 'none' : '';
-      s.el.style.left = `${x}px`; s.el.style.top = `${y}px`;
+      _proj.copy(s.pos).project(camera);
+      const x = Math.round((_proj.x * 0.5 + 0.5) * innerWidth * 2) / 2;
+      const y = Math.round((-_proj.y * 0.5 + 0.5) * innerHeight * 2) / 2;
+      const behind = _proj.z > 1 || y < ceil || y > floor;
+      const showEl = !behind;
+      const showLb = !behind && s.active;
+      if (s._showEl !== showEl) { s._showEl = showEl; s.el.style.display = showEl ? '' : 'none'; }
+      if (s._showLb !== showLb) { s._showLb = showLb; s.lb.style.display = showLb ? '' : 'none'; }
+      if (!showEl) continue;
+      // 走 GPU 合成层 translate3d 并做脏值跳过：静帧零 DOM 写、零重排
+      if (s._x !== x || s._y !== y) {
+        s._x = x; s._y = y;
+        s.el.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;
+      }
+      if (!showLb) continue;
       // 标签贴近右缘时翻到左侧展开，并夹在视口里 —— 不夹取，
       // 窄屏上的教学要点会被屏幕边裁掉（同文件 tick-tip 的老规矩）。
       // 纵向与笔记卡重叠时，右边界收到卡的左沿
       const limit = (nb && y > nb.top - 24 && y < nb.bottom + 24) ? nb.left - 12 : innerWidth;
       const flip = x > limit - 200;
-      s.lb.dataset.side = flip ? 'left' : 'right';
-      s.lb.style.left = `${flip ? x - 14 : x + 14}px`;
-      s.lb.style.top = `${Math.min(Math.max(y, 56), innerHeight - 72)}px`;
+      const lx = flip ? x - 14 : x + 14;
+      const ly = Math.min(Math.max(y, 56), innerHeight - 72);
+      if (s._flip !== flip || s._lx !== lx || s._ly !== ly) {
+        s._flip = flip; s._lx = lx; s._ly = ly;
+        s.lb.dataset.side = flip ? 'left' : 'right';
+        s.lb.style.transform = flip
+          ? `translate3d(${lx}px,${ly}px,0) translate(calc(-100% - 16px),-50%)`
+          : `translate3d(${lx}px,${ly}px,0) translate(16px,-50%)`;
+      }
     }
   }
 
@@ -745,7 +818,7 @@ export class HUD {
    */
   #setChromeInert(on) {
     for (const el of [this.el.topbar, this.el.bottom, this.el.prev, this.el.next,
-      this.el.noteTab, this.el.cover]) {
+      this.el.note, this.el.noteTab, this.el.cover]) {
       if (el) el.inert = on;
     }
     for (const s of this.spots) s.el.inert = on;
@@ -848,10 +921,14 @@ export class Arrows {
     for (const it of list) {
       const el = document.createElement('div');
       el.className = 'arrow';
+      el.setAttribute('aria-hidden', 'true');
       el.innerHTML = icon(it.ico || 'right');
-      el.style.transform = `translate(-50%,-50%) rotate(${it.rot || 0}deg)`;
       document.body.appendChild(el);
-      this.items.push({ el, pos: it.pos.clone(), dir: it.dir ? it.dir.clone().normalize() : null });
+      this.items.push({
+        el, pos: it.pos.clone(),
+        dir: it.dir ? it.dir.clone().normalize() : null,
+        rot: it.rot || 0,
+      });
     }
   }
 
@@ -859,18 +936,22 @@ export class Arrows {
 
   update(camera) {
     if (!this.items.length) return;
-    const v = new THREE.Vector3();
-    const v2 = new THREE.Vector3();
     for (const it of this.items) {
-      v.copy(it.pos).project(camera);
-      it.el.style.display = v.z > 1 ? 'none' : '';
-      it.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
-      it.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
+      _proj.copy(it.pos).project(camera);
+      const show = _proj.z <= 1;
+      if (it._show !== show) { it._show = show; it.el.style.display = show ? '' : 'none'; }
+      if (!show) continue;
+      const x = Math.round((_proj.x * 0.5 + 0.5) * innerWidth * 2) / 2;
+      const y = Math.round((-_proj.y * 0.5 + 0.5) * innerHeight * 2) / 2;
+      let deg = it.rot;
       if (it.dir) {
         // 把 pos 与 pos+dir 两点都投到屏幕上求夹角 —— 写死的角度换个机位就是反的
-        v2.copy(it.pos).addScaledVector(it.dir, 30).project(camera);
-        const deg = (Math.atan2(-(v2.y - v.y) * innerHeight, (v2.x - v.x) * innerWidth) * 180) / Math.PI;
-        it.el.style.transform = `translate(-50%,-50%) rotate(${deg}deg)`;
+        _proj2.copy(it.pos).addScaledVector(it.dir, 30).project(camera);
+        deg = Math.round((Math.atan2(-(_proj2.y - _proj.y) * innerHeight, (_proj2.x - _proj.x) * innerWidth) * 180) / Math.PI * 2) / 2;
+      }
+      if (it._x !== x || it._y !== y || it._deg !== deg) {
+        it._x = x; it._y = y; it._deg = deg;
+        it.el.style.transform = `translate3d(${x}px,${y}px,0) translate(-50%,-50%) rotate(${deg}deg)`;
       }
     }
   }

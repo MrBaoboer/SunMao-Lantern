@@ -36,10 +36,14 @@ const RUN = {
 
 const DEFAULTS = { ...PREFS, ...RUN };
 
+function storage() {
+  return typeof window !== 'undefined' ? window.localStorage : null;
+}
+
 function load() {
   const s = { ...DEFAULTS };
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = storage()?.getItem(KEY);
     if (raw) {
       const saved = JSON.parse(raw);
       // 只收偏好。进度一律用默认值 —— 存档里若还留着旧版本的进度，忽略即可
@@ -74,7 +78,7 @@ export const state = new Proxy(load(), {
       queued = false;
       const prefs = {};
       for (const key of PREF_KEYS) prefs[key] = t[key];
-      try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* 隐私模式下静默 */ }
+      try { storage()?.setItem(KEY, JSON.stringify(prefs)); } catch { /* 隐私模式下静默 */ }
     });
     return true;
   },

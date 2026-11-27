@@ -45,6 +45,8 @@ export function buildCornerBracket({ sx, sy }) {
   // 不补这一下，云头板会整体退到插舌背后一个板厚，两块只剩一条棱相连。
   geo.rotateX(Math.PI / 2);
   geo.translate(0, J5.TENON_T, 0);
+  // 补齐 aCut 顶点属性：木料着色器声明了 attribute float aCut，显式绑定零值避免未绑定属性警告
+  geo.setAttribute('aCut', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count), 1));
   const g = new THREE.Group();
   const mesh = new THREE.Mesh(geo, makeWoodMaterial({
     grainAxis: 0, seed: new THREE.Vector3(sx * x0, sy * C.INNER_FACE, zTop), tone: 0.22,
@@ -53,10 +55,9 @@ export function buildCornerBracket({ sx, sy }) {
   g.add(mesh);
 
   // 上缘 a/6 插舌，落入上枨框底面角槽
-  const tongue = new THREE.Mesh(
-    new THREE.BoxGeometry(J5.TENON_L, J5.TENON_T, J5.SLOT_D),
-    mesh.material,
-  );
+  const tongueGeo = new THREE.BoxGeometry(J5.TENON_L, J5.TENON_T, J5.SLOT_D);
+  tongueGeo.setAttribute('aCut', new THREE.BufferAttribute(new Float32Array(tongueGeo.attributes.position.count), 1));
+  const tongue = new THREE.Mesh(tongueGeo, mesh.material);
   tongue.position.set(J5.TENON_L / 2, J5.TENON_T / 2, J5.SLOT_D / 2);
   g.add(tongue);
 
@@ -187,7 +188,16 @@ export function buildTassel() {
    * 灯脚离地一小段，穗子就有地方垂了。26 mm 约合灯身的七分之一，
    * 与实物的比例相称。
    */
+  // 将 48 根丝线合并为单一 BufferGeometry：视觉与摆动一致，但把 48 次 Draw Call 降成 1 次
   const N = 48, len = a(13 / 6);
+  const P = [], Nm = [], UVs = [], IDX = [];
+  const mtx = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const eul = new THREE.Euler();
+  const scl = new THREE.Vector3(1, 1, 1);
+  let vertBase = 0;
+
   for (let i = 0; i < N; i++) {
     const ang = (i / N) * Math.PI * 2 + (i % 2) * 0.07;
     const ring = i % 3;
@@ -195,20 +205,96 @@ export function buildTassel() {
     const l = len - ring * 1.4;                    // 外圈略短，穗尾收成一个锥
     const geo = new THREE.CylinderGeometry(0.32, 0.18, l, 4);
     geo.rotateX(Math.PI / 2);                      // 轴向 +Y → +Z，几何层转，顺序明确
-    const s = new THREE.Mesh(geo, mat);
     /*
      * 略向外张，丝线才不是一束平行的棍。
-     * 倾斜必须绕「与半径垂直的那根水平轴」——  给 Mesh 同时写 rotation.x 与 rotation.z
+     * 倾斜必须绕「与半径垂直的那根水平轴」—— 给 Mesh 同时写 rotation.x 与 rotation.z
      * 会按欧拉 XYZ 合成，丝线是在一个固定平面里越倒越平，转到九十度那几根直接横过来。
      */
     const splay = 0.09 + ring * 0.05;
-    s.rotation.set(Math.sin(ang) * splay, -Math.cos(ang) * splay, 0);
-    s.position.set(Math.cos(ang) * rr, Math.sin(ang) * rr, -l / 2 - 4.2);
-    strands.add(s);
+    eul.set(Math.sin(ang) * splay, -Math.cos(ang) * splay, 0);
+    quat.setFromEuler(eul);
+    pos.set(Math.cos(ang) * rr, Math.sin(ang) * rr, -l / 2 - 4.2);
+    mtx.compose(pos, quat, scl);
+    geo.applyMatrix4(mtx);
+
+    const pAttr = geo.attributes.position;
+    const nAttr = geo.attributes.normal;
+    const uAttr = geo.attributes.uv;
+    for (let k = 0; k < pAttr.count; k++) {
+      P.push(pAttr.getX(k), pAttr.getY(k), pAttr.getZ(k));
+      Nm.push(nAttr.getX(k), nAttr.getY(k), nAttr.getZ(k));
+      UVs.push(uAttr.getX(k), uAttr.getY(k));
+    }
+    const idx = geo.index;
+    for (let k = 0; k < idx.count; k++) IDX.push(idx.getX(k) + vertBase);
+    vertBase += pAttr.count;
+    geo.dispose();
   }
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.BufferAttribute(new Float32Array(P), 3));
+  merged.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(Nm), 3));
+  merged.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(UVs), 2));
+  merged.setIndex(IDX);
+  merged.computeBoundingSphere();
+  strands.add(new THREE.Mesh(merged, mat));
   g.add(strands);
   g.userData = { id: 'DC-TASSEL-01', kind: 'tassel', strands };
   return g;
+}
+
+/** 程序化火苗与光晕贴图（全片只生成一次，避免纯色硬边矩形面片穿帮） */
+let flameTex = null;
+let glowTex = null;
+function getFlameTexture() {
+  if (flameTex) return flameTex;
+  const W = 64, H = 96;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  // 泪滴轮廓：下圆润、上收尖，由内到外从白金过渡到橙红并柔边消隐
+  c.save();
+  c.beginPath();
+  c.moveTo(W * 0.5, H * 0.06);
+  c.bezierCurveTo(W * 0.78, H * 0.42, W * 0.88, H * 0.72, W * 0.5, H * 0.94);
+  c.bezierCurveTo(W * 0.12, H * 0.72, W * 0.22, H * 0.42, W * 0.5, H * 0.06);
+  c.closePath();
+  c.clip();
+  const outer = c.createRadialGradient(W * 0.5, H * 0.68, 2, W * 0.5, H * 0.58, H * 0.48);
+  outer.addColorStop(0, 'rgba(255, 252, 232, 1)');
+  outer.addColorStop(0.28, 'rgba(255, 214, 118, 0.96)');
+  outer.addColorStop(0.62, 'rgba(255, 132, 42, 0.65)');
+  outer.addColorStop(1, 'rgba(255, 76, 16, 0)');
+  c.fillStyle = outer;
+  c.fillRect(0, 0, W, H);
+  // 焰心：偏下的一小团亮白金
+  const core = c.createRadialGradient(W * 0.5, H * 0.72, 1, W * 0.5, H * 0.70, W * 0.22);
+  core.addColorStop(0, 'rgba(255, 255, 245, 1)');
+  core.addColorStop(0.65, 'rgba(255, 236, 175, 0.7)');
+  core.addColorStop(1, 'rgba(255, 200, 100, 0)');
+  c.fillStyle = core;
+  c.fillRect(0, 0, W, H);
+  c.restore();
+  flameTex = new THREE.CanvasTexture(cv);
+  flameTex.colorSpace = THREE.SRGBColorSpace;
+  return flameTex;
+}
+
+function getGlowTexture() {
+  if (glowTex) return glowTex;
+  const S = 64;
+  const cv = document.createElement('canvas');
+  cv.width = S; cv.height = S;
+  const c = cv.getContext('2d');
+  const g = c.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, 'rgba(255, 224, 150, 0.95)');
+  g.addColorStop(0.32, 'rgba(255, 162, 68, 0.55)');
+  g.addColorStop(0.7, 'rgba(255, 112, 36, 0.16)');
+  g.addColorStop(1, 'rgba(255, 90, 20, 0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, S, S);
+  glowTex = new THREE.CanvasTexture(cv);
+  glowTex.colorSpace = THREE.SRGBColorSpace;
+  return glowTex;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -226,26 +312,32 @@ export function buildLampCore() {
     new THREE.MeshStandardMaterial({ color: 0xf6ead0, roughness: 0.72 }),
   );
   candle.rotation.x = Math.PI / 2; candle.position.z = 15.5;
-  g.add(dish, stem, candle);
+  // 烛芯：烛顶探出一小截炭黑灯捻，熄灭态也能读出这是根蜡烛
+  const wick = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.45, 0.55, 3.2, 6),
+    new THREE.MeshStandardMaterial({ color: 0x261f1a, roughness: 0.95 }),
+  );
+  wick.rotation.x = Math.PI / 2; wick.position.z = 24.8;
+  g.add(dish, stem, candle, wick);
 
-  // 火焰：双层 billboard，未点亮时不可见
+  // 火焰：程序化泪滴贴图 + 径向柔光晕 billboard，未点亮时不可见
   const flameMat = new THREE.MeshBasicMaterial({
-    color: 0xffc266, transparent: true, opacity: 0, depthWrite: false,
+    color: 0xffffff, map: getFlameTexture(), transparent: true, opacity: 0, depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  const flame = new THREE.Mesh(new THREE.PlaneGeometry(9, 15), flameMat);
-  flame.position.z = 30;
+  const flame = new THREE.Mesh(new THREE.PlaneGeometry(11, 17), flameMat);
+  flame.position.z = 31;
   flame.renderOrder = 5;
   const glowMat = new THREE.MeshBasicMaterial({
-    color: 0xff9a3c, transparent: true, opacity: 0, depthWrite: false,
+    color: 0xffffff, map: getGlowTexture(), transparent: true, opacity: 0, depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(34, 34), glowMat);
-  glow.position.z = 28;
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(42, 42), glowMat);
+  glow.position.z = 29;
   glow.renderOrder = 4;
   g.add(flame, glow);
 
-  g.userData = { id: 'LG-CORE-01', kind: 'core', flame, glow, flameMat, glowMat, wickHeight: 30 };
+  g.userData = { id: 'LG-CORE-01', kind: 'core', flame, glow, flameMat, glowMat, wickHeight: 31 };
   return g;
 }
 
@@ -349,7 +441,15 @@ export function buildCutPaperTexture(motif, size = 512) {
     c.bezierCurveTo(S * 0.86, -S * 0.42, S * 0.3, -S * 0.5, 0, -S * 0.1);
     c.fill();
     c.beginPath(); c.arc(0, -S * 0.2, S * 0.14, 0, Math.PI * 2); c.fill();
-    ring(0, 2, () => { c.beginPath(); c.moveTo(0, -S * 0.3); c.lineTo(S * 0.06, -S * 0.44); c.lineTo(-S * 0.02, -S * 0.36); c.fill(); });
+    // 两只尖耳左右镜像立在头顶（旧实现用 ring(0, 2, …) 旋转了 180°，第二只耳掉到了下巴）
+    for (const s of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(s * S * 0.04, -S * 0.28);
+      c.lineTo(s * S * 0.14, -S * 0.44);
+      c.lineTo(s * S * 0.15, -S * 0.22);
+      c.closePath();
+      c.fill();
+    }
   }
   c.restore();
 
@@ -361,10 +461,10 @@ export function buildCutPaperTexture(motif, size = 512) {
 export function buildCutPaper(motifId) {
   const w = a(7), h = a(7);
   const tex = buildCutPaperTexture(motifId);
+  // 遵循 makeCutPaperMaterial 的约定：走 alphaTest 裁切而非 transparent 混合，
+  // 避免与紧贴在背后 2 mm 处的半透明绵纸发生深度排序穿帮
   const mat = makeCutPaperMaterial(tex);
-  mat.alphaMap = tex;
-  mat.transparent = true;
-  mat.alphaTest = 0.42;
+  mat.alphaTest = 0.45;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
   mesh.rotation.x = Math.PI / 2;
   mesh.userData = { kind: 'cutpaper', motif: motifId };

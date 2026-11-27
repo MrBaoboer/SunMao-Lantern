@@ -74,6 +74,7 @@ export class BGM {
     this.current = id;
     this.baseVol = tr.vol;
     this.levelScale = o.level ?? 1;
+    this._blocked = null;
     a.play().then(() => {
       const t0 = performance.now();
       const target = this.targetVolume();
@@ -84,7 +85,28 @@ export class BGM {
         if (k < 1) requestAnimationFrame(f);
       };
       f();
-    }).catch(() => { /* 自动播放被拦 */ });
+    }).catch(() => {
+      // 首次手势前被自动播放策略拦截：记下来，用户首次交互解锁音频后立刻续播
+      if (this.el === a) this._blocked = { a, fade };
+    });
+  }
+
+  /** 首次手势解锁音频时，拉起先前被自动播放策略拦住的 BGM */
+  unlock() {
+    const b = this._blocked;
+    this._blocked = null;
+    if (!b || this.el !== b.a || !b.a.paused) return;
+    b.a.play().then(() => {
+      const t0 = performance.now();
+      const target = this.targetVolume();
+      const f = () => {
+        if (this.el !== b.a) return;
+        const k = Math.min(1, (performance.now() - t0) / (b.fade * 1000));
+        b.a.volume = target * k;
+        if (k < 1) requestAnimationFrame(f);
+      };
+      f();
+    }).catch(() => { /* 仍被拦截则静默 */ });
   }
 
   targetVolume() {

@@ -185,27 +185,44 @@ export function act4(ctx) {
           c.hud.setCue(`格心 <b>${seated}</b> / 4`, null, { quiet: true });
         };
 
+        let busy = false;
         const one = async () => {
+          if (busy) return;
           const pid = PANELS[seated];
           if (!pid) return;
-          // 上枨框剖开，好看清那道深槽；正在装的这一片留实 —— 它才是这一步要看的东西
-          if (seated === 0) c.lantern.setSection(['UB-A1'], true, [pid]);
-          await install(pid, seated === 0);
-          c.lantern.setSection(null, false);
-          if (seated >= 4) {
-            c.sfx.play('WOOD_SETTLE', { gain: 0.5 });
-            c.hud.toast('四片都装好了', { gold: true });
-            engine.done();
-            return;
+          busy = true;
+          c.hud.setTask(null);
+          try {
+            // 上枨框剖开，好看清那道深槽；正在装的这一片留实 —— 它才是这一步要看的东西
+            if (seated === 0) c.lantern.setSection(['UB-A1'], true, [pid]);
+            await install(pid, seated === 0);
+            c.lantern.setSection(null, false);
+            if (seated >= 4) {
+              c.sfx.play('WOOD_SETTLE', { gain: 0.5 });
+              c.hud.toast('四片都装好了', { gold: true });
+              engine.done();
+              return;
+            }
+            c.hud.setTask(`装第 ${seated + 1} 片`, one);
+          } finally {
+            busy = false;
           }
-          c.hud.setTask(`装第 ${seated + 1} 片`, one);
         };
 
         c.hud.setTask('装第 1 片', one);
         c.hud.setAlts([{ label: '帮我装上', ico: 'spark', onClick: async () => {
-          while (seated < 4) await install(PANELS[seated], false);
-          c.hud.toast('四片都装好了', { gold: true });
-          engine.done();
+          if (busy) return;
+          busy = true;
+          c.hud.setTask(null);
+          c.hud.setAlts([]);
+          try {
+            while (seated < 4) await install(PANELS[seated], false);
+            c.sfx.play('WOOD_SETTLE', { gain: 0.5 });
+            c.hud.toast('四片都装好了', { gold: true });
+            engine.done();
+          } finally {
+            busy = false;
+          }
         } }]);
       },
       exit(c) {
@@ -234,6 +251,17 @@ export function act4(ctx) {
 （气口）
 中梁底下挂个中国结，接一串红流苏。
 最后放灯芯 —— 它就坐在中梁上。`,
+      segments: [
+        `该给灯笼糊「皮」了。
+里面糊一层绵纸，外面贴上红纸窗花。`,
+        `四个角，各嵌一个祥云牙子。
+看着是朵云，其实在撑着这个角 ——
+有它在，方框就不容易歪。`,
+        `顶上再装龙纹角花，扣住四个柱头。
+角花一扣，柱子就再也退不出来了。`,
+        `中梁底下挂个中国结，接一串红流苏。
+最后放灯芯 —— 它就坐在中梁上。`,
+      ],
       note: {
         title: '上的是哪一道锁',
         spec: [['角花外挡边', '向外出挑 2 毫米'], ['角花压舌', '落进顶面浅槽']],
@@ -280,6 +308,7 @@ export function act4(ctx) {
           {
             label: '装祥云牙子',
             run: async () => {
+              engine.say(1);
               for (const [i, b] of c.lantern.decor.brackets.entries()) {
                 b.visible = true;
                 const home = b.position.clone();
@@ -295,6 +324,7 @@ export function act4(ctx) {
           {
             label: '装龙纹角花',
             run: async () => {
+              engine.say(2);
               for (const [i, p] of c.lantern.decor.plates.entries()) {
                 p.visible = true;
                 const home = p.position.clone();
@@ -316,6 +346,7 @@ export function act4(ctx) {
           {
             label: '挂结与流苏',
             run: async () => {
+              engine.say(3);
               c.lantern.knot.visible = true;
               c.lantern.tassel.visible = true;
               c.sfx.play('KNOT_SWING');
@@ -386,6 +417,15 @@ export function act4(ctx) {
         c.lantern.showDecor(true);
         c.lantern.core.visible = true;
 
+        const LAYER_DESC = {
+          1: '底盘 <b>5</b> 件：两顺枨、两横枨与中梁，托起整盏灯与灯芯',
+          2: '上面的框 <b>4</b> 件：中部不开槽，底面留深槽，顶面留角花压槽',
+          3: '立柱 <b>4</b> 根：两处细颈扣入柱窝，柱身柱脚上下夹紧框子',
+          4: '格心与纸 <b>12</b> 件：外窗花、中棂格、内绵纸，三层错落透光',
+          5: '装饰与灯芯 <b>11</b> 件：牙子撑角、角花锁柱，结穗与灯芯收尾',
+        };
+        let animId = 0;
+
         // 坞压得越矮，灯笼在画面里就越大 —— 这一步要看的正是那三十六件东西
         c.hud.dock({
           body: `<div class="layers">${EXPLODE_LAYERS.map((l) =>
@@ -401,10 +441,12 @@ export function act4(ctx) {
               b.setAttribute('aria-pressed', String(c.lantern.layerFocus === +b.dataset.l));
               b.addEventListener('click', () => {
                 const on = b.getAttribute('aria-pressed') === 'false';
+                const id = on ? +b.dataset.l : null;
                 o.querySelectorAll('.layer').forEach((x) => x.setAttribute('aria-pressed', 'false'));
                 b.setAttribute('aria-pressed', String(on));
-                c.lantern.focusLayer(on ? +b.dataset.l : null);
+                c.lantern.focusLayer(id);
                 c.lantern.setExplode(c.lantern.explodeT, 'layered');
+                c.hud.setCue(id ? LAYER_DESC[id] : '点一层，单看那一层', id ? null : 'tap');
                 c.sfx.play('UI_TAP');
               });
             });
@@ -412,24 +454,34 @@ export function act4(ctx) {
             // 坞可能被「怎么操作」盖过又交还回来 —— 滑杆要跟着模型现在的样子摆，
             // 不能一律回到 0，否则灯笼摊开着而滑杆写着「没拆」
             rng.value = Math.round(c.lantern.explodeT * 100);
-            rng.addEventListener('input', () => c.lantern.setExplode(rng.value / 100, 'layered'));
+            rng.addEventListener('input', () => {
+              animId++;                    // 手动拖滑杆即接管，避免与自动展开/合回补间抢写
+              c.lantern.setExplode(rng.value / 100, 'layered');
+            });
             c.explodeRange = rng;
           },
         });
         c.hud.setCue('点一层，单看那一层', 'tap');
 
         await wait(0.6);
+        const openId = ++animId;
         await tween(3.0, (k) => {
+          if (animId !== openId) return;
           c.lantern.setExplode(k, 'layered');
           if (c.explodeRange) c.explodeRange.value = k * 100;
         }, { ease: Ease.inOutCubic });
 
         c.hud.setAlts([{ label: '合回去', ico: 'refresh', onClick: async () => {
-          await tween(2.2, (k) => {
-            c.lantern.setExplode(1 - k, 'layered');
-            if (c.explodeRange) c.explodeRange.value = (1 - k) * 100;
+          const from = c.lantern.explodeT;
+          if (from <= 0.001) return;
+          const id = ++animId;
+          await tween(2.2 * from, (k) => {
+            if (animId !== id) return;
+            const v = from * (1 - k);
+            c.lantern.setExplode(v, 'layered');
+            if (c.explodeRange) c.explodeRange.value = v * 100;
           }, { ease: Ease.inOutCubic });
-          c.sfx.play('SNAP_IN');
+          if (animId === id) c.sfx.play('SNAP_IN');
         } }]);
       },
       exit(c) {
@@ -457,7 +509,8 @@ export function act4(ctx) {
         c.lantern.applyAssembly();
         c.lantern.showDecor(true);
         c.lantern.core.visible = true;
-        c.lantern.setLit(c.state.lit ? Math.min(1.4, 1 + c.state.riddleScore * 0.08) : 0);
+        const bright = c.state.litLevel > 0 ? c.state.litLevel : 1;
+        c.lantern.setLit(c.state.lit ? Math.min(1.4, 1 + c.state.riddleScore * 0.08) * bright : 0);
         c.openHub();
       },
       exit() { junk.clear(); },

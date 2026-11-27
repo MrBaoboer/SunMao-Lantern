@@ -21,6 +21,7 @@ export class Engine {
     this.steps = [];
     this.index = -1;
     this.busy = false;
+    this._goSeq = 0;
     /** 这一步的动手环节做完了没有。done() 置真，置真之后「下一步」就只管翻页 */
     this.taskDone = false;
     /** 这一步动过手 —— 段与段之间的空当里也不算做完 */
@@ -140,8 +141,9 @@ export class Engine {
     return null;
   }
 
-  async go(i) {
-    if (i < 0 || i >= this.steps.length || i === this.index) return;
+  async go(i, { force = false } = {}) {
+    if (i < 0 || i >= this.steps.length || (!force && i === this.index)) return;
+    const seq = ++this._goSeq;
     // 上一步的动画还没跑完也照样翻 —— 取消它，别让用户等
     cancelAll();
     // 代劳那一串 await 全靠 cancelAll 掐断，掐断之后不会兑现 —— 四个标志在这里收
@@ -155,8 +157,10 @@ export class Engine {
 
     try {
       // ── 收尾 ──
+      ctx.onStepLeave?.();
       ctx.voice.stop();
       await prev?.exit?.(ctx);
+      if (this._goSeq !== seq) return;
       ctx.drag.cancel();
       ctx.mach.end();
       ctx.guides.clear();
@@ -171,6 +175,7 @@ export class Engine {
       ctx.hud.closeOverlays();        // 两层一起收 —— 上一步的坞不留给下一步
       ctx.exitInspect?.();            // 「拆开看看」开着就翻页，灯笼会永久停在半透的爆炸态
       ctx.lantern.clearHighlights();
+      ctx.lantern.focusLayer(null);
       ctx.lantern.setSection(null, false);
       // 点过灯之后再往回翻，工作台上的半成品不该还亮着 —— 要亮的那一步自己会点
       ctx.lantern.setLit(0);
@@ -197,12 +202,17 @@ export class Engine {
       if (s.note) ctx.hud.setNote(s.note);
       if (s.cue) ctx.hud.setCue(s.cue.text, s.cue.ico);
 
-      // 旁白与画面同时开始，谁也不等谁
+      // 旁白与画面同时开始，谁也不等谁。
+      // 多阶段动手步骤声明了 segments 时：若有整步配音文件仍播整条；否则先播首段，
+      // 后续段落由步骤在真正切到下一工件/下一项装饰时通过 engine.say() 同步触发。
       if (s.narration) {
-        ctx.voice.play(s.id, s.narration, { cps: s.cps ?? 4.0, lyric: !!s.lyric });
+        const useSeg = s.segments?.length && !(ctx.state.voice && ctx.voice.available.has(s.id));
+        const text = useSeg ? s.segments[0] : s.narration;
+        ctx.voice.play(useSeg ? `${s.id}-1` : s.id, text, { cps: s.cps ?? 4.0, lyric: !!s.lyric });
       }
       if (s.enter) await s.enter(ctx, this);
     } catch (e) {
+      if (this._goSeq !== seq) return;
       console.error(`[step ${this.steps[i]?.id}]`, e);
       /*
        * 铺到一半断掉的话，屏幕上是一个自己不会说话的半成品。两件事要做：
@@ -213,8 +223,23 @@ export class Engine {
       this.taskDone = true;
       ctx.hud.toast('这一步没能完全铺开，往下走或点顶上的格子换一步', { dur: 4000 });
     } finally {
-      this.busy = false;
+      if (this._goSeq === seq) this.busy = false;
     }
+  }
+
+  /** 多阶段步骤切换到第 n 段（从 1 开始）时触发对应旁白，整步配音开启时不打断原音频 */
+  say(segIndex) {
+    const s = this.current;
+    if (!s?.segments?.[segIndex]) return;
+    if (this.ctx.state.voice && this.ctx.voice.available.has(s.id)) return;
+    this.ctx.voice.play(`${s.id}-${segIndex + 1}`, s.segments[segIndex], {
+      cps: s.cps ?? 4.0, lyric: !!s.lyric,
+    });
+  }
+
+  /** 重播当前这一步/这一段的旁白 */
+  replayNarration() {
+    return this.ctx.voice.replay();
   }
 
   /** 任务做完了：收起任务按钮，让右边那枚箭头亮一下 —— 这之后「下一步」就直接翻页 */

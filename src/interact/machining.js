@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import { tween, Ease, wait } from '../util/tween.js';
 import { makeGoldMaterial } from '../render/materials.js';
+import { isPrimaryPointer, setRayFromEvent, makeDragPlane, haptic } from './pointer.js';
 
 /**
  * 把一条二维轮廓立起来做成刀身。
@@ -232,11 +233,20 @@ export class Machining {
     const c = this.ctx.stage.canvas;
     this._down = (e) => this.onDown(e);
     this._move = (e) => this.onMove(e);
-    this._up = () => this.onUp();
+    this._up = (e) => this.onUp(e);
     c.addEventListener('pointerdown', this._down);
     addEventListener('pointermove', this._move);
     addEventListener('pointerup', this._up);
     addEventListener('pointercancel', this._up);
+  }
+
+  dispose() {
+    this.end();
+    const c = this.ctx.stage.canvas;
+    c.removeEventListener('pointerdown', this._down);
+    removeEventListener('pointermove', this._move);
+    removeEventListener('pointerup', this._up);
+    removeEventListener('pointercancel', this._up);
   }
 
   /**
@@ -465,6 +475,7 @@ export class Machining {
     }
     this.job = null;
     this.dragging = null;
+    this.pointerId = null;
     // 最后一刀走完时手可能还按着 —— 那一下交还轨道控制，剩下半程就成了转镜头
     if (!this.grabbed) this.ctx.stage.controls.enabled = true;
   }
@@ -478,25 +489,18 @@ export class Machining {
 
   onDown(e) {
     const j = this.job;
-    if (!j || this.ctx.hud.overlayOpen) return;
-    const rect = this.ctx.stage.canvas.getBoundingClientRect();
-    this.ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.ptr.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    this.ray.setFromCamera(this.ptr, this.ctx.stage.camera);
+    if (!j || this.dragging || this.ctx.hud.overlayOpen || !isPrimaryPointer(e)) return;
+    setRayFromEvent(this.ray, this.ptr, e, this.ctx.stage.canvas, this.ctx.stage.camera);
     const hits = this.ray.intersectObject(this.tool, true);
     if (!hits.length) return;
 
-    const camDir = new THREE.Vector3();
-    this.ctx.stage.camera.getWorldDirection(camDir);
-    let n = camDir.clone().addScaledVector(j.dir, -camDir.dot(j.dir));
-    if (n.lengthSq() < 1e-4) n.set(0, 0, 1);
-    n.normalize();
     this.dragging = {
-      plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n, hits[0].point),
+      plane: makeDragPlane(this.ctx.stage.camera, j.dir, hits[0].point),
       grab: hits[0].point.clone(),
       u0: j.u,
       perp: 0, along: 0, warned: false,
     };
+    this.pointerId = e.pointerId;
     this.grabbed = true;
     this.ctx.stage.controls.enabled = false;
     e.preventDefault();
@@ -505,11 +509,8 @@ export class Machining {
   onMove(e) {
     const d = this.dragging;
     const j = this.job;
-    if (!d || !j) return;
-    const rect = this.ctx.stage.canvas.getBoundingClientRect();
-    this.ptr.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.ptr.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    this.ray.setFromCamera(this.ptr, this.ctx.stage.camera);
+    if (!d || !j || (this.pointerId !== null && e.pointerId !== this.pointerId)) return;
+    setRayFromEvent(this.ray, this.ptr, e, this.ctx.stage.canvas, this.ctx.stage.camera);
     const P = new THREE.Vector3();
     if (!this.ray.ray.intersectPlane(d.plane, P)) return;
 
@@ -556,6 +557,7 @@ export class Machining {
 
     // 音高随刀数升高
     this.ctx.sfx.play(j.sfx || 'CHISEL_STROKE', { pitch: (j.stroke - 1) * 1.5 });
+    haptic(10, this.ctx.state);
     // 木屑
     const p = this.tool.position.clone();
     this.ctx.fx.chips.emit(p, j.chipDir || new THREE.Vector3(0, 0, 1));
@@ -580,10 +582,11 @@ export class Machining {
     }
   }
 
-  onUp() {
+  onUp(e) {
+    if (this.pointerId !== null && e && e.pointerId !== this.pointerId) return;
+    this.pointerId = null;
     this.dragging = null;
-    this.grabbed = false;
-    this.ctx.stage.controls.enabled = true;
+    if (this.grabbed) { this.grabbed = false; this.ctx.stage.controls.enabled = true; }
   }
 
   /** §7 降级路径：点击「开始加工」自动播放 —— 内容 100% 完整 */

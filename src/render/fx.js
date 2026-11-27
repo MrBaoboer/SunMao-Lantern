@@ -11,13 +11,14 @@ import * as THREE from 'three';
 export function detectTier() {
   const mem = navigator.deviceMemory || 4;
   const cores = navigator.hardwareConcurrency || 4;
-  // 只认 UA 会漏掉 iPad —— iPadOS 默认按桌面版上报（UA 里写的是 Macintosh），
-  // 于是 iPad 被判成高配档、全屏 bloom 全开，而作者的原意（正则里列了 iPad）是低配。
-  // Chromium 系直接问 userAgentData；Safari / Firefox 没有，就按指针类型兜底：
-  // 粗指针 + 不能悬停 = 手指操作的设备。最后仍留一道 UA 正则给更老的浏览器。
-  const touchOnly = () => matchMedia('(pointer: coarse)').matches && matchMedia('(hover: none)').matches;
-  const mobile = navigator.userAgentData?.mobile
-    ?? (touchOnly() || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent));
+  // 只认 UA 会漏掉 iPad —— iPadOS 默认按桌面版上报（UA 里写的是 Macintosh）。
+  // 不能用 `userAgentData?.mobile ?? ...`：Android 平板或桌面模式 UA 下它返回 false，
+  // 会短路跳过 touchOnly()；改用逻辑或，任意一条命中移动/纯触屏特征即落低配档。
+  const touchOnly = () => typeof matchMedia === 'function'
+    && matchMedia('(pointer: coarse)').matches && matchMedia('(hover: none)').matches;
+  const mobile = Boolean(navigator.userAgentData?.mobile)
+    || touchOnly()
+    || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
   if (mobile || mem <= 2 || cores <= 2) return 'low';
   if (mem <= 4 || cores <= 4) return 'mid';
   return 'high';

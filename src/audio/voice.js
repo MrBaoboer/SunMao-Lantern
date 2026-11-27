@@ -109,13 +109,16 @@ export class VoiceTrack {
    */
   play(stepId, text, o = {}) {
     this.stop();
+    this._last = { stepId, text, o };
     const gen = this.gen;
     const lines = parseNarration(text, o.cps ?? BASE_CPS);
     if (!lines.length) { o.onDone?.(); return; }
     const total = lines.reduce((s, l) => s + l.dur, 0);
 
+    let started = false;
     const runCaptions = (scale = 1) => {
-      if (this.gen !== gen) return;
+      if (started || this.gen !== gen) return;
+      started = true;
       let i = 0;
       const step = () => {
         if (this.gen !== gen) return;
@@ -141,11 +144,22 @@ export class VoiceTrack {
         const scale = a.duration && isFinite(a.duration) ? a.duration / total : 1;
         runCaptions(scale);
       }, { once: true });
-      a.addEventListener('error', () => runCaptions(1), { once: true });
+      a.addEventListener('error', () => {
+        if (this.audio === a) this.audio = null;
+        runCaptions(1);
+      }, { once: true });
       a.play().catch(() => { /* 自动播放被拦，字幕照走 */ });
     } else {
       runCaptions(1);
     }
+  }
+
+  /** 重播当前这一段旁白（不重置当前步骤进度） */
+  replay() {
+    if (!this._last) return false;
+    const { stepId, text, o } = this._last;
+    this.play(stepId, text, o);
+    return true;
   }
 
   /** 仅走字幕（静默点：S30 巡礼段严禁补录任何旁白） */

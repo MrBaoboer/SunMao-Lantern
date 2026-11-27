@@ -42,11 +42,13 @@ button {
   border: 0;
   background: none;
   cursor: pointer;
+  touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 button:disabled { cursor: default; }
 
-a { color: inherit; }
+a { color: inherit; touch-action: manipulation; }
+input[type="range"] { touch-action: pan-x; }
 
 svg { display: block; }
 .ico { width: 1em; height: 1em; flex: none; stroke: currentColor; fill: none; }

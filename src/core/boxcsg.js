@@ -279,7 +279,7 @@ export function translateBoxes(boxes, dx, dy, dz) {
   return boxes.map((b) => box(b.x0 + dx, b.y0 + dy, b.z0 + dz, b.x1 + dx, b.y1 + dy, b.z1 + dz));
 }
 
-/** 两组盒体之间的最大重叠体积（0 表示无干涉） */
+/** 两组盒体之间的总重叠体积（0 表示无干涉） */
 export function interferenceVolume(as, bs) {
   let total = 0;
   for (const p of as) for (const q of bs) {

@@ -6,6 +6,7 @@ import { PALETTE, makeWoodMaterial } from '../render/materials.js';
 import { Solid, box } from '../core/boxcsg.js';
 import { solidToGeometry, grainAxisOf, edgeLines } from '../render/geometry.js';
 import { tween } from '../util/tween.js';
+import { isPrimaryPointer, setRayFromEvent, makeDragPlane, haptic } from '../interact/pointer.js';
 
 export { box, edgeLines };
 
@@ -102,18 +103,25 @@ export function buildLanternRiver(scene) {
     lamps.push({ m, mat, delay: i * 0.18 });
   }
   scene.add(g);
+  let disposed = false;
   return {
     group: g, lamps,
-    /** 点灯波：自远及近依次点亮 */
+    /** 点灯波：自远及近依次点亮（走统一帧时钟 delay，翻页或销毁即止，不留游离定时器） */
     wave(sfx) {
       for (const l of lamps) {
-        setTimeout(() => {
-          tween(0.7, (k) => { l.mat.opacity = 0.10 + 0.62 * k; });
-          sfx?.play('LIGHT_SOFT', { gain: 0.35, pitch: (rnd(l.delay * 31) - 0.5) * 6 });
-        }, l.delay * 1000);
+        tween(0.7, (k) => {
+          if (disposed) return;
+          l.mat.opacity = 0.10 + 0.62 * k;
+        }, {
+          delay: l.delay,
+          onDone: () => {
+            if (!disposed) sfx?.play('LIGHT_SOFT', { gain: 0.35, pitch: (rnd(l.delay * 31) - 0.5) * 6 });
+          },
+        });
       }
     },
     dispose() {
+      disposed = true;
       scene.remove(g);
       for (const l of lamps) l.mat.dispose();
     },
@@ -218,36 +226,29 @@ export function makeSimpleDrag(ctx) {
     const d = dir.clone().normalize();
     const start = obj.position.clone();
     let drag = null;
+    let pointerId = null;
     let seated = false;
     // 手指还按着的时候，绝不能把轨道控制交回去（见 onUp 的注释）
     let grabbed = false;
 
-    const pointer = (e) => {
-      const r = ctx.stage.canvas.getBoundingClientRect();
-      p2.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(p2, ctx.stage.camera);
-    };
+    const pointer = (e) => setRayFromEvent(ray, p2, e, ctx.stage.canvas, ctx.stage.camera);
 
     const onDown = (e) => {
-      if (seated || ctx.hud.overlayOpen) return;
+      if (seated || drag || ctx.hud.overlayOpen || !isPrimaryPointer(e)) return;
       pointer(e);
       if (!ray.intersectObject(obj, true).length) return;
-      const camDir = new THREE.Vector3();
-      ctx.stage.camera.getWorldDirection(camDir);
-      let n = camDir.clone().addScaledVector(d, -camDir.dot(d));
-      if (n.lengthSq() < 1e-4) n.set(0, 0, 1);
-      n.normalize();
       const pt = new THREE.Vector3();
-      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, obj.position);
+      const plane = makeDragPlane(ctx.stage.camera, d, obj.position);
       if (!ray.ray.intersectPlane(plane, pt)) return;
       drag = { plane, grab: pt.clone(), u0: obj.position.clone().sub(start).dot(d) / distance, perp: 0, along: 0, warned: false };
+      pointerId = e.pointerId;
       grabbed = true;
       ctx.stage.controls.enabled = false;
       e.preventDefault();
     };
 
     const onMove = (e) => {
-      if (!drag || seated) return;
+      if (!drag || seated || (pointerId !== null && e.pointerId !== pointerId)) return;
       pointer(e);
       const pt = new THREE.Vector3();
       if (!ray.ray.intersectPlane(drag.plane, pt)) return;
@@ -268,12 +269,13 @@ export function makeSimpleDrag(ctx) {
       if (u > 0.88) {
         drag = null; seated = true;
         ctx.guides.clear();
+        haptic(14, ctx.state);
         onSeat?.();
       }
     };
 
     /*
-     * 轨道控制只在**松手**时交还。
+     * 轨道控制只在**松手**（或系统断触 pointercancel）时交还。
      *
      * OrbitControls 是在 Stage 里先建的，它的 pointerdown 比这里先跑 ——
      * 那一下它已经把 pointermove/pointerup 挂上了。之后设 enabled = false
@@ -281,7 +283,9 @@ export function makeSimpleDrag(ctx) {
      * 剩下的这半程就变成了转镜头 —— 「拖完之后画面顺着拖的方向歪了」正是这么来的。
      * 所以拖歪了、装到位了，都只收手不交权。
      */
-    const onUp = () => {
+    const onUp = (e) => {
+      if (pointerId !== null && e && e.pointerId !== pointerId) return;
+      pointerId = null;
       if (drag && !seated) obj.position.copy(start);
       drag = null;
       if (grabbed) { grabbed = false; ctx.stage.controls.enabled = true; }
@@ -290,6 +294,7 @@ export function makeSimpleDrag(ctx) {
     ctx.stage.canvas.addEventListener('pointerdown', onDown);
     addEventListener('pointermove', onMove);
     addEventListener('pointerup', onUp);
+    addEventListener('pointercancel', onUp);
 
     // 该往哪儿拖：一枚呼吸的小箭头。默认钉在构件后方，步骤可以自己给一组位置
     const spots = opt.arrows || [obj.position.clone().addScaledVector(d, -14)];
@@ -309,6 +314,8 @@ export function makeSimpleDrag(ctx) {
       ctx.stage.canvas.removeEventListener('pointerdown', onDown);
       removeEventListener('pointermove', onMove);
       removeEventListener('pointerup', onUp);
+      removeEventListener('pointercancel', onUp);
+      if (grabbed) { grabbed = false; ctx.stage.controls.enabled = true; }
     } });
   };
 }

@@ -31,7 +31,8 @@ export function openM1(c, onExit) {
 
   let k = 0, holding = false, held = 0, lit = c.state.lit, need = 1.2, misses = 0;
   let closed = false;
-  c.lantern.setLit(lit ? level(c) : 0);
+  const savedBright = () => (c.state.litLevel > 0 ? c.state.litLevel : 1);
+  c.lantern.setLit(lit ? level(c) * savedBright() : 0);
 
   const close = () => {
     closed = true;
@@ -67,10 +68,23 @@ export function openM1(c, onExit) {
       const tools = o.querySelector('#tools');
       const again = o.querySelector('#again');
 
+      const bright = o.querySelector('#bright');
+      bright.value = String(Math.round(savedBright() * 100));
+
+      const showLitUI = () => {
+        fire.hidden = true;
+        ring.style.display = 'none';
+        tip.textContent = '';
+        tools.hidden = false;
+        again.hidden = false;
+      };
+
       const done = async () => {
         if (closed) return;
         lit = true;
         c.state.lit = true;
+        c.state.litLevel = 1;
+        bright.value = '100';
         // 点亮那一刻就把「成」记上 —— 后面的拉远、辉光与旁白都是余韵，
         // 人在余韵里按返回不该丢掉这件事：否则回到四门页，灯亮着、印却没盖，
         // 片尾也永远凑不齐四件
@@ -94,8 +108,7 @@ export function openM1(c, onExit) {
         // 这条链还会跑到这里，旁白就响在了四门页上
         if (closed) return;
         playVO(c, 'M1');
-        tools.hidden = false;
-        again.hidden = false;
+        showLitUI();
       };
 
       const start = () => {
@@ -147,20 +160,28 @@ export function openM1(c, onExit) {
       c.stage.updaters.add(upd);
       junk.add({ dispose: () => { c.stage.updaters.delete(upd); removeEventListener('pointerup', stop); } });
 
-      o.querySelector('#bright').addEventListener('input', (e) => {
+      bright.addEventListener('input', (e) => {
         c.state.litLevel = e.target.value / 100;
         c.lantern.setLit(level(c) * c.state.litLevel);
       });
       again.addEventListener('click', () => {
-        lit = false; k = 0; c.state.lit = false;
+        lit = false; k = 0; c.state.lit = false; c.state.litLevel = 0;
         c.lantern.setLit(0);
         c.sfx.stopLoop('FLAME_LOOP');
         fire.hidden = false; ring.style.display = '';
+        arc.style.strokeDashoffset = '276';
         tools.hidden = true; again.hidden = true;
         tip.textContent = '按住不放，等这一圈走满';
+        c.stage.setRecommended({ az: 55, el: 8, dist: 300, target: V(...AIM_LANTERN), fit: { r: 78, h: 126 } });
       });
 
-      if (lit) done();
+      // 已经点亮时再次进入：直接进入赏灯与调亮状态，不重播引火动画和旁白
+      if (lit) {
+        c.stage.setRecommended({ az: 55, el: 10, dist: 470, target: V(...AIM_LANTERN), fit: FIT_LANTERN });
+        c.stage.snapToRecommended();
+        c.sfx.loop('FLAME_LOOP');
+        showLitUI();
+      }
     },
   });
 
@@ -250,9 +271,11 @@ export function openM2(c, onExit) {
           const right = picked === q.key;
           if (right) {
             score++;
-            c.state.riddleScore = score;
+            // 重玩灯谜保留最高成绩，不因重玩拉暗已经点亮的灯
+            c.state.riddleScore = Math.max(c.state.riddleScore || 0, score);
             c.sfx.play('SUCCESS');
-            c.lantern.setLit(c.state.lit ? level(c) : score * 0.08);
+            const bright = c.state.litLevel > 0 ? c.state.litLevel : 1;
+            c.lantern.setLit(c.state.lit ? level(c) * bright : c.state.riddleScore * 0.08);
             ans.innerHTML = `<div class="answer-k">对了 · 灯又亮了一分</div>
               <div class="answer-v">${q.why}</div>`;
           } else {
@@ -260,7 +283,9 @@ export function openM2(c, onExit) {
               <div class="answer-v">${q.why}</div>`;
           }
           if (q.last && right) playVO(c, 'M2-fin');
+          o.querySelector('#skip').hidden = true;
           next.hidden = false;
+          next.focus();
         };
 
         o.querySelectorAll('.opt').forEach((b) =>

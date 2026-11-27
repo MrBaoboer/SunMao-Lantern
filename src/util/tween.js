@@ -28,8 +28,8 @@ export const reducedMotion = () =>
 
 const running = new Set();
 
-export function tick(dt) {
-  for (const tw of [...running]) tw._step(dt);
+export function tick(dt, wallDt = dt) {
+  for (const tw of [...running]) tw._step(dt, wallDt);
 }
 
 class Tween {
@@ -73,22 +73,39 @@ export function tween(dur, onUpdate, opts = {}) {
   });
 }
 
-const waits = new Set();
+class Wait {
+  constructor(dur, resolve) {
+    this.dur = Math.max(1e-4, dur);
+    this.resolve = resolve;
+    this.t = 0;
+    this.done = false;
+    running.add(this);
+  }
+  _step(_dt, wallDt) {
+    if (this.done) return;
+    this.t += wallDt;
+    if (this.t >= this.dur) {
+      this.done = true;
+      running.delete(this);
+      this.resolve();
+    }
+  }
+  cancel() { this.done = true; running.delete(this); }
+}
 
 /**
- * 等一会儿。
- * 被 cancelAll 取消时**不会**兑现 —— 于是 `await wait(...)` 之后的那些代码
- * 就此打住。翻页时这一条很要紧：上一步排在后面的动作不该落到下一步的画面上。
+ * 等一会儿（与 tween 共用帧时钟 tick(dt)）。
+ *
+ * 两项收益：
+ *   · 切到后台时 rAF 停摆，wait 随之自动暂停，不再与暂停了的动画和旁白脱节；
+ *   · 被 cancelAll 取消时**不会**兑现 —— 于是 `await wait(...)` 之后的那些代码
+ *     就此打住。翻页时这一条很要紧：上一步排在后面的动作不该落到下一步的画面上。
  */
 export const wait = (s) => new Promise((resolve) => {
-  const rec = { id: 0 };
-  rec.id = setTimeout(() => { waits.delete(rec); resolve(); }, s * 1000);
-  waits.add(rec);
+  new Wait(s, resolve);
 });
 
 /** 掐断所有在跑的动画与等待 */
 export function cancelAll() {
   for (const t of [...running]) t.cancel();
-  for (const w of waits) clearTimeout(w.id);
-  waits.clear();
 }

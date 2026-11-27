@@ -46,8 +46,13 @@ export function openM3(c, onExit) {
 
   let picked = c.state.wishText || '';
   let closed = false;
+  let posterUrl = null;
+  const revokePoster = () => {
+    if (posterUrl?.startsWith('blob:')) URL.revokeObjectURL(posterUrl);
+    posterUrl = null;
+  };
   const close = () => {
-    closed = true; junk.clear(); c.hud.setBack(null); c.hud.hideOverlay(); c.voice.stop(); onExit?.();
+    closed = true; revokePoster(); junk.clear(); c.hud.setBack(null); c.hud.hideOverlay(); c.voice.stop(); onExit?.();
   };
   c.hud.setBack(close);
   const phrase = (s) =>
@@ -81,7 +86,7 @@ export function openM3(c, onExit) {
 
   const combo = () => {
     const s = [0, 0, 0, 0];
-    const draw = () => c.hud.sheet({
+    c.hud.sheet({
       title: '自己凑一句',
       lede: '挑四个词',
       body: `${COMBO.map((g, gi) => `<div class="combo-grp">
@@ -90,21 +95,26 @@ export function openM3(c, onExit) {
             <button class="wish" type="button" data-g="${gi}" data-v="${vi}"
                     aria-pressed="${s[gi] === vi}">${v}</button>`).join('')}</div>
         </div>`).join('')}
-        <p class="combo-out">${phrase(s)}</p>`,
+        <p class="combo-out" id="combo-out" aria-live="polite">${phrase(s)}</p>`,
       actions: [
         { label: '还是挑现成的', on: choose },
         { label: '就写这句', kind: 'primary', ico: 'brush', on: () => { picked = phrase(s); write(); } },
       ],
       onMount: (o) => {
+        const out = o.querySelector('#combo-out');
+        // 原地更新选中态与预览句，不再重建整张卷 —— 消除闪烁并保住键盘焦点
         o.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => {
-          s[+b.dataset.g] = +b.dataset.v;
+          const gi = +b.dataset.g;
+          s[gi] = +b.dataset.v;
+          o.querySelectorAll(`[data-g="${gi}"]`).forEach((x) => {
+            x.setAttribute('aria-pressed', String(x === b));
+          });
+          out.textContent = phrase(s);
           c.sfx.play('UI_TAP');
-          draw();
         }));
       },
       onEsc: choose,
     });
-    draw();
   };
 
   const write = async () => {
@@ -160,17 +170,21 @@ export function openM3(c, onExit) {
     c.sfx.play('SUCCESS', { gain: 0.6 });
     await wait(0.7);
     if (closed) return;
-    poster();
+    await poster();
   };
 
-  const poster = () => {
+  const poster = async () => {
     if (!c.state.posterNo) c.state.posterNo = makePosterNo();
-    const url = drawPoster(c);
+    const url = await drawPoster(c);
+    if (closed) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return; }
+    revokePoster();
+    posterUrl = url;
     c.state.modulesDone = { ...c.state.modulesDone, M3: true };
     c.sfx.play('SUCCESS');
+    const safeWish = c.state.wishText.replace(/"/g, '&quot;');
     c.hud.sheet({
       label: '写好的海报',
-      body: `<img class="poster" src="${url}" alt="写着「${c.state.wishText}」的灯笼海报">`,
+      body: `<img class="poster" src="${url}" alt="写着「${safeWish}」的灯笼海报">`,
       actions: [
         { label: '换一句', ico: 'refresh', on: choose },
         {
@@ -186,8 +200,21 @@ export function openM3(c, onExit) {
   return close;
 }
 
+/** 将 Canvas 转为 Blob URL（比大体积 base64 dataURL 更省内存，移动端下载更稳） */
+function canvasToURL(cv) {
+  return new Promise((resolve) => {
+    if (typeof cv.toBlob === 'function') {
+      cv.toBlob((blob) => {
+        resolve(blob ? URL.createObjectURL(blob) : cv.toDataURL('image/png'));
+      }, 'image/png');
+    } else {
+      resolve(cv.toDataURL('image/png'));
+    }
+  });
+}
+
 /** 竖版海报：标题 + 当前画面 + 纹样脚线 + 心愿 + 编号 */
-function drawPoster(c) {
+async function drawPoster(c) {
   const W = 1080, H = 1920;
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
@@ -198,10 +225,23 @@ function drawPoster(c) {
   grd.addColorStop(0, '#171310'); grd.addColorStop(0.55, '#0b0907'); grd.addColorStop(1, '#120e0a');
   g.fillStyle = grd; g.fillRect(0, 0, W, H);
 
+  // 若用户还没去点亮灯笼就先来写心愿，夜色里截出的灯会漆黑难辨 ——
+  // 仅在抓帧这一刻给一档柔和的展厅微光，拍完即复原，不改灯的真实点亮状态
+  const prevKey = c.stage.key.intensity;
+  const prevEnv = c.stage.scene.environmentIntensity;
+  const dimUnlit = !c.state.lit;
+  if (dimUnlit) {
+    c.stage.key.intensity = Math.max(prevKey, 1.05);
+    c.stage.scene.environmentIntensity = Math.max(prevEnv, 0.42);
+  }
   // 画布默认不保留绘制缓冲（preserveDrawingBuffer=false），
   // 必须先同步渲染一帧再取图 —— 否则从定时器进来时截到的是空白
   if (c.stage.bloomEnabled) c.stage.composer.render();
   else c.stage.renderer.render(c.stage.scene, c.stage.camera);
+  if (dimUnlit) {
+    c.stage.key.intensity = prevKey;
+    c.stage.scene.environmentIntensity = prevEnv;
+  }
 
   g.textAlign = 'center';
   g.fillStyle = '#f2ece0';
@@ -252,7 +292,7 @@ function drawPoster(c) {
   g.textAlign = 'right';
   g.fillText('13 根木条 · 0 颗钉子', W - 72, H - 62);
 
-  return cv.toDataURL('image/png');
+  return canvasToURL(cv);
 }
 
 /**
@@ -346,20 +386,22 @@ export function openM4(c, onExit) {
     draw();
   };
 
-  const shoot = () => {
+  const shoot = async () => {
     c.sfx.play('SHUTTER');
     // 与屏幕上看到的那一帧走同一条管线：低配档没有后处理，
     // 走 composer 会拍出一张和画面不一样的图
     if (c.stage.bloomEnabled) c.stage.composer.render();
     else c.stage.renderer.render(c.stage.scene, c.stage.camera);
+    const url = await canvasToURL(c.stage.renderer.domElement);
     const link = document.createElement('a');
-    link.href = c.stage.renderer.domElement.toDataURL('image/png');
+    link.href = url;
     link.download = '榫卯灯笼.png';
     // 必须先进文档再点。Firefox 不给游离节点上的 download 触发下载 ——
     // 而 Firefox 113 在声明的浏览器基线之内（docs/DEVELOPMENT.md#环境）
     document.body.appendChild(link);
     link.click();
     link.remove();
+    if (url.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(url), 4000);
     c.hud.toast('这一张已经存下来了', { gold: true });
   };
 

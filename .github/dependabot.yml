@@ -1,5 +1,5 @@
-# 依赖升级交给 dependabot：每月一次，每个生态捆成一条 PR —— CI 绿了点一下就能合，
-# 不必逐个包审。安全更新不等月、随时来，同样只捆一条。
+# 依赖升级交给 dependabot：每周一例行检查一次，每个生态捆成一条 PR —— CI 绿了点一下就能合，
+# 不必逐个包审，也避免整月堆积引发多包冲突或间接依赖安全告警滞留。安全更新随时来，同样只捆一条。
 #
 # 做不到「全部并成一条」：分组只在单个 package-ecosystem 内生效，跨生态没有合并的写法。
 # 所以最多两条 —— npm 一条、GitHub Actions 一条，而 action 常年不动，多半只有前者。
@@ -12,9 +12,11 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
+      day: monday
     # 例行升级永远只占一个位；安全更新不计入这个上限
     open-pull-requests-limit: 1
+    rebase-strategy: auto
     commit-message:
       prefix: 依赖
     groups:
@@ -29,8 +31,10 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: monthly
+      interval: weekly
+      day: monday
     open-pull-requests-limit: 1
+    rebase-strategy: auto
     commit-message:
       prefix: CI
     groups:

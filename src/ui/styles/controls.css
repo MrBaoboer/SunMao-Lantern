@@ -22,7 +22,7 @@
 
 .btn-primary { background: var(--accent); color: var(--on-accent); font-weight: 500; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-lift); transform: translateY(-1px); }
-.btn-primary:active:not(:disabled) { transform: translateY(0); }
+.btn-primary:active:not(:disabled) { transform: scale(0.97); }
 .btn-primary:disabled { background: none; color: var(--text-4); box-shadow: var(--hair); }
 
 .btn-quiet {
@@ -31,15 +31,17 @@
   box-shadow: var(--hair);
 }
 .btn-quiet:hover:not(:disabled) { color: var(--text); box-shadow: var(--hair-gold); }
+.btn-quiet:active:not(:disabled) { transform: scale(0.97); }
 
 /* 次要行动一律是无框文字，永远不与主行动争夺注意力 */
 .btn-text {
   padding: 12px var(--s4);
   font-size: var(--fs-tiny); letter-spacing: var(--ls-base);
   color: var(--text-3);
-  transition: color var(--t-base) var(--ease);
+  transition: color var(--t-base) var(--ease), opacity var(--t-fast) var(--ease);
 }
 .btn-text:hover:not(:disabled) { color: var(--text); }
+.btn-text:active:not(:disabled) { opacity: 0.65; }
 
 /* 图标按钮。视觉 38px，命中区借 ::after 扩到 46px */
 .icon-btn {
@@ -48,11 +50,12 @@
   display: grid; place-items: center;
   width: 38px; height: 38px; border-radius: var(--r-full);
   color: var(--text-3);
-  transition: color var(--t-base) var(--ease), background var(--t-base) var(--ease);
+  transition: color var(--t-base) var(--ease), background var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
 }
 .icon-btn::after { content: ''; position: absolute; inset: -4px; border-radius: inherit; }
 .icon-btn .ico { width: 18px; height: 18px; }
 .icon-btn:hover:not(:disabled) { color: var(--text); background: var(--shade); }
+.icon-btn:active:not(:disabled) { transform: scale(0.93); }
 .icon-btn:disabled { opacity: 0.24; }
 
 /* ═══════════════ 滑杆 ═══════════════ */
@@ -170,8 +173,7 @@ input[type="range"]::-moz-range-thumb {
 /* ═══════════════ 三维锚点标注 ═══════════════ */
 
 .spot {
-  position: fixed; z-index: var(--z-nav);
-  transform: translate(-50%, -50%);
+  position: fixed; left: 0; top: 0; z-index: var(--z-nav);
   display: grid; place-items: center;
   width: 26px; height: 26px; border-radius: 50%;
   font-family: var(--serif); font-size: var(--fs-mini); line-height: 1;
@@ -179,19 +181,19 @@ input[type="range"]::-moz-range-thumb {
   background: var(--surface);
   box-shadow: inset 0 0 0 1px currentColor, var(--lift-1);
   opacity: 0.72;
-  transition: opacity var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
+  will-change: transform;
+  transition: opacity var(--t-base) var(--ease), scale var(--t-fast) var(--ease);
 }
 /* 视觉仍是 26 的一枚小圆点，命中区扩到 44 —— 手指点得中，画面也不被它占掉 */
 .spot::after { content: ''; position: absolute; inset: -9px; border-radius: 50%; }
 .spot .ico { width: 13px; height: 13px; }
 .spot:hover, .spot[aria-pressed="true"] { opacity: 1; }
-.spot:hover { transform: translate(-50%, -50%) scale(1.08); }
+.spot:hover { scale: 1.08; }
 .spot[aria-pressed="true"] { background: currentColor; }
 .spot[aria-pressed="true"] > * { color: var(--surface); }
 
 .spot-label {
-  position: fixed; z-index: var(--z-nav);
-  transform: translate(16px, -50%);
+  position: fixed; left: 0; top: 0; z-index: var(--z-nav);
   pointer-events: none;
   max-width: min(58vw, 240px);   /* 允许换行 —— 窄屏上教学要点不能被屏幕边裁掉 */
   padding: var(--s2) var(--s3);
@@ -199,10 +201,9 @@ input[type="range"]::-moz-range-thumb {
   background: var(--slip); color: var(--slip-ink);
   font-size: var(--fs-tiny); letter-spacing: var(--ls-tight); line-height: var(--lh-tight);
   box-shadow: var(--lift-2);
+  will-change: transform;
   animation: fade var(--t-fast) var(--ease) both;
 }
-/* 贴近右缘时翻到锚点左侧展开（updateSpots 里按位置写入 data-side） */
-.spot-label[data-side="left"] { transform: translate(calc(-100% - 16px), -50%); }
 .spot-label small {
   display: block; margin-top: 2px;
   font-size: var(--fs-mini); letter-spacing: 0; color: var(--slip-mute);
@@ -215,13 +216,13 @@ input[type="range"]::-moz-range-thumb {
  * 细线加低透明度等于没画。所以给足描边、给一圈与底色同色的外发光，
  * 呼吸的下限也抬到六成：这一枚是「往哪儿使劲」的唯一答案，不能若隐若现。
  *
- * transform 由 Arrows.update() 每帧写入（位置 + 按相机投影求出的角度），
+ * transform 由 Arrows.update() 每帧写入（translate3d 位置 + 按相机投影求出的角度），
  * 所以呼吸动画只能动 opacity，不能动 transform。
  */
 .arrow {
-  position: fixed; z-index: var(--z-nav);
-  transform: translate(-50%, -50%);
+  position: fixed; left: 0; top: 0; z-index: var(--z-nav);
   pointer-events: none; color: var(--accent);
+  will-change: transform;
   filter: drop-shadow(0 0 5px var(--bg)) drop-shadow(0 0 2px var(--bg));
   animation: breathe 1.7s ease-in-out infinite;
 }

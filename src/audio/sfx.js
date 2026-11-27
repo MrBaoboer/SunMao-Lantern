@@ -646,8 +646,8 @@ const LOOPS = {
     let alive = true;
     let wait = 240;
     const tick = () => {
-      if (!alive || !S.enabled) return;
-      S.crackle(ctx.currentTime + 0.01, { n: 1, spread: 0.01, f: 2400, fSpread: 1800, gain: 0.02 });
+      if (!alive) return;
+      if (S.enabled) S.crackle(ctx.currentTime + 0.01, { n: 1, spread: 0.01, f: 2400, fSpread: 1800, gain: 0.02 });
       wait = Math.max(90, wait * 0.9);
       timer = setTimeout(tick, wait * (0.7 + Math.random() * 0.6));
     };
@@ -683,8 +683,9 @@ const LOOPS = {
     let alive = true;
     let timer = 0;
     const spark = () => {
-      if (!alive || !S.enabled) return;
-      S.crackle(ctx.currentTime + 0.01, { n: 1, spread: 0.01, f: 2200, fSpread: 1600, gain: 0.012 });
+      if (!alive) return;
+      // 静音期间保持调度存活，取消静音后火焰火星声自动恢复
+      if (S.enabled) S.crackle(ctx.currentTime + 0.01, { n: 1, spread: 0.01, f: 2200, fSpread: 1600, gain: 0.012 });
       timer = setTimeout(spark, 1400 + Math.random() * 2200);
     };
     timer = setTimeout(spark, 1200);
@@ -703,9 +704,10 @@ const LOOPS = {
 export const SFX = new SFXEngine();
 
 /** 首个用户手势时解锁音频（浏览器自动播放策略） */
-export function unlockAudio() {
+export function unlockAudio(onUnlock) {
   const go = () => {
     SFX.ensure();
+    onUnlock?.();
     removeEventListener('pointerdown', go);
     removeEventListener('keydown', go);
   };

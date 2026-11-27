@@ -13,6 +13,9 @@ import assert from 'node:assert/strict';
 
 import { a, av, dim, M, C } from '../src/core/modulus.js';
 import { box, boxVolume, boxesOverlap, boxIntersection, Solid, interferenceVolume } from '../src/core/boxcsg.js';
+import { state, resetRun, makePosterNo } from '../src/core/state.js';
+import { latticeSegments, PANEL_DIMS } from '../src/render/lattice.js';
+import { parseNarration } from '../src/audio/voice.js';
 import { tween, wait, cancelAll, tick, Ease } from '../src/util/tween.js';
 
 // ── 模数 ────────────────────────────────────────────────
@@ -123,4 +126,73 @@ test('回调抛错不会让 tween 变成不死 tween', async () => {
   assert.ok(errs.length > 0, '错误应被记录');
   // 再 tick 一次不应再抛（tween 已经从队列里摘掉）
   assert.doesNotThrow(() => tick(0.2));
+});
+
+test('wait(s) 跟随活跃帧时钟推进，低帧率下仍按 wallDt 对齐真实秒数', async () => {
+  let done = false;
+  let tw = 0;
+  const p = wait(0.3).then(() => { done = true; });
+  tween(1.0, (k) => { tw = k; }, { ease: Ease.linear });
+  tick(0.05, 0.15);
+  await Promise.resolve();
+  assert.equal(done, false);
+  assert.ok(Math.abs(tw - 0.05) < 1e-6);
+  tick(0.05, 0.16);
+  await p;
+  assert.equal(done, true);
+  assert.ok(Math.abs(tw - 0.10) < 1e-6);
+  cancelAll();
+});
+
+// ── 格心纹样 ────────────────────────────────────────────
+test('万字纹保持连续回折空腔，不退化成全连通方格网', () => {
+  const segs = latticeSegments('wanzi');
+  assert.ok(segs.length > 60, `万字纹线段数偏少：${segs.length}`);
+  // 取内部横线（去掉四条边框后），验证同一水平线上存在断口（开口通道），而非整行贯通
+  const { FIELD } = PANEL_DIMS;
+  const innerH = segs.filter((s) =>
+    Math.abs(s.y0 - s.y1) < 1e-3 && s.y0 > FIELD.y0 + 1 && s.y0 < FIELD.y1 - 1,
+  );
+  assert.ok(innerH.length > 10, '内部应有多条横向棂条');
+  const span = FIELD.x1 - FIELD.x0;
+  const fullLines = innerH.filter((s) => Math.abs(s.x1 - s.x0) > span * 0.85);
+  assert.equal(fullLines.length, 0, '万字纹不应退化成贯通整宽的横网格线');
+});
+
+test('麻叶纹正常生成六出放射棂条且无零长退化线段', () => {
+  const segs = latticeSegments('mayo');
+  assert.ok(segs.length > 80, `麻叶纹线段数偏少：${segs.length}`);
+  for (const s of segs) {
+    assert.ok(Math.hypot(s.x1 - s.x0, s.y1 - s.y0) >= 1, '不应含零长或极短碎线段');
+  }
+});
+
+// ── 旁白解析 ────────────────────────────────────────────
+test('parseNarration 正确解析停顿、气口与行内括注', () => {
+  const lines = parseNarration(`第一句（轻）。\n（气口）\n（停顿 1.5 s）\n第二句`, 4.0);
+  assert.equal(lines.length, 4);
+  assert.equal(lines[0].text, '第一句。');
+  assert.equal(lines[1].silent, true);
+  assert.equal(lines[1].dur, 0.5);
+  assert.equal(lines[2].silent, true);
+  assert.equal(lines[2].dur, 1.5);
+  assert.equal(lines[3].text, '第二句');
+});
+
+// ── 状态隔离与随机编号 ──────────────────────────────────
+test('resetRun 只清进度字段，保留设备偏好，且生成合法海报编号', () => {
+  state.theme = 'dark';
+  state.lit = true;
+  state.litLevel = 0.6;
+  state.riddleScore = 5;
+  state.wishText = '岁岁平安';
+  state.modulesDone = { M1: true, M2: true };
+  resetRun();
+  assert.equal(state.theme, 'dark');
+  assert.equal(state.lit, false);
+  assert.equal(state.litLevel, 0);
+  assert.equal(state.riddleScore, 0);
+  assert.equal(state.wishText, '');
+  assert.deepEqual(state.modulesDone, {});
+  assert.match(makePosterNo(2026), /^2026-SM-[0-9A-HJ-NP-Z]{6}$/);
 });

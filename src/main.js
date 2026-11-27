@@ -30,7 +30,7 @@ import { VoiceTrack } from './audio/voice.js';
 import { DragAssembly } from './interact/assembly.js';
 import { Machining } from './interact/machining.js';
 import { Engine } from './app/engine.js';
-import { tween, tick as tickTweens, reducedMotion } from './util/tween.js';
+import { tween, wait, tick as tickTweens, reducedMotion } from './util/tween.js';
 import { makeSimpleDrag, AIM_LANTERN, FIT_LANTERN } from './steps/util.js';
 import { act1 } from './steps/act1.js';
 import { act3 } from './steps/act3.js';
@@ -57,17 +57,26 @@ const progress = (p, msg) => {
   coverBar.style.width = `${Math.round(p * 100)}%`;
   if (msg) coverMsg.textContent = msg;
 };
-const frame = () => new Promise((r) => setTimeout(r, 16));
+const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   const tier = detectTier();
+  const hud = new HUD(state);
+  const bgm = new BGM(state, SFX);
+  const voice = new VoiceTrack(state, hud);
+  // 音频清单拉取在首帧即并行发起，不与三维建模串行排队
+  const manifestsReady = Promise.all([voice.loadManifest(), bgm.loadManifest()]);
 
   // 画质分档在 Stage 里（像素比、MSAA、阴影贴图），这里只管后处理这一项
   const stage = new Stage(document.getElementById('stage'), tier);
   stage.setTheme(state.theme);
   stage.setMood('craft');
   if (tier === 'low') stage.bloomEnabled = false;
+
+  let entered = false;
+  let coverHideTimer = 0;
+  let restoreCoverEntry = null;
 
   /*
    * WebGL 上下文可能被系统回收（移动端切后台常见）—— 不处理就是永久黑屏。
@@ -78,6 +87,7 @@ async function main() {
    */
   stage.canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
+    clearTimeout(coverHideTimer);
     stage.stop();
     cover.hidden = false;
     cover.classList.remove('gone');
@@ -117,9 +127,6 @@ async function main() {
   progress(0.72, '正在开榫凿卯');
   await frame();
 
-  const hud = new HUD(state);
-  const bgm = new BGM(state, SFX);
-  const voice = new VoiceTrack(state, hud);
   const guides = new Arrows();
   const fx = {
     chips: new ChipBurst(stage.scene, tier),
@@ -134,7 +141,21 @@ async function main() {
   ctx.mach = new Machining(ctx);
   ctx.simpleDrag = makeSimpleDrag(ctx);
 
-  await Promise.all([voice.loadManifest(), bgm.loadManifest()]);
+  // 先把成品摆上台并置为可见，再做 compileAsync：
+  // WebGLRenderer.compileAsync 会跳过 invisible 对象，原先先编译再亮出格心/纸/装饰，
+  // 封面化开第一帧仍被迫同步编译全部装饰与纸面着色器。现在全部着色器在封面期间一次编完。
+  lantern.attachAll();
+  lantern.showOnly(null);
+  lantern.allFinished();
+  for (const p of lantern.parts.values()) p.installed = true;
+  lantern.applyAssembly();
+  lantern.showPanels(true);
+  lantern.showDecor(true);
+  lantern.core.visible = true;
+  lantern.setLit(0);
+  stage.setMood('dusk', { snap: true });   // 还压在加载封面底下，没有可看的渐变
+
+  await manifestsReady;
   hud.hasVoice = voice.available.size > 0;
 
   progress(0.88, '正在合龙');
@@ -147,7 +168,7 @@ async function main() {
   } catch (e) {
     console.warn('[precompile]', e);   // 编不动不该拦住开场
   }
-  progress(0.95);
+  progress(0.96);
   await frame();
 
   const engine = new Engine(ctx);
@@ -158,6 +179,8 @@ async function main() {
   // 「都玩过了」的时刻。四扇门是自由顺序，所以只认张数，不认顺序。
   let outroShown = false;
   let hubToken = 0;
+  ctx.onStepLeave = () => { hubToken++; };
+
   ctx.openHub = () => {
     const myToken = ++hubToken;
     const done = state.modulesDone || {};
@@ -174,6 +197,7 @@ async function main() {
         o.querySelectorAll('.door').forEach((b) => {
           b.addEventListener('click', () => {
             const m = DOORS.find((x) => x.id === b.dataset.m);
+            hubToken++;
             SFX.play('UI_TAP');
             hud.closeOverlays();        // 四扇门收干净，模块自己的坞才是底层
             hud.showChrome(false);
@@ -204,9 +228,8 @@ async function main() {
       (async () => {
         playVO(ctx, state.lit ? 'OUTRO' : 'OUTRO-dark');
         // 与旁白对齐：按语速推算，两版末句「新年快乐」都起于十秒出头 ——
-        // 卡在这一刻升起来，写下来的祝福和念出来的祝福同时到
-        await sleep(10300);
-        // 这几秒里用户可能又进了别的模块 —— 片尾不该盖到人家头上
+        // 使用受帧时钟驱动的 wait()：切后台自动暂停、离开 D5 或重启立即取消，不会越步弹出
+        await wait(10.3);
         if (hubToken !== myToken) return;
         hud.sheet({
           label: '片尾',
@@ -221,7 +244,7 @@ async function main() {
           onMount: (o) => {
             o.querySelectorAll('.ln').forEach((el, i) => {
               el.style.opacity = 0;
-              setTimeout(() => tween(0.7, (k) => { el.style.opacity = k; }), i * 900);
+              tween(0.7, (k) => { el.style.opacity = k; }, { delay: i * 0.9 });
             });
           },
         });
@@ -260,6 +283,7 @@ async function main() {
   // ── 拆开看看：任意时刻剖切与拆解 ──
   let inspecting = false;
   let seeThrough = 0;
+  let inspectSnap = null;
   const setSeeThrough = (k) => {
     seeThrough = k;
     for (const p of lantern.parts.values()) {
@@ -277,13 +301,28 @@ async function main() {
   ctx.exitInspect = () => {
     if (!inspecting) return;
     inspecting = false;
+    const snap = inspectSnap;
+    inspectSnap = null;
     lantern.setSection(null, false);
     lantern.setExplode(0, 'layered');
+    // 还原拆开前每件构件的精确位姿（保护进行中的待装件与工作台离位件）
+    if (snap) {
+      for (const [id, pos, rot, scale] of snap) {
+        const p = lantern.parts.get(id);
+        if (!p) continue;
+        p.mesh.position.copy(pos);
+        p.mesh.rotation.copy(rot);
+        p.mesh.scale.copy(scale);
+      }
+    }
     setSeeThrough(0);
   };
   hud.onInspect = () => {
     if (inspecting) { hud.hideOverlay(); ctx.exitInspect(); return; }
     inspecting = true;
+    inspectSnap = [...lantern.parts.entries()].map(([id, p]) => [
+      id, p.mesh.position.clone(), p.mesh.rotation.clone(), p.mesh.scale.clone(),
+    ]);
     const pct = (v) => Math.round(v * 100);
     hud.dock({
       top: true,          // 盖在这一步自己的坞上面，收起时把它交还
@@ -302,21 +341,36 @@ async function main() {
   };
 
   addEventListener('keydown', (e) => {
-    if (e.key !== 'x' && e.key !== 'X') return;
-    // Ctrl/Cmd+X 是剪切，不该顺手把灯笼拆开；封面还没退场时也不该
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (!cover.hidden && !cover.classList.contains('gone')) return;
-    if (inspecting || !hud.overlayOpen) hud.onInspect();
+    if (e.target instanceof Element
+      && e.target.closest('input, select, textarea')) return;
+    if (e.key === 'x' || e.key === 'X') {
+      if (inspecting || !hud.overlayOpen) hud.onInspect();
+    } else if (e.key === 'r' || e.key === 'R') {
+      if (!hud.modalOpen && stage.resetView()) hud.toast('视角已回正', { dur: 1200 });
+    }
   });
 
-  // 上下文找回来了：原地接着走，不必重新加载，这一遍的进度也就留住了
+  // 双击画布空白处平滑回正视角（不重置本步进度）
+  stage.canvas.addEventListener('dblclick', () => {
+    if (!entered || hud.modalOpen || !stage.userTook) return;
+    if (stage.resetView()) hud.toast('视角已回正', { dur: 1200 });
+  });
+
+  // 上下文找回来了：已进入主线就原地接着走；若还没点进封面则恢复入口，不把人困在无控件画面
   stage.canvas.addEventListener('webglcontextrestored', () => {
     stage.resize();
     stage.start();
     coverMsg.classList.remove('bad');
+    if (!entered) {
+      restoreCoverEntry?.();
+      return;
+    }
     coverAct.hidden = true;
     cover.classList.add('gone');
-    setTimeout(() => { cover.hidden = true; }, 1000);
+    clearTimeout(coverHideTimer);
+    coverHideTimer = setTimeout(() => { cover.hidden = true; }, 1000);
     hud.toast('画面回来了', { dur: 2200 });
   });
 
@@ -329,26 +383,30 @@ async function main() {
 
   // 界面占掉的上下两条边交给三维 —— 灯笼据此让位与退远
   hud.onSafeArea = (safe) => stage.setSafeArea(safe);
+  stage.onUserOrbit = (on) => hud.setResetCam(on);
+  hud.onResetCam = () => stage.resetView();
+  hud.onReplay = () => { if (engine.replayNarration()) hud.toast('再说一遍', { dur: 1400 }); };
 
   hud.onSound = (v) => { SFX.setEnabled(v); bgm.setEnabled(v); };
   hud.onTheme = (v) => stage.setTheme(v);
   // 「从头再来」是真的从头：这一遍的进度、亮度、灯谜得分、愿望一并清掉。
-  // 只把索引拨回 0 的话，灯还是亮的、门上还盖着印 —— 那不叫从头
+  // 传 { force: true }：即使当前正好停在第一步 A1，也要完整重走开场
   hud.onRestart = async () => {
     if (inspecting) hud.onInspect();
+    hubToken++;
     resetRun();
     outroShown = false;
     lantern.setLit(0);
     lantern.setPattern(state.patternId);
-    await engine.go(0);
+    await engine.go(0, { force: true });
   };
   // 夜色场景里界面跟着变暗，否则字压在黑画面上读不出来
   stage.onMood = (name) => hud.setTone(name === 'night' ? 'dark' : null);
   hud.setTone(stage.moodName === 'night' ? 'dark' : null);
 
   // ── 主循环 ──
-  stage.updaters.add((dt, t) => {
-    tickTweens(dt);
+  stage.updaters.add((dt, t, wallDt) => {
+    tickTweens(dt, wallDt);
     lantern.update(dt, t);
     fx.chips.update(dt);
     fx.ripples.update(dt);
@@ -376,21 +434,9 @@ async function main() {
       return r.file;
     };
   }
-  unlockAudio();
+  unlockAudio(() => bgm.unlock());
 
   // ── 封面 ──
-  // 三维已经就绪：把成品摆上台，让封面化开之后背后就是这盏灯。
-  lantern.attachAll();
-  lantern.showOnly(null);
-  lantern.allFinished();
-  for (const p of lantern.parts.values()) p.installed = true;
-  lantern.applyAssembly();
-  lantern.showPanels(true);
-  lantern.showDecor(true);
-  lantern.core.visible = true;
-  lantern.setLit(0);
-  stage.setMood('dusk', { snap: true });   // 还压在加载封面底下，没有可看的渐变
-
   // 封面的灯退得远一些、转得慢一些：它是题字背后的一层影，不是主体。
   // 要求减少动效时就摆在那儿不转 —— 这是一段一直不停的运动，CSS 管不到
   let az = 62;
@@ -403,15 +449,17 @@ async function main() {
   if (!reducedMotion()) stage.updaters.add(drift);
 
   progress(1);
-  await sleep(200);
+  await frame();
   cover.dataset.ready = '1';
 
   // 每次打开都是新的一遍：封面只有一个入口，不问「要不要接着上次」
   const enter = async () => {
+    entered = true;
     coverAct.querySelectorAll('button').forEach((b) => { b.disabled = true; });
     stage.updaters.delete(drift);
     cover.classList.add('gone');
-    setTimeout(() => { cover.hidden = true; }, 1000);
+    clearTimeout(coverHideTimer);
+    coverHideTimer = setTimeout(() => { cover.hidden = true; }, 1000);
     hud.showChrome(true);
     if (!state.primed) {
       state.primed = true;
@@ -421,21 +469,23 @@ async function main() {
     await engine.go(0);
   };
 
-  coverAct.innerHTML = `
-    <button class="btn btn-primary" id="cv-go">开始做灯</button>
-    <div class="cover-alt">
-      <button class="btn btn-text" id="cv-help">怎么操作</button>
-    </div>`;
-  coverMsg.hidden = true;
-  coverAct.hidden = false;
-  coverAct.querySelector('#cv-go').focus();
-
-  coverAct.querySelector('#cv-go').addEventListener('click', enter);
-  // 在封面上把完整版读过一遍，进场就不再放精简版 —— 同一份内容不该连讲两次
-  coverAct.querySelector('#cv-help').addEventListener('click', () => hud.guide({
-    full: true,
-    onClose: () => { state.primed = true; },
-  }));
+  restoreCoverEntry = () => {
+    coverAct.innerHTML = `
+      <button class="btn btn-primary" id="cv-go">开始做灯</button>
+      <div class="cover-alt">
+        <button class="btn btn-text" id="cv-help">怎么操作</button>
+      </div>`;
+    coverMsg.hidden = true;
+    coverAct.hidden = false;
+    coverAct.querySelector('#cv-go').focus();
+    coverAct.querySelector('#cv-go').addEventListener('click', enter);
+    // 在封面上把完整版读过一遍，进场就不再放精简版 —— 同一份内容不该连讲两次
+    coverAct.querySelector('#cv-help').addEventListener('click', () => hud.guide({
+      full: true,
+      onClose: () => { state.primed = true; },
+    }));
+  };
+  restoreCoverEntry();
 }
 
 main().catch((e) => {

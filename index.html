@@ -12,6 +12,10 @@
 <meta name="theme-color" content="#f4efe3" />
 <title>榫卯灯笼 · 3D 分步木工课程</title>
 <meta name="description" content="十三根木条，一颗钉子也不用。在浏览器里亲手做一盏能拆开的中式灯笼。" />
+<meta property="og:type" content="website" />
+<meta property="og:locale" content="zh_CN" />
+<meta property="og:title" content="榫卯灯笼 · 3D 分步木工课程" />
+<meta property="og:description" content="十三根木条，一颗钉子也不用。在浏览器里亲手做一盏能拆开的中式灯笼，再点亮它。" />
 <!-- 图标是这盏灯的立绘，圆角瓷片式：32 给标签页，180 给 iOS 加到主屏 -->
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -51,11 +55,15 @@
   <header id="topbar" hidden>
     <nav id="chapters" class="chapters" aria-label="章节"></nav>
     <div class="toprow">
-      <div class="where">
+      <button id="btn-toc" class="where" type="button" aria-label="打开课程目录">
         <span id="stepno" class="stepno"></span>
-        <h2 id="steptitle" class="steptitle"></h2>
+        <span id="phasenm" class="phasenm"></span>
+        <span id="steptitle" class="steptitle"></span>
+      </button>
+      <div class="top-tools">
+        <button id="btn-reset-cam" class="icon-btn" type="button" aria-label="回正视角" title="回正视角（R）" hidden></button>
+        <button id="btn-menu" class="icon-btn" type="button" aria-label="更多" aria-haspopup="true" aria-expanded="false"></button>
       </div>
-      <button id="btn-menu" class="icon-btn" aria-label="更多" aria-haspopup="true" aria-expanded="false"></button>
     </div>
   </header>
 
